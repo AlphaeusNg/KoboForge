@@ -67,6 +67,7 @@
         const deviceFrame = document.getElementById('deviceFrame');
         const deviceScreen = document.getElementById('deviceScreen');
         const deviceReaderHeader = document.getElementById('deviceReaderHeader');
+        const deviceReaderTitle = document.getElementById('deviceReaderTitle');
         const deviceReaderFooter = document.getElementById('deviceReaderFooter');
         const deviceBookViewport = document.getElementById('deviceBookViewport');
         const deviceBookContent = previewEl;
@@ -76,6 +77,7 @@
         const deviceButtonOne = document.getElementById('deviceButtonOne');
         const deviceButtonTwo = document.getElementById('deviceButtonTwo');
         const devicePreviewTarget = document.getElementById('devicePreviewTarget');
+        const controlTooltip = document.getElementById('controlTooltip');
 
         /*
          * Portrait screen pixel sizes, PPI, and body dimensions below are from
@@ -162,6 +164,62 @@
         let editPageUnlockTimer = null;
         let editViewportLockFrame = null;
         let documentImageConversionToken = 0;
+        let tooltipHideTimer = null;
+
+        function tooltipTarget(node) {
+            return node?.closest?.('[data-tooltip]') || null;
+        }
+
+        function hideControlTooltip() {
+            clearTimeout(tooltipHideTimer);
+            tooltipHideTimer = null;
+            controlTooltip?.classList.remove('is-visible', 'is-below');
+        }
+
+        function showControlTooltip(target, { temporary = false } = {}) {
+            if (!controlTooltip || !target?.dataset?.tooltip) return;
+            clearTimeout(tooltipHideTimer);
+            controlTooltip.textContent = target.dataset.tooltip;
+            controlTooltip.classList.remove('is-below');
+            controlTooltip.classList.add('is-visible');
+            const rect = target.getBoundingClientRect();
+            const halfWidth = Math.max(controlTooltip.offsetWidth / 2, 28);
+            const left = Math.min(
+                window.innerWidth - halfWidth - 6,
+                Math.max(halfWidth + 6, rect.left + rect.width / 2)
+            );
+            const showBelow = rect.top < controlTooltip.offsetHeight + 12;
+            controlTooltip.style.left = `${left}px`;
+            controlTooltip.style.top = `${showBelow ? rect.bottom : rect.top}px`;
+            controlTooltip.classList.toggle('is-below', showBelow);
+            if (temporary) {
+                tooltipHideTimer = setTimeout(hideControlTooltip, 1200);
+            }
+        }
+
+        document.addEventListener('pointerover', (event) => {
+            if (event.pointerType === 'touch') return;
+            const target = tooltipTarget(event.target);
+            if (target) showControlTooltip(target);
+        });
+        document.addEventListener('pointerout', (event) => {
+            if (event.pointerType === 'touch') return;
+            const target = tooltipTarget(event.target);
+            if (target && !target.contains(event.relatedTarget)) hideControlTooltip();
+        });
+        document.addEventListener('focusin', (event) => {
+            const target = tooltipTarget(event.target);
+            if (target) showControlTooltip(target);
+        });
+        document.addEventListener('focusout', (event) => {
+            if (tooltipTarget(event.target)) hideControlTooltip();
+        });
+        document.addEventListener('pointerdown', (event) => {
+            if (event.pointerType !== 'touch') return;
+            const target = tooltipTarget(event.target);
+            if (target) showControlTooltip(target, { temporary: true });
+        });
+        document.addEventListener('scroll', hideControlTooltip, true);
 
         // —— Preferences ——
         function loadPrefs() {
@@ -253,6 +311,7 @@
                 b.classList.toggle('active', active);
                 b.classList.toggle('text-slate-300', active);
                 b.classList.toggle('text-slate-400', !active);
+                b.setAttribute('aria-pressed', String(active));
             });
 
             previewWrap?.classList.remove('mode-edit', 'mode-diff', 'mode-html');
@@ -267,6 +326,7 @@
             bodyHtmlSource.classList.toggle('hidden', !isHtml);
             htmlToolbar?.classList.toggle('hidden', !isHtml);
             editToolbar?.classList.toggle('hidden', !isEdit);
+            document.body.classList.toggle('kf-toolbar-open', isEdit);
             diffPanel?.classList.toggle('hidden', !isDiff);
 
             previewEl.contentEditable = isEdit ? 'true' : 'false';
@@ -440,7 +500,7 @@
                 paintDiffNavList(tracked);
                 renderedBody = tracked.html || '<p class="kf-tc-empty">No changes yet.</p>';
             }
-            deviceReaderHeader.textContent = title;
+            if (deviceReaderTitle) deviceReaderTitle.textContent = title;
             deviceBookContent.lang = lang;
             deviceBookContent.innerHTML = renderedBody || '<p>(Empty document)</p>';
             deviceBookContent.contentEditable = editMode === 'edit' ? 'true' : 'false';
@@ -543,15 +603,17 @@
             const fontMm = Number(deviceFontSize?.value || 3.6);
             const marginMm = Number(deviceMargin?.value || 8);
             const showChrome = !!deviceChrome?.checked;
-            const contentEdgeMm = showChrome ? 7 : 3.5;
+            const contentTopMm = 7;
+            const contentBottomMm = showChrome ? 7 : 3.5;
             const chromeOffsetMm = 2.5;
 
             deviceScreen.style.setProperty('--reader-margin', `${marginMm * cssPxPerMm}px`);
-            deviceScreen.style.setProperty('--reader-content-top', `${contentEdgeMm * cssPxPerMm}px`);
-            deviceScreen.style.setProperty('--reader-content-bottom', `${contentEdgeMm * cssPxPerMm}px`);
+            deviceScreen.style.setProperty('--reader-content-top', `${contentTopMm * cssPxPerMm}px`);
+            deviceScreen.style.setProperty('--reader-content-bottom', `${contentBottomMm * cssPxPerMm}px`);
             deviceScreen.style.setProperty('--reader-chrome-offset', `${chromeOffsetMm * cssPxPerMm}px`);
             deviceScreen.style.setProperty('--reader-chrome-size', `${1.9 * cssPxPerMm}px`);
-            deviceReaderHeader.classList.toggle('hidden', !showChrome);
+            deviceReaderHeader.classList.remove('hidden');
+            deviceReaderTitle?.classList.toggle('hidden', !showChrome);
             deviceReaderFooter.classList.toggle('hidden', !showChrome);
             deviceBookContent.style.fontSize = `${fontMm * cssPxPerMm}px`;
             deviceBookContent.style.setProperty('--reader-line-height', '1.52');
@@ -2040,6 +2102,7 @@
                 b.classList.toggle('active', active);
                 b.classList.toggle('text-slate-300', active);
                 b.classList.toggle('text-slate-400', !active);
+                b.setAttribute('aria-pressed', String(active));
             });
             downloadBtn.disabled = true;
             if (clearBtn) clearBtn.disabled = true;
@@ -2061,6 +2124,7 @@
             bodyHtmlSource.classList.add('hidden');
             htmlToolbar.classList.add('hidden');
             editToolbar?.classList.add('hidden');
+            document.body.classList.remove('kf-toolbar-open');
             statusEl.textContent = 'Waiting for a document.';
             bookTitleInput.value = '';
             if (fileInput) fileInput.value = '';
@@ -2818,11 +2882,13 @@
                         if (font?.sourceName) detectedFontFamilies.add(font.sourceName);
                     });
                     const viewport = page.getViewport({ scale: 1 });
+                    const tableGeometry = detectPdfTableGeometry(operatorList);
                     const pageBlocks = extractPdfBlocks(textContent.items || [], {
                         preserveTables: preserveTablesEnabled(),
                         fontMetadata,
                         pageWidth: viewport.width,
-                        pageHeight: viewport.height
+                        pageHeight: viewport.height,
+                        tableGeometry
                     });
                     pageLayout = pageBlocks.pageLayout || pageLayout;
                     if (pageLayout.readingColumns > 1) readingColumnPageCount += 1;
@@ -3039,7 +3105,7 @@
         }
 
         function renderPdfRunsHtml(runs) {
-            return (runs || []).map((run) => {
+            return (runs || []).map((run, index, allRuns) => {
                 const classes = [
                     'kf-pdf-run',
                     `kf-font-${run.family || 'serif'}`,
@@ -3047,7 +3113,16 @@
                 ];
                 if (run.light) classes.push('kf-weight-light');
                 if (run.gapLevel) classes.push(`kf-gap-before-${run.gapLevel}`);
-                let content = escapeHtml(run.text || '');
+                const previousText = (allRuns[index - 1]?.text || '').trimEnd();
+                const currentText = (run.text || '').trimStart();
+                const fieldBoundary = /[:;]$/.test(previousText)
+                    && (
+                        /^[A-Z][a-z]/.test(currentText)
+                        || /^\d{1,2}(?:am|pm)\b/i.test(currentText)
+                    );
+                let content = escapeHtml(normalizePdfTokenSpacing(
+                    `${run.gapLevel || fieldBoundary ? ' ' : ''}${run.text || ''}`
+                ));
                 if (run.italic) content = `<em>${content}</em>`;
                 if (run.bold) content = `<strong>${content}</strong>`;
                 return `<span class="${classes.join(' ')}">${content}</span>`;
@@ -3062,6 +3137,13 @@
             return `<span class="kf-pdf-line kf-indent-${indent}">${content}</span>`;
         }
 
+        function normalizePdfTokenSpacing(text) {
+            return String(text || '')
+                .replace(/([:;])(?=[A-Z][a-z])/g, '$1 ')
+                .replace(/:(?=\d{1,2}(?:am|pm)\b)/gi, ': ')
+                .replace(/(\d(?:st|nd|rd|th))(?=[A-Z][a-z])/g, '$1 ');
+        }
+
         function buildPdfLines(items, { fontMetadata = {} } = {}) {
             const normalized = (items || [])
                 .filter((item) => item && item.str && String(item.str).trim() !== '')
@@ -3070,7 +3152,9 @@
                     // Skipping them used to throw mid-document after page 1.
                     const tr = item.transform;
                     if (!tr || tr.length < 6) return null;
-                    const text = stripInvalidXmlChars(String(item.str));
+                    const text = normalizePdfTokenSpacing(
+                        stripInvalidXmlChars(String(item.str))
+                    );
                     if (!text.trim()) return null;
                     const chars = Math.max(text.length, 1);
                     const width = Number(item.width) || 0;
@@ -3352,6 +3436,81 @@
             return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
         }
 
+        /**
+         * Look for an actual ruled grid in the PDF drawing operators. Text that
+         * merely lines up in columns is commonly a definition list or worksheet,
+         * so alignment alone must not create a table.
+         */
+        function detectPdfTableGeometry(operatorList) {
+            const ops = pdfjsLib.OPS || {};
+            if (!operatorList || !Number.isFinite(ops.constructPath)) {
+                return { hasGrid: false, horizontalRules: 0, verticalRules: 0 };
+            }
+            const paintStrokeOps = new Set([
+                ops.stroke,
+                ops.closeStroke,
+                ops.fillStroke,
+                ops.eoFillStroke,
+                ops.closeFillStroke,
+                ops.closeEOFillStroke
+            ].filter(Number.isFinite));
+            const horizontalRules = [];
+            const verticalRules = [];
+            const strokedRectangles = [];
+
+            operatorList.fnArray.forEach((fn, index) => {
+                if (fn !== ops.constructPath) return;
+                const args = operatorList.argsArray[index] || [];
+                const pathOps = Array.isArray(args[0]) ? args[0] : [];
+                const coordinates = Array.isArray(args[1]) ? args[1] : [];
+                const bbox = Array.isArray(args[2]) ? args[2] : [];
+                let width = 0;
+                let height = 0;
+                const isRectangle = pathOps.length === 1
+                    && pathOps[0] === ops.rectangle
+                    && coordinates.length >= 4;
+                if (isRectangle) {
+                    width = Math.abs(Number(coordinates[2]) || 0);
+                    height = Math.abs(Number(coordinates[3]) || 0);
+                } else if (bbox.length >= 4) {
+                    width = Math.abs((Number(bbox[2]) || 0) - (Number(bbox[0]) || 0));
+                    height = Math.abs((Number(bbox[3]) || 0) - (Number(bbox[1]) || 0));
+                }
+                if (width >= 24 && height <= Math.max(3, width * 0.012)) {
+                    horizontalRules.push({ width, height });
+                }
+                if (height >= 24 && width <= Math.max(3, height * 0.012)) {
+                    verticalRules.push({ width, height });
+                }
+                if (
+                    isRectangle
+                    && width >= 12
+                    && height >= 8
+                    && paintStrokeOps.has(operatorList.fnArray[index + 1])
+                ) {
+                    strokedRectangles.push({ width, height });
+                }
+            });
+
+            const repeatedCells = strokedRectangles.length >= 4
+                && (() => {
+                    const typicalWidth = median(strokedRectangles.map((rect) => rect.width));
+                    const typicalHeight = median(strokedRectangles.map((rect) => rect.height));
+                    return strokedRectangles.filter((rect) => (
+                        Math.abs(rect.width - typicalWidth) <= Math.max(2, typicalWidth * 0.22)
+                        && Math.abs(rect.height - typicalHeight) <= Math.max(2, typicalHeight * 0.22)
+                    )).length >= 4;
+                })();
+            return {
+                hasGrid: (
+                    horizontalRules.length >= 2
+                    && verticalRules.length >= 2
+                ) || repeatedCells,
+                horizontalRules: horizontalRules.length,
+                verticalRules: verticalRules.length
+            };
+        }
+
         function clusterColumnXs(xs, tolerance) {
             if (!xs.length) return [];
             const sorted = [...xs].sort((a, b) => a - b);
@@ -3542,10 +3701,47 @@
             return html;
         }
 
-        function tryBuildTableFromLines(lines) {
+        function hasPdfTableHeaderEvidence(lines, columnGroups) {
+            if (lines.length < 3 || !lines[0]?.hasBold) return false;
+            const columnCount = columnGroups[0]?.length || 0;
+            if (columnCount < 2 || columnCount > 6) return false;
+            if (!columnGroups.every((groups) => groups.length === columnCount)) return false;
+            const headers = columnGroups[0].map((group) => (group.text || '').trim());
+            if (
+                headers.some((header) => (
+                    !header
+                    || header.length > 48
+                    || /^\(?\d{1,3}[\).:]?\b/.test(header)
+                    || /[.!?]\s*$/.test(header)
+                ))
+            ) {
+                return false;
+            }
+            const bodyLines = lines.slice(1);
+            const nonBoldBody = bodyLines.filter((line) => !line.hasBold).length;
+            if (nonBoldBody < Math.ceil(bodyLines.length * 0.6)) return false;
+            const tolerance = Math.max(
+                median(lines.map((line) => line.avgCharWidth || 4)) * 3,
+                16
+            );
+            for (let column = 0; column < columnCount; column += 1) {
+                const starts = columnGroups.map((groups) => groups[column].x);
+                const center = median(starts);
+                if (starts.some((start) => Math.abs(start - center) > tolerance)) return false;
+            }
+            return true;
+        }
+
+        function tryBuildTableFromLines(lines, tableGeometry = {}) {
             if (lines.length < 2) return null;
-            if (lines.length >= 3 && lines.every(lineLooksLikeTwoColumnRow)) {
-                const columnGroups = lines.map(splitPdfLineIntoColumns);
+            const columnGroups = lines.map(splitPdfLineIntoColumns);
+            const semanticHeader = hasPdfTableHeaderEvidence(lines, columnGroups);
+            if (!tableGeometry.hasGrid && !semanticHeader) return null;
+
+            if (
+                lines.length >= 3
+                && columnGroups.every((groups) => groups.length === 2)
+            ) {
                 const secondStarts = columnGroups.map((groups) => groups[1].x);
                 const center = median(secondStarts);
                 const tolerance = Math.max(
@@ -3555,7 +3751,7 @@
                 if (secondStarts.every((start) => Math.abs(start - center) <= tolerance)) {
                     const rows = columnGroups.map((groups) => groups.map((group) => group.text));
                     const tableHtml = buildTableHtml(rows, {
-                        headerRow: !!lines[0].hasBold
+                        headerRow: semanticHeader
                     });
                     if (tableHtml) return tableHtml;
                 }
@@ -3575,7 +3771,7 @@
             if (colCenters.length < 2) return null;
 
             const rows = lines.map((line) => lineToRow(line, colCenters, colTolerance));
-            const tableHtml = buildTableHtml(rows, { headerRow: true });
+            const tableHtml = buildTableHtml(rows, { headerRow: semanticHeader });
             return tableHtml || null;
         }
 
@@ -3638,7 +3834,7 @@
             return `<div class="kf-note-space kf-space-${lines}" data-space-lines="${lines}" contenteditable="false" role="separator" aria-label="Preserved blank writing space"></div>`;
         }
 
-        function extractPdfSegmentBlocks(builtLines, preserveTables) {
+        function extractPdfSegmentBlocks(builtLines, preserveTables, tableGeometry) {
             if (!builtLines.length) return [];
 
             if (!preserveTables) {
@@ -3683,7 +3879,7 @@
                 }
 
                 if (region.length >= 2) {
-                    const tableHtml = tryBuildTableFromLines(region);
+                    const tableHtml = tryBuildTableFromLines(region, tableGeometry);
                     if (tableHtml) {
                         flushProse();
                         blocks.push({
@@ -3704,7 +3900,12 @@
             return blocks;
         }
 
-        function extractPdfBlocksFromLines(builtLines, preserveTables, pageHeight) {
+        function extractPdfBlocksFromLines(
+            builtLines,
+            preserveTables,
+            pageHeight,
+            tableGeometry
+        ) {
             if (!builtLines.length) return [];
             const whitespace = detectPdfWhitespace(builtLines, { pageHeight });
             const spaceByLine = new Map(
@@ -3716,7 +3917,7 @@
                 segment.push(line);
                 const space = spaceByLine.get(index);
                 if (!space) return;
-                extractPdfSegmentBlocks(segment, preserveTables)
+                extractPdfSegmentBlocks(segment, preserveTables, tableGeometry)
                     .forEach((block) => blocks.push(block));
                 blocks.push({
                     type: 'spacer',
@@ -3726,7 +3927,7 @@
                 });
                 segment = [];
             });
-            extractPdfSegmentBlocks(segment, preserveTables)
+            extractPdfSegmentBlocks(segment, preserveTables, tableGeometry)
                 .forEach((block) => blocks.push(block));
             return blocks;
         }
@@ -3735,7 +3936,8 @@
             preserveTables = true,
             fontMetadata = {},
             pageWidth = 0,
-            pageHeight = 0
+            pageHeight = 0,
+            tableGeometry = { hasGrid: false }
         } = {}) {
             const builtLines = buildPdfLines(items, { fontMetadata });
             const blocks = [];
@@ -3752,7 +3954,12 @@
                     ['right', readingColumns.rightItems]
                 ].forEach(([sourceColumn, columnItems]) => {
                     const columnLines = buildPdfLines(columnItems, { fontMetadata });
-                    extractPdfBlocksFromLines(columnLines, preserveTables, pageHeight)
+                    extractPdfBlocksFromLines(
+                        columnLines,
+                        preserveTables,
+                        pageHeight,
+                        tableGeometry
+                    )
                         .forEach((block) => {
                             block.sourceColumn = sourceColumn;
                             blocks.push(block);
@@ -3788,7 +3995,12 @@
                         : 'right';
                 }
             } else {
-                extractPdfBlocksFromLines(builtLines, preserveTables, pageHeight)
+                extractPdfBlocksFromLines(
+                    builtLines,
+                    preserveTables,
+                    pageHeight,
+                    tableGeometry
+                )
                     .forEach((block) => blocks.push(block));
             }
             blocks.forEach((block) => {
@@ -3809,6 +4021,76 @@
                 Object.assign(block, position);
             });
             return blocks;
+        }
+
+        function pdfLineStartsStructuredBlock(line) {
+            const text = (line?.plainText || '').trim();
+            return /^(?:[•●▪◦*-]|\(?\d{1,3}[\).]|[A-Z][\).])\s+\S/.test(text);
+        }
+
+        function shouldBreakPdfParagraph(previousLine, line, {
+            typicalLineAdvance,
+            textLeft,
+            textWidth,
+            typicalStart
+        }) {
+            const verticalGap = previousLine.y - line.y;
+            if (
+                verticalGap > Math.max(
+                    previousLine.lineHeight * 1.72,
+                    typicalLineAdvance * 1.45
+                )
+            ) {
+                return true;
+            }
+            if (pdfLineStartsStructuredBlock(line)) return true;
+
+            const previousText = (previousLine.plainText || '').trim();
+            const nextText = (line.plainText || '').trim();
+            if (!previousText || !nextText) return true;
+            const averageCharacter = Math.max(
+                3,
+                (Number(previousLine.avgCharWidth) + Number(line.avgCharWidth)) / 2 || 4
+            );
+            const previousFill = (
+                (Number(previousLine.xEnd) || textLeft) - textLeft
+            ) / Math.max(textWidth, 1);
+            const startShift = (
+                (Number(line.xStart) || typicalStart) - typicalStart
+            ) / averageCharacter;
+            const startsAsContinuation = /^[a-z,.;:!?)}\]’”]/.test(nextText);
+            const previousIsOpen = /[-–—,;:(\[/]$/.test(previousText)
+                || !/[.!?]["'’”)}\]]?$/.test(previousText);
+            if (startsAsContinuation || previousIsOpen || previousFill >= 0.74) {
+                return false;
+            }
+
+            const familyChanged = previousLine.dominantFontFamily
+                && line.dominantFontFamily
+                && previousLine.dominantFontFamily !== line.dominantFontFamily;
+            const sizeRatio = (line.maxHeight || line.lineHeight || 10)
+                / Math.max(previousLine.maxHeight || previousLine.lineHeight || 10, 1);
+            if (familyChanged && (sizeRatio < 0.86 || sizeRatio > 1.16)) return true;
+
+            const previousEndsSentence = /[.!?]["'’”)}\]]?$/.test(previousText);
+            const nextStartsUppercase = /^[A-Z“"'‘]/.test(nextText);
+            if (
+                previousEndsSentence
+                && nextStartsUppercase
+                && (previousFill < 0.68 || Math.abs(startShift) >= 2.5)
+            ) {
+                return true;
+            }
+            return false;
+        }
+
+        function renderPdfParagraphHtml(lines) {
+            return lines
+                .map((line, index) => renderPdfLineHtml(
+                    line,
+                    { preserveIndent: index === 0 }
+                ))
+                .join(' ');
         }
 
         function linesToParagraphBlocks(builtLines) {
@@ -3847,11 +4129,26 @@
                     prev.maxHeight = Math.max(prev.maxHeight || 0, line.maxHeight || 0);
                     prev.hasBold = prev.hasBold || line.hasBold;
                     prev.hasItalic = prev.hasItalic || line.hasItalic;
+                    prev.xEnd = line.xEnd;
                     continue;
                 }
                 joined.push(line);
             }
 
+            const bodyLines = joined.filter((line) => !lineLooksLikeHeading(line));
+            const metricLines = bodyLines.length ? bodyLines : joined;
+            const textLeft = Math.min(
+                ...metricLines.map((line) => Number(line.xStart) || 0)
+            );
+            const textRight = Math.max(
+                ...metricLines.map((line) => Number(line.xEnd) || textLeft)
+            );
+            const textWidth = Math.max(textRight - textLeft, 1);
+            const typicalStart = median(
+                metricLines
+                    .filter((line) => (line.plainText || '').trim().length >= 12)
+                    .map((line) => Number(line.xStart) || textLeft)
+            ) || textLeft;
             const blocks = [];
             let current = [];
             let previousLine = null;
@@ -3860,8 +4157,8 @@
                 if (!current.length) return;
                 blocks.push({
                     type: 'paragraph',
-                    text: current.map((line) => line.rawText).join('\n'),
-                    html: current.map((line) => renderPdfLineHtml(line)).join('<br>'),
+                    text: current.map((line) => (line.plainText || '').trim()).join(' '),
+                    html: renderPdfParagraphHtml(current),
                     sourceLines: current.slice()
                 });
                 current = [];
@@ -3916,13 +4213,16 @@
                     continue;
                 }
 
-                const verticalGap = previousLine.y - line.y;
-                const paragraphBreak =
-                    verticalGap > Math.max(
-                        previousLine.lineHeight * 1.7,
-                        typicalLineAdvance * 1.42
-                    ) ||
-                    Math.abs(line.indentSpaces - previousLine.indentSpaces) >= 6;
+                const paragraphBreak = shouldBreakPdfParagraph(
+                    previousLine,
+                    line,
+                    {
+                        typicalLineAdvance,
+                        textLeft,
+                        textWidth,
+                        typicalStart
+                    }
+                );
 
                 if (paragraphBreak) {
                     flushPara();

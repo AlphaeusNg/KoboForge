@@ -65,10 +65,14 @@ const features = [
     ['PDF intentional whitespace detector', 'function detectPdfWhitespace'],
     ['PDF embedded font metadata', 'function collectPdfFontMetadata'],
     ['PDF portable typography runs', 'function renderPdfRunsHtml'],
+    ['PDF token spacing repair', 'function normalizePdfTokenSpacing'],
     ['PDF source-page layout', 'function detectPdfPageLayout'],
     ['PDF block position', 'function detectPdfBlockPosition'],
     ['PDF page-level reading columns', 'function detectPdfReadingColumns'],
     ['PDF stable two-column tables', 'function stableTwoColumnLineIndexes'],
+    ['PDF ruled-table evidence', 'function detectPdfTableGeometry'],
+    ['PDF semantic table header evidence', 'function hasPdfTableHeaderEvidence'],
+    ['PDF paragraph continuation checker', 'function shouldBreakPdfParagraph'],
     ['EPUB image assets', 'function extractEmbeddedImagesForEpub'],
     ['Floyd–Steinberg dithering', 'Floyd–Steinberg'],
 ];
@@ -342,6 +346,12 @@ assert.ok(page.includes('.kf-font-script') && page.includes('.kf-size-175'),
     'PDF font family and relative size classes must be styled');
 assert.ok(page.includes('kf-gap-before-3') && page.includes('margin-inline-start'),
     'wide PDF item gaps must remain visually separated in the device editor');
+assert.ok(page.includes("renderPdfParagraphHtml(current)")
+    && page.includes(".join(' ')")
+    && !page.includes("current.map((line) => renderPdfLineHtml(line)).join('<br>')"),
+    'same-paragraph PDF lines must reflow as one sentence instead of saved line breaks');
+assert.ok(page.includes('if (!tableGeometry.hasGrid && !semanticHeader) return null;'),
+    'aligned PDF prose must not become a table without grid or header evidence');
 assert.ok(page.includes("let editMode = 'edit'"), 'empty workspace defaults to Edit');
 assert.ok(page.includes("setEditMode('edit')"), 'import opens the selected Kobo editor');
 assert.ok(!html.includes('data-mode="view"'), 'separate Device mode removed');
@@ -402,6 +412,28 @@ assert.ok(page.includes('data-vpos="top"')
     'vertical placement controls');
 assert.ok(page.includes('data-font-step="1"') && page.includes('changeSelectedFontSize'),
     'block font-size controls');
+assert.ok(html.includes('class="icon-sprite"')
+    && html.includes('href="#icon-align-left"')
+    && html.includes('href="#icon-table"'),
+    'formatting controls use compact reusable SVG icons');
+assert.ok(
+    [...html.matchAll(/<button[^>]*class="[^"]*\btb-btn\b[^"]*"[^>]*>/g)]
+        .every((match) => /data-tooltip="[^"]+"/.test(match[0])
+            && /aria-label="[^"]+"/.test(match[0])),
+    'every compact formatting icon exposes hover/tap and assistive labels'
+);
+assert.ok(
+    /id="deviceReaderHeader"[\s\S]*id="devicePagePrev"[\s\S]*id="devicePageNext"[\s\S]*<\/div>/.test(html),
+    'previous and next arrows live inside the Kobo reader header'
+);
+assert.ok(page.includes('#editToolbar {')
+    && page.includes('position: fixed')
+    && page.includes('touch-action: pan-x pan-y')
+    && page.includes('overflow: auto'),
+    'phone adjustment palette stays fixed and scrolls on both axes');
+assert.ok(page.includes("event.pointerType !== 'touch'")
+    && page.includes("showControlTooltip(target, { temporary: true })"),
+    'touch presses reveal the same word labels as hover/focus');
 assert.ok(page.includes('function handleEditorTab') && page.includes("event.key !== 'Tab'"),
     'Word-like Tab editing');
 assert.ok(page.includes('id="insertTableBtn"') && page.includes('function insertEditableTable'),

@@ -15,6 +15,8 @@ before exporting a Kobo-friendly EPUB.
 - Kobo Libra Colour default, plus Clara BW/Colour, Sage, and Elipsa 2E
 - Responsive device staging that shrinks with the selected Kobo on phones
 - Direct editing in the paginated Kobo view, with a separate in-device Diff mode
+- Compact icon-only phone controls with hover/tap labels, fixed two-axis
+  formatting palette, and page arrows inside the Kobo header
 - Locked edit pagination: deletion reflows later paragraphs without viewport drift
 - Left/center/right and top/middle/bottom placement, font sizing, Word-style
   Tab behavior, editable table insertion, and HTML source mode
@@ -23,7 +25,8 @@ before exporting a Kobo-friendly EPUB.
 - Robust PDF whitespace analysis that preserves large worksheet/note regions
 - PDF source-page boundaries and coordinate-aware vertical/horizontal placement
 - Page-level reading-column separation that prevents left/right text interleaving
-- Stable multi-line column detection that converts genuine PDF tables to HTML
+- Sentence-aware PDF line joining that reflows visual lines into real paragraphs
+- Conservative PDF table detection requiring ruled-grid or distinct header evidence
 - PDF font profiling that retains relative size, family type, weight, and slant
 - Wide PDF column gaps that remain separated and wrap cleanly on narrow Kobos
 - EPUB3 export with nav + NCX and packaged image manifest assets
