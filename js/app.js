@@ -3,7 +3,7 @@
             buildFixedLayoutPublicationFiles,
             fixedLayoutDownloadName,
             resolveEpubLayoutMode
-        } from './fixed-layout.js?v=2026.07.24.13';
+        } from './fixed-layout.js?v=2026.07.24.14';
         import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
@@ -32,6 +32,9 @@
         const applyHtmlBtn = document.getElementById('applyHtmlBtn');
         const cancelHtmlBtn = document.getElementById('cancelHtmlBtn');
         const insertTableBtn = document.getElementById('insertTableBtn');
+        const tablePicker = document.getElementById('tablePicker');
+        const tablePickerGrid = document.getElementById('tablePickerGrid');
+        const tablePickerLabel = document.getElementById('tablePickerLabel');
         const imageEditControls = document.getElementById('imageEditControls');
         const imageCutBtn = document.getElementById('imageCutBtn');
         const imageCopyBtn = document.getElementById('imageCopyBtn');
@@ -184,6 +187,7 @@
         let selectedEditableImage = null;
         let imageClipboardHtml = '';
         let savedEditRange = null;
+        let tableInsertionRange = null;
 
         function tooltipTarget(node) {
             return node?.closest?.('[data-tooltip]') || null;
@@ -635,6 +639,8 @@
             deviceBookContent.innerHTML = renderedBody || '<p>(Empty document)</p>';
             selectedEditableImage = null;
             savedEditRange = null;
+            tableInsertionRange = null;
+            closeTablePicker();
             deviceBookContent.contentEditable = editMode === 'edit' && !fixedPreview ? 'true' : 'false';
             deviceBookContent.classList.toggle('kf-editing', editMode === 'edit' && !fixedPreview);
             deviceBookContent.classList.toggle('kf-diffing', editMode === 'diff' && !fixedPreview);
@@ -934,11 +940,85 @@
 
         function normalizedImageWidth(img) {
             const stored = Number(img?.getAttribute('data-kf-width'));
-            const styled = Number.parseFloat(img?.style?.width || '');
+            const figure = img?.closest?.('figure.kf-document-image');
+            const styled = Number.parseFloat(
+                figure?.style?.width
+                || img?.style?.width
+                || ''
+            );
             const value = Number.isFinite(stored) && stored > 0
                 ? stored
                 : (Number.isFinite(styled) && styled > 0 ? styled : 100);
             return Math.max(25, Math.min(100, Math.round(value / 5) * 5));
+        }
+
+        function normalizedImageLayout(img) {
+            const stored = img?.getAttribute('data-kf-layout') || '';
+            if (['block', 'inline-left', 'inline-right'].includes(stored)) return stored;
+            const unit = img?.closest?.('figure.kf-document-image') || img;
+            if (unit?.classList?.contains('kf-image-inline-right')) return 'inline-right';
+            if (unit?.classList?.contains('kf-image-inline-left')) return 'inline-left';
+            const textParagraph = img?.closest?.('p');
+            return textParagraph && (textParagraph.textContent || '').trim()
+                ? 'inline-left'
+                : 'block';
+        }
+
+        function imageWidthForPageFit({
+            pixelWidth,
+            pixelHeight,
+            fitHeightPercent = 72,
+            imageCount = 1,
+            layout = 'block',
+            target = documentImageTarget()
+        } = {}) {
+            const width = Math.max(1, Number(pixelWidth) || 1);
+            const height = Math.max(1, Number(pixelHeight) || 1);
+            const count = Math.max(1, Math.round(Number(imageCount) || 1));
+            const availableRatio = Math.max(
+                0.2,
+                Math.min(0.92, (Number(fitHeightPercent) || 72) / 100)
+            );
+            const perImageHeight = Math.max(
+                0.18,
+                (availableRatio - (Math.max(0, count - 1) * 0.035)) / count
+            );
+            const naturalWidthPercent = (
+                target.height
+                * perImageHeight
+                * (width / height)
+                / Math.max(1, target.width)
+            ) * 100;
+            const maximum = layout === 'block' ? 100 : 60;
+            return Math.max(
+                25,
+                Math.min(maximum, Math.floor(naturalWidthPercent / 5) * 5 || 25)
+            );
+        }
+
+        function applyImageLayoutPresentation(img) {
+            if (!img) return;
+            const layout = normalizedImageLayout(img);
+            const width = normalizedImageWidth(img);
+            const figure = img.closest?.('figure.kf-document-image');
+            const unit = figure || img;
+            [unit, img].forEach((element) => {
+                element?.classList?.remove(
+                    'kf-image-block',
+                    'kf-image-inline-left',
+                    'kf-image-inline-right'
+                );
+            });
+            unit.classList.add(`kf-image-${layout}`);
+            img.setAttribute('data-kf-layout', layout);
+            img.setAttribute('data-kf-width', String(width));
+            if (figure && layout !== 'block') {
+                figure.style.width = `${width}%`;
+                img.style.width = '100%';
+            } else {
+                figure?.style?.removeProperty('width');
+                img.style.width = `${width}%`;
+            }
         }
 
         function updateImageEditControls({ reveal = false } = {}) {
@@ -957,9 +1037,20 @@
             imageSizeControl?.classList.toggle('hidden', !hasSelection);
             if (hasSelection && imageSizeRange) {
                 const width = normalizedImageWidth(selectedEditableImage);
+                imageSizeRange.max = normalizedImageLayout(selectedEditableImage) === 'block'
+                    ? '100'
+                    : '60';
                 imageSizeRange.value = String(width);
                 if (imageSizeValue) imageSizeValue.textContent = `${width}%`;
             }
+            imageEditControls.querySelectorAll('[data-image-layout]').forEach((button) => {
+                button.disabled = !hasSelection;
+                button.classList.toggle(
+                    'is-active',
+                    hasSelection
+                    && button.dataset.imageLayout === normalizedImageLayout(selectedEditableImage)
+                );
+            });
             if (reveal && !imageEditControls.classList.contains('hidden')) {
                 const lane = editToolbar?.querySelector('[data-toolbar-row="objects"]');
                 if (lane) lane.scrollLeft = 0;
@@ -1004,7 +1095,7 @@
                 img.classList.remove('kf-image-selected');
                 const width = normalizedImageWidth(img);
                 img.setAttribute('data-kf-width', String(width));
-                img.style.width = `${width}%`;
+                applyImageLayoutPresentation(img);
                 if (editable) {
                     img.tabIndex = 0;
                     img.draggable = false;
@@ -1027,15 +1118,37 @@
 
         function resizeSelectedImage(width) {
             if (!selectedEditableImage || !previewEl?.contains(selectedEditableImage)) return;
+            const maximum = normalizedImageLayout(selectedEditableImage) === 'block' ? 100 : 60;
             const normalized = Math.max(
                 25,
-                Math.min(100, Math.round(Number(width || 100) / 5) * 5)
+                Math.min(maximum, Math.round(Number(width || maximum) / 5) * 5)
             );
             selectedEditableImage.setAttribute('data-kf-width', String(normalized));
-            selectedEditableImage.style.width = `${normalized}%`;
+            selectedEditableImage.setAttribute('data-kf-width-mode', 'user');
+            applyImageLayoutPresentation(selectedEditableImage);
             if (imageSizeRange) imageSizeRange.value = String(normalized);
             if (imageSizeValue) imageSizeValue.textContent = `${normalized}%`;
             finishImageEdit(`Image width set to ${normalized}%.`);
+        }
+
+        function setSelectedImageLayout(layout) {
+            if (
+                !selectedEditableImage
+                || !previewEl?.contains(selectedEditableImage)
+                || !['block', 'inline-left', 'inline-right'].includes(layout)
+            ) return;
+            selectedEditableImage.setAttribute('data-kf-layout', layout);
+            selectedEditableImage.setAttribute('data-kf-layout-mode', 'user');
+            if (layout !== 'block' && normalizedImageWidth(selectedEditableImage) > 60) {
+                selectedEditableImage.setAttribute('data-kf-width', '60');
+                selectedEditableImage.setAttribute('data-kf-width-mode', 'user');
+            }
+            applyImageLayoutPresentation(selectedEditableImage);
+            updateImageEditControls();
+            const message = layout === 'block'
+                ? 'Image moved to its own row.'
+                : `Image inlined on the ${layout.endsWith('right') ? 'right' : 'left'}; text can share its rows.`;
+            finishImageEdit(message);
         }
 
         function cleanImageClipboardMarkup(img) {
@@ -1221,6 +1334,22 @@
                 if (imageId) img.setAttribute('data-kf-image-id', imageId);
                 const width = normalizedImageWidth(source);
                 img.setAttribute('data-kf-width', String(width));
+                img.setAttribute(
+                    'data-kf-width-mode',
+                    source.getAttribute('data-kf-width-mode')
+                    || (
+                        source.hasAttribute('data-kf-width')
+                        || !!source.style.width
+                            ? 'user'
+                            : 'auto'
+                    )
+                );
+                img.setAttribute('data-kf-layout', normalizedImageLayout(source));
+                img.setAttribute(
+                    'data-kf-layout-mode',
+                    source.getAttribute('data-kf-layout-mode')
+                    || (source.hasAttribute('data-kf-layout') ? 'user' : 'auto')
+                );
                 img.style.width = `${width}%`;
                 accepted.appendChild(img);
             });
@@ -1442,16 +1571,130 @@
             element.closest?.('#deviceBookContent')?.focus();
         }
 
-        function insertEditableTable(rows = 2, columns = 2) {
+        function updateTablePickerSelection(rows = 1, columns = 1) {
+            const selectedRows = Math.max(1, Math.min(5, Math.round(Number(rows) || 1)));
+            const selectedColumns = Math.max(1, Math.min(5, Math.round(Number(columns) || 1)));
+            tablePickerGrid?.querySelectorAll('[data-table-row]').forEach((cell) => {
+                const selected = Number(cell.dataset.tableRow) <= selectedRows
+                    && Number(cell.dataset.tableColumn) <= selectedColumns;
+                cell.classList.toggle('is-selected', selected);
+                cell.setAttribute('aria-selected', String(selected));
+            });
+            if (tablePickerLabel) {
+                tablePickerLabel.textContent = `${selectedRows} × ${selectedColumns} table`;
+            }
+        }
+
+        function positionTablePicker() {
+            if (!tablePicker || tablePicker.classList.contains('hidden') || !insertTableBtn) return;
+            const buttonRect = insertTableBtn.getBoundingClientRect();
+            const pickerRect = tablePicker.getBoundingClientRect();
+            const gutter = 8;
+            const left = Math.max(
+                gutter,
+                Math.min(
+                    window.innerWidth - pickerRect.width - gutter,
+                    buttonRect.left + (buttonRect.width / 2) - (pickerRect.width / 2)
+                )
+            );
+            const below = buttonRect.bottom + 6;
+            const top = below + pickerRect.height <= window.innerHeight - gutter
+                ? below
+                : Math.max(gutter, buttonRect.top - pickerRect.height - 6);
+            tablePicker.style.left = `${Math.round(left)}px`;
+            tablePicker.style.top = `${Math.round(top)}px`;
+        }
+
+        function closeTablePicker({ returnFocus = false } = {}) {
+            if (!tablePicker) return;
+            tablePicker.classList.add('hidden');
+            insertTableBtn?.setAttribute('aria-expanded', 'false');
+            if (returnFocus) insertTableBtn?.focus({ preventScroll: true });
+        }
+
+        function openTablePicker() {
+            if (!canFormatNow() || !tablePicker) return;
+            tableInsertionRange = imageInsertionRange();
+            updateTablePickerSelection(1, 1);
+            tablePicker.classList.remove('hidden');
+            insertTableBtn?.setAttribute('aria-expanded', 'true');
+            positionTablePicker();
+            tablePickerGrid?.querySelector('[data-table-row="1"][data-table-column="1"]')
+                ?.focus({ preventScroll: true });
+        }
+
+        function toggleTablePicker() {
+            if (!tablePicker || tablePicker.classList.contains('hidden')) openTablePicker();
+            else closeTablePicker({ returnFocus: true });
+        }
+
+        function buildTablePicker() {
+            if (!tablePickerGrid) return;
+            tablePickerGrid.innerHTML = '';
+            for (let row = 1; row <= 5; row += 1) {
+                for (let column = 1; column <= 5; column += 1) {
+                    const cell = document.createElement('button');
+                    cell.type = 'button';
+                    cell.className = 'table-picker-cell';
+                    cell.dataset.tableRow = String(row);
+                    cell.dataset.tableColumn = String(column);
+                    cell.setAttribute('role', 'gridcell');
+                    cell.setAttribute('aria-label', `${row} rows by ${column} columns`);
+                    cell.setAttribute('aria-selected', 'false');
+                    cell.addEventListener('pointerenter', () => {
+                        updateTablePickerSelection(row, column);
+                    });
+                    cell.addEventListener('focus', () => {
+                        updateTablePickerSelection(row, column);
+                    });
+                    cell.addEventListener('click', () => {
+                        const targetRange = tableInsertionRange?.cloneRange?.() || null;
+                        closeTablePicker();
+                        insertEditableTable(row, column, targetRange);
+                    });
+                    cell.addEventListener('keydown', (event) => {
+                        if (event.key === 'Escape') {
+                            event.preventDefault();
+                            closeTablePicker({ returnFocus: true });
+                            return;
+                        }
+                        const movement = {
+                            ArrowLeft: [0, -1],
+                            ArrowRight: [0, 1],
+                            ArrowUp: [-1, 0],
+                            ArrowDown: [1, 0]
+                        }[event.key];
+                        if (!movement) return;
+                        event.preventDefault();
+                        const nextRow = Math.max(1, Math.min(5, row + movement[0]));
+                        const nextColumn = Math.max(1, Math.min(5, column + movement[1]));
+                        tablePickerGrid.querySelector(
+                            `[data-table-row="${nextRow}"][data-table-column="${nextColumn}"]`
+                        )?.focus();
+                    });
+                    tablePickerGrid.appendChild(cell);
+                }
+            }
+            updateTablePickerSelection(1, 1);
+        }
+
+        function insertEditableTable(
+            rows = 2,
+            columns = 2,
+            targetRange = tableInsertionRange || imageInsertionRange()
+        ) {
             if (!canFormatNow()) return;
+            const rowCount = Math.max(1, Math.min(5, Math.round(Number(rows) || 1)));
+            const columnCount = Math.max(1, Math.min(5, Math.round(Number(columns) || 1)));
+            if (!targetRange || !rangeLivesInPreview(targetRange)) return;
             const selection = window.getSelection();
-            if (!selection || !selection.rangeCount) return;
+            if (!selection) return;
             const table = document.createElement('table');
             table.className = 'kobo-table kf-user-table';
             const tbody = document.createElement('tbody');
-            for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+            for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
                 const row = document.createElement('tr');
-                for (let columnIndex = 0; columnIndex < columns; columnIndex += 1) {
+                for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
                     const cell = document.createElement('td');
                     cell.appendChild(document.createElement('br'));
                     row.appendChild(cell);
@@ -1460,16 +1703,16 @@
             }
             table.appendChild(tbody);
 
-            let anchor = selection.anchorNode;
+            let anchor = targetRange.startContainer;
             if (anchor?.nodeType === 3) anchor = anchor.parentElement;
             const block = anchor?.closest?.('p,h1,h2,h3,h4,blockquote,li,table');
             if (block && block !== previewEl && previewEl.contains(block)) {
                 block.insertAdjacentElement('afterend', table);
             } else {
-                const range = selection.getRangeAt(0);
-                range.deleteContents();
-                range.insertNode(table);
+                targetRange.deleteContents();
+                targetRange.insertNode(table);
             }
+            tableInsertionRange = null;
             placeCaretInside(table.querySelector('td'));
             afterFormat();
             scheduleDevicePagination();
@@ -1588,9 +1831,28 @@
                 else if (btn.dataset.align) applyHorizontalAlignment(btn.dataset.align);
                 else if (btn.dataset.vpos) applyVerticalPlacement(btn.dataset.vpos);
                 else if (btn.dataset.fontStep !== undefined) changeSelectedFontSize(btn.dataset.fontStep);
-                else if (btn === insertTableBtn) insertEditableTable();
+                else if (btn.dataset.imageLayout) setSelectedImageLayout(btn.dataset.imageLayout);
+                else if (btn === insertTableBtn) toggleTablePicker();
             });
         });
+
+        buildTablePicker();
+        document.addEventListener('pointerdown', (event) => {
+            if (
+                tablePicker?.classList.contains('hidden')
+                || tablePicker?.contains(event.target)
+                || insertTableBtn?.contains(event.target)
+            ) return;
+            closeTablePicker();
+        });
+        document.addEventListener('scroll', (event) => {
+            if (
+                tablePicker?.classList.contains('hidden')
+                || tablePicker?.contains(event.target)
+            ) return;
+            closeTablePicker();
+        }, true);
+        window.addEventListener('resize', positionTablePicker);
 
         imageCutBtn?.addEventListener('click', cutSelectedImage);
         imageCopyBtn?.addEventListener('click', copySelectedImage);
@@ -2178,9 +2440,20 @@
 
             root.querySelectorAll('img').forEach((img) => {
                 const width = normalizedImageWidth(img);
-                img.style.width = `${width}%`;
-                if (forExport) img.removeAttribute('data-kf-width');
-                else img.setAttribute('data-kf-width', String(width));
+                const layout = normalizedImageLayout(img);
+                img.setAttribute('data-kf-width', String(width));
+                img.setAttribute('data-kf-layout', layout);
+                applyImageLayoutPresentation(img);
+                if (forExport) {
+                    [
+                        'data-kf-width',
+                        'data-kf-width-mode',
+                        'data-kf-layout',
+                        'data-kf-layout-mode',
+                        'data-kf-fit-height',
+                        'data-kf-page-images'
+                    ].forEach((name) => img.removeAttribute(name));
+                }
                 img.classList.remove('kf-editable-image', 'kf-image-selected');
                 if (!img.className) img.removeAttribute('class');
                 ['tabindex', 'draggable', 'aria-selected', 'data-tooltip', 'title'].forEach((name) => {
@@ -4190,7 +4463,8 @@
                 let pageLayout = {
                     startZone: 'top',
                     offsetLevel: 0,
-                    topRatio: 0
+                    topRatio: 0,
+                    remainingRatio: 0.92
                 };
                 let pageDesignSignal = {};
                 try {
@@ -4292,12 +4566,30 @@
                         tableGeometry,
                         viewport
                     });
-                    pageImages.forEach((source, imageIndex) => {
+                    const imageLayout = ['left', 'right'].includes(pageLayout.sideRail)
+                        ? `inline-${pageLayout.sideRail}`
+                        : 'block';
+                    const fitHeightPercent = Math.max(
+                        20,
+                        Math.min(
+                            92,
+                            pageLayout.sideRail
+                                ? 82
+                                : Math.round((Number(pageLayout.remainingRatio) || 0.72) * 100)
+                        )
+                    );
+                    const imageParts = pageImages.map((source, imageIndex) => {
                         detectedImageCount += 1;
-                        pageParts.push(
-                            `<figure class="kf-document-image"><img src="${source}" alt="PDF page ${pageNumber} image ${imageIndex + 1}"></figure>`
+                        return (
+                            `<figure class="kf-document-image kf-image-${imageLayout}">`
+                            + `<img src="${source}" alt="PDF page ${pageNumber} image ${imageIndex + 1}" `
+                            + `data-kf-layout="${imageLayout}" data-kf-layout-mode="auto" `
+                            + `data-kf-width-mode="auto" data-kf-fit-height="${fitHeightPercent}" `
+                            + `data-kf-page-images="${Math.max(1, pageImages.length)}"></figure>`
                         );
                     });
+                    if (pageLayout.sideRail) pageParts.unshift(...imageParts);
+                    else pageParts.push(...imageParts);
                 } catch (pageErr) {
                     // Isolate per-page failures so page 2+ never aborts the whole convert
                     console.error(`[KoboForge] PDF page ${pageNumber}`, pageErr);
@@ -4624,18 +4916,32 @@
             const first = lines?.[0];
             const height = Math.max(Number(pageHeight) || 0, 1);
             if (!first) {
-                return { startZone: 'top', offsetLevel: 0, topRatio: 0 };
+                return {
+                    startZone: 'top',
+                    offsetLevel: 0,
+                    topRatio: 0,
+                    remainingRatio: 0.92
+                };
             }
             const firstTop = height - (
                 Number(first.y || 0) + Number(first.maxHeight || first.lineHeight || 0)
             );
             const topRatio = Math.max(0, Math.min(0.8, firstTop / height));
+            const bottomClear = Math.min(...lines.map((line) => (
+                Number(line.y || 0)
+                - (Number(line.maxHeight || line.lineHeight || 0) * 0.35)
+            )));
+            const remainingRatio = Math.max(
+                0.2,
+                Math.min(0.92, (bottomClear / height) - 0.025)
+            );
             return {
                 startZone: pdfVerticalZone(topRatio),
                 // Eight export-safe classes retain the page's top whitespace
                 // without introducing fixed-position text that cannot reflow.
                 offsetLevel: Math.max(0, Math.min(8, Math.round(topRatio * 16))),
-                topRatio
+                topRatio,
+                remainingRatio
             };
         }
 
@@ -6143,6 +6449,7 @@
                 'p{margin:0 0 0.85em;text-align:justify;page-break-inside:auto;page-break-before:auto;page-break-after:auto;}',
                 'h1.kf-pdf-block,h2.kf-pdf-block,h3.kf-pdf-block,p.kf-pdf-block{font-size:1em;font-family:inherit;text-align:left;}',
                 '.kf-pdf-page{display:block;box-sizing:border-box;width:100%;page-break-inside:auto;break-inside:auto;}',
+                '.kf-pdf-page::after{display:table;clear:both;content:"";}',
                 '.kf-pdf-page+.kf-pdf-page{margin-top:0;page-break-before:always;break-before:page;}',
                 '.kf-page-offset-0{padding-top:0;}.kf-page-offset-1{padding-top:1.8em;}.kf-page-offset-2{padding-top:3.6em;}.kf-page-offset-3{padding-top:5.4em;}.kf-page-offset-4{padding-top:7.2em;}.kf-page-offset-5{padding-top:9em;}.kf-page-offset-6{padding-top:10.8em;}.kf-page-offset-7{padding-top:12.6em;}.kf-page-offset-8{padding-top:14.4em;}',
                 '.kf-align-left{text-align:left !important;}.kf-align-center{text-align:center !important;}.kf-align-right{text-align:right !important;}',
@@ -6168,6 +6475,11 @@
                 'th{font-weight:700;background:#eee;}',
                 'code{font-family:monospace;font-size:0.92em;}',
                 'figure.kf-document-image{margin:1em 0;text-align:center;page-break-inside:auto;}',
+                'figure.kf-document-image.kf-image-inline-left,figure.kf-document-image.kf-image-inline-right{max-width:60%;margin-top:.25em;margin-bottom:.55em;}',
+                'figure.kf-document-image.kf-image-inline-left,img.kf-image-inline-left{float:left;margin-left:0;margin-right:.8em;}',
+                'figure.kf-document-image.kf-image-inline-right,img.kf-image-inline-right{float:right;margin-left:.8em;margin-right:0;}',
+                'figure.kf-document-image.kf-image-inline-left img,figure.kf-document-image.kf-image-inline-right img{display:block;width:100%;margin:0;}',
+                'img.kf-image-inline-left,img.kf-image-inline-right{display:inline-block;max-width:60%;margin-top:.2em;margin-bottom:.5em;}',
                 'img{display:block;max-width:100%;height:auto;margin:.75em auto;}',
                 'br{line-height:1.55;}'
             ].join(''));
@@ -6475,6 +6787,23 @@ ${spineItems}
                     img.setAttribute('data-kf-pixel-size', `${variant.width}x${variant.height}`);
                     img.classList.add('kf-inline-image');
                     if (!img.getAttribute('alt')) img.setAttribute('alt', 'Document image');
+                    if (!img.getAttribute('data-kf-layout')) {
+                        img.setAttribute('data-kf-layout', normalizedImageLayout(img));
+                        img.setAttribute('data-kf-layout-mode', 'auto');
+                    }
+                    if (img.getAttribute('data-kf-width-mode') !== 'user') {
+                        const automaticWidth = imageWidthForPageFit({
+                            pixelWidth: variant.width,
+                            pixelHeight: variant.height,
+                            fitHeightPercent: img.getAttribute('data-kf-fit-height') || 72,
+                            imageCount: img.getAttribute('data-kf-page-images') || 1,
+                            layout: normalizedImageLayout(img),
+                            target
+                        });
+                        img.setAttribute('data-kf-width', String(automaticWidth));
+                        img.setAttribute('data-kf-width-mode', 'auto');
+                    }
+                    applyImageLayoutPresentation(img);
                     converted += 1;
                 } catch (error) {
                     console.warn('[KoboForge] Embedded image conversion failed', error);

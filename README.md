@@ -21,12 +21,15 @@ before exporting a Kobo-friendly EPUB.
   space, and source-page layout changes
 - Compact icon-only phone controls with hover/tap labels, separate horizontally
   scrollable text and image/table rows, and pinned page arrows beside them
-- Selectable inline images with Kobo-view cut, copy, paste, and delete controls
-  plus dynamic width resizing and standard keyboard/clipboard-event support
+- Selectable images with Kobo-view cut, copy, paste, delete, dynamic width, and
+  own-row/inline-left/inline-right text wrapping controls
+- Aspect-ratio-aware image defaults sized to the selected Kobo and the remaining
+  space on the detected PDF source page
 - Compact conversion summary with three facts and one high-level observation
 - Locked edit pagination: deletion reflows later paragraphs without viewport drift
 - Left/center/right and top/middle/bottom placement, font sizing, Word-style
-  Tab behavior, editable table insertion, and HTML source mode
+  Tab behavior, Google-Docs-style 1×1 through 5×5 table insertion, and HTML
+  source mode
 - DOCX image extraction and automatic Kobo-targeted resizing/tone mapping
 - PDF image extraction with inline scan-page fallback
 - Robust PDF whitespace analysis that preserves large worksheet/note regions

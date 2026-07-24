@@ -6,7 +6,7 @@
   "use strict";
 
   global.SITE_VERSION = {
-    id: "2026.07.24.13",
+    id: "2026.07.24.14",
     repo: "KoboForge",
     label: "Kobo EPUB converter",
   };

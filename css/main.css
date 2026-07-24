@@ -375,6 +375,12 @@ body {
     break-inside: auto;
 }
 
+#deviceBookContent .kf-pdf-page::after {
+    display: table;
+    clear: both;
+    content: "";
+}
+
 #deviceBookContent .kf-pdf-page + .kf-pdf-page {
     margin-top: 0;
     page-break-before: always;
@@ -569,6 +575,42 @@ body {
     break-inside: auto;
 }
 
+#deviceBookContent figure.kf-document-image.kf-image-inline-left,
+#deviceBookContent figure.kf-document-image.kf-image-inline-right {
+    max-width: 60%;
+    margin-top: 0.25em;
+    margin-bottom: 0.55em;
+}
+
+#deviceBookContent figure.kf-document-image.kf-image-inline-left,
+#deviceBookContent img.kf-image-inline-left {
+    float: left;
+    margin-right: 0.8em;
+    margin-left: 0;
+}
+
+#deviceBookContent figure.kf-document-image.kf-image-inline-right,
+#deviceBookContent img.kf-image-inline-right {
+    float: right;
+    margin-right: 0;
+    margin-left: 0.8em;
+}
+
+#deviceBookContent figure.kf-document-image.kf-image-inline-left img,
+#deviceBookContent figure.kf-document-image.kf-image-inline-right img {
+    display: block;
+    width: 100%;
+    margin: 0;
+}
+
+#deviceBookContent img.kf-image-inline-left,
+#deviceBookContent img.kf-image-inline-right {
+    display: inline-block;
+    max-width: 60%;
+    margin-top: 0.2em;
+    margin-bottom: 0.5em;
+}
+
 .device-spec-pill {
     border: 1px solid rgba(255, 255, 255, 0.09);
     background: rgba(15, 23, 42, 0.7);
@@ -727,6 +769,56 @@ body {
     text-align: right;
 }
 
+.table-picker {
+    position: fixed;
+    z-index: 90;
+    width: max-content;
+    padding: 0.5rem;
+    border: 1px solid rgba(201, 162, 39, 0.38);
+    border-radius: 0.7rem;
+    background: rgba(8, 13, 23, 0.98);
+    box-shadow: 0 14px 35px rgba(0, 0, 0, 0.42);
+}
+
+.table-picker.hidden {
+    display: none;
+}
+
+.table-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1.55rem);
+    gap: 0.18rem;
+}
+
+.table-picker-cell {
+    width: 1.55rem;
+    height: 1.55rem;
+    padding: 0;
+    border: 1px solid rgba(148, 163, 184, 0.34);
+    border-radius: 0.22rem;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.table-picker-cell.is-selected {
+    border-color: rgba(201, 162, 39, 0.82);
+    background: rgba(201, 162, 39, 0.24);
+}
+
+.table-picker-cell:focus-visible {
+    outline: 2px solid #f5d36d;
+    outline-offset: 1px;
+}
+
+.table-picker-label {
+    display: block;
+    min-height: 1rem;
+    margin-top: 0.38rem;
+    color: #cbd5e1;
+    font-size: 0.64rem;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
 .tb-icon-text {
     letter-spacing: -0.06em;
 }
@@ -801,6 +893,15 @@ body {
 
     .image-size-control input {
         width: 3.3rem;
+    }
+
+    .table-picker-grid {
+        grid-template-columns: repeat(5, 1.72rem);
+    }
+
+    .table-picker-cell {
+        width: 1.72rem;
+        height: 1.72rem;
     }
 }
 

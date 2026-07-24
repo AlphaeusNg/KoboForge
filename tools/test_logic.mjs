@@ -652,8 +652,34 @@ assert.ok(page.includes("event.pointerType !== 'touch'")
     'touch presses reveal the same word labels as hover/focus');
 assert.ok(page.includes('function handleEditorTab') && page.includes("event.key !== 'Tab'"),
     'Word-like Tab editing');
-assert.ok(page.includes('id="insertTableBtn"') && page.includes('function insertEditableTable'),
-    'editable table insertion');
+assert.ok(
+    page.includes('id="insertTableBtn"')
+        && page.includes('id="tablePicker"')
+        && page.includes('id="tablePickerGrid"')
+        && page.includes('function buildTablePicker')
+        && page.includes('row <= 5')
+        && page.includes('column <= 5')
+        && page.includes('Math.min(5, Math.round(Number(rows)')
+        && !html.includes('Insert 2 by 2 table'),
+    'table insertion uses a dynamic keyboard/touch 1–5 row and column picker'
+);
+assert.ok(
+    html.includes('data-image-layout="block"')
+        && html.includes('data-image-layout="inline-left"')
+        && html.includes('data-image-layout="inline-right"')
+        && page.includes('function setSelectedImageLayout')
+        && styles.includes('figure.kf-document-image.kf-image-inline-left')
+        && styles.includes('float: right'),
+    'selected images can occupy their own row or share rows with wrapped text'
+);
+assert.ok(
+    page.includes('function imageWidthForPageFit')
+        && page.includes('data-kf-fit-height')
+        && page.includes('data-kf-page-images')
+        && page.includes("data-kf-width-mode=\"auto\"")
+        && page.includes('remainingRatio'),
+    'imported image defaults use aspect ratio, source-page space, image count, and Kobo geometry'
+);
 assert.ok(page.includes('class="kf-pdf-page') && page.includes('data-source-page='),
     'PDF pages become explicit source-page sections');
 assert.ok(page.includes('.kf-pdf-page + .kf-pdf-page')
@@ -689,6 +715,74 @@ assert.ok(epubCssMatch, 'EPUB CSS built as array join');
 assert.ok(
     !epubCssMatch[1].includes('pre-wrap'),
     'EPUB styles.css must not use white-space:pre-wrap (Kobo page-turn freeze)'
+);
+assert.ok(
+    epubCssMatch[1].includes('kf-image-inline-left')
+        && epubCssMatch[1].includes('float:left')
+        && epubCssMatch[1].includes('clear:both'),
+    'EPUB CSS keeps inline image wrapping contained within its source PDF page'
+);
+
+function imageWidthForPageFit({
+    pixelWidth,
+    pixelHeight,
+    fitHeightPercent = 72,
+    imageCount = 1,
+    layout = 'block',
+    target
+}) {
+    const width = Math.max(1, Number(pixelWidth) || 1);
+    const height = Math.max(1, Number(pixelHeight) || 1);
+    const count = Math.max(1, Math.round(Number(imageCount) || 1));
+    const availableRatio = Math.max(
+        0.2,
+        Math.min(0.92, (Number(fitHeightPercent) || 72) / 100)
+    );
+    const perImageHeight = Math.max(
+        0.18,
+        (availableRatio - (Math.max(0, count - 1) * 0.035)) / count
+    );
+    const naturalWidthPercent = (
+        target.height * perImageHeight * (width / height) / Math.max(1, target.width)
+    ) * 100;
+    const maximum = layout === 'block' ? 100 : 60;
+    return Math.max(
+        25,
+        Math.min(maximum, Math.floor(naturalWidthPercent / 5) * 5 || 25)
+    );
+}
+
+const libraPortrait = { width: 1264, height: 1680 };
+assert.equal(
+    imageWidthForPageFit({
+        pixelWidth: 1000,
+        pixelHeight: 1000,
+        target: libraPortrait
+    }),
+    95,
+    'square images shrink just enough to leave text room on Libra Colour'
+);
+assert.equal(
+    imageWidthForPageFit({
+        pixelWidth: 600,
+        pixelHeight: 1200,
+        fitHeightPercent: 50,
+        target: libraPortrait
+    }),
+    30,
+    'tall images shrink to the remaining source-page height'
+);
+assert.equal(
+    imageWidthForPageFit({
+        pixelWidth: 1600,
+        pixelHeight: 900,
+        fitHeightPercent: 80,
+        imageCount: 2,
+        layout: 'inline-left',
+        target: libraPortrait
+    }),
+    60,
+    'inline images stay compact even when a wide source could fill the page'
 );
 
 console.log('All KoboForge logic tests passed.');
