@@ -51,8 +51,8 @@ body {
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
 }
 
-#previewWrap.mode-view,
-#previewWrap.mode-edit {
+#previewWrap.mode-edit,
+#previewWrap.mode-diff {
     padding: 0;
     background: transparent;
     box-shadow: none;
@@ -78,16 +78,20 @@ body {
 }
 
 .device-stage {
-    min-height: 610px;
     display: grid;
     place-items: center;
+    box-sizing: border-box;
+    width: 100%;
     padding: 2rem 1rem 1.25rem;
-    overflow: auto;
+    overflow: visible;
 }
 
 #deviceFrame {
     position: relative;
-    width: min(var(--device-css-width, 360px), 100%);
+    width: min(
+        var(--device-css-width, 360px),
+        var(--device-relative-width, 100%)
+    );
     flex: none;
     border-radius: var(--device-radius, 12px);
     background:
@@ -177,6 +181,9 @@ body {
     bottom: var(--reader-content-bottom, 20px);
     left: var(--reader-margin, 18px);
     overflow: hidden;
+    overflow-anchor: none;
+    overscroll-behavior: none;
+    scroll-behavior: auto;
 }
 
 #deviceBookContent {
@@ -190,6 +197,7 @@ body {
     overflow: visible;
     transform: translate3d(0, 0, 0);
     transition: transform 0.14s ease-out;
+    overflow-anchor: none;
     -webkit-hyphens: auto;
     hyphens: auto;
 }
@@ -230,6 +238,56 @@ body {
     font-size: 1em;
     font-family: inherit;
     text-align: left;
+}
+
+#deviceBookContent .kf-pdf-page {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    break-inside: auto;
+}
+
+#deviceBookContent .kf-pdf-page + .kf-pdf-page {
+    margin-top: 1em;
+    page-break-before: auto;
+    break-before: auto;
+}
+
+#deviceBookContent .kf-page-offset-0 { padding-top: 0; }
+#deviceBookContent .kf-page-offset-1 { padding-top: 1.8em; }
+#deviceBookContent .kf-page-offset-2 { padding-top: 3.6em; }
+#deviceBookContent .kf-page-offset-3 { padding-top: 5.4em; }
+#deviceBookContent .kf-page-offset-4 { padding-top: 7.2em; }
+#deviceBookContent .kf-page-offset-5 { padding-top: 9em; }
+#deviceBookContent .kf-page-offset-6 { padding-top: 10.8em; }
+#deviceBookContent .kf-page-offset-7 { padding-top: 12.6em; }
+#deviceBookContent .kf-page-offset-8 { padding-top: 14.4em; }
+
+#deviceBookContent.kf-editing .kf-pdf-page {
+    box-shadow: inset 0 1px rgba(124, 45, 18, 0.14);
+}
+
+#deviceBookContent .kf-align-left { text-align: left !important; }
+#deviceBookContent .kf-align-center { text-align: center !important; }
+#deviceBookContent .kf-align-right { text-align: right !important; }
+
+#deviceBookContent .kf-user-vpos-top { margin-top: 0 !important; }
+#deviceBookContent .kf-user-vpos-middle { margin-top: 6em !important; }
+#deviceBookContent .kf-user-vpos-bottom { margin-top: 12em !important; }
+
+#deviceBookContent .kf-user-size-75 { font-size: 0.75em !important; }
+#deviceBookContent .kf-user-size-88 { font-size: 0.88em !important; }
+#deviceBookContent .kf-user-size-100 { font-size: 1em !important; }
+#deviceBookContent .kf-user-size-112 { font-size: 1.12em !important; }
+#deviceBookContent .kf-user-size-125 { font-size: 1.25em !important; }
+#deviceBookContent .kf-user-size-150 { font-size: 1.5em !important; }
+#deviceBookContent .kf-user-size-175 { font-size: 1.75em !important; }
+
+#deviceBookContent .kf-tab {
+    display: inline-block;
+    width: 2.5em;
+    min-height: 1em;
+    vertical-align: baseline;
 }
 
 #deviceBookContent .kf-pdf-line {
@@ -377,8 +435,7 @@ body {
 
 @media (max-width: 767px) {
     .device-stage {
-        min-height: 500px;
-        padding-inline: 0.65rem;
+        padding: 0.9rem 0.65rem 0.75rem;
     }
 
     #deviceFrame::after {
@@ -491,7 +548,7 @@ body {
     }
 }
 
-/* Edit diff (git-like) */
+/* Diff mode change index */
 #diffPanel {
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(2, 6, 23, 0.65);
@@ -505,7 +562,7 @@ body {
     word-break: break-word;
 }
 
-/* Jump list integrated under Edit mode */
+/* Jump list under the read-only Diff Kobo */
 #diffBody .diff-hunk {
     display: block;
     width: 100%;
@@ -583,7 +640,7 @@ body {
     vertical-align: 0.05em;
 }
 
-/* Google Docs–style track changes inside the editable Kobo screen */
+/* Google Docs–style track changes inside the read-only Diff Kobo */
 #deviceBookContent .kf-tc-del,
 #deviceBookContent del.kf-tc-del {
     background: rgba(220, 38, 38, 0.14);

@@ -25,6 +25,7 @@
         const editToolbar = document.getElementById('editToolbar');
         const applyHtmlBtn = document.getElementById('applyHtmlBtn');
         const cancelHtmlBtn = document.getElementById('cancelHtmlBtn');
+        const insertTableBtn = document.getElementById('insertTableBtn');
         const diffPanel = document.getElementById('diffPanel');
         const diffBody = document.getElementById('diffBody');
         const diffSummary = document.getElementById('diffSummary');
@@ -152,11 +153,14 @@
         let currentOutput = null;
         let currentFile = null;
         let bodyEdited = false;
-        let editMode = 'view'; // view | edit | html
+        let editMode = 'edit'; // edit | diff | html
         let commitTimer = null;
         let devicePageIndex = 0;
         let devicePageCount = 1;
         let deviceLayoutTimer = null;
+        let lockedEditPageIndex = null;
+        let editPageUnlockTimer = null;
+        let editViewportLockFrame = null;
         let documentImageConversionToken = 0;
 
         // —— Preferences ——
@@ -232,8 +236,8 @@
         });
 
         function setEditMode(mode) {
-            if (!['view', 'edit', 'html'].includes(mode)) mode = 'view';
-            if (!currentOutput && mode !== 'view') {
+            if (!['edit', 'diff', 'html'].includes(mode)) mode = 'edit';
+            if (!currentOutput) {
                 statusEl.textContent = 'Load a document first.';
                 return;
             }
@@ -241,6 +245,7 @@
             if (editMode === 'edit' || editMode === 'html') {
                 syncBodyFromUi();
             }
+            releaseEditablePageLock();
 
             editMode = mode;
             modeButtons.forEach((b) => {
@@ -250,28 +255,34 @@
                 b.classList.toggle('text-slate-400', !active);
             });
 
-            previewWrap?.classList.remove('mode-view', 'mode-edit', 'mode-html');
+            previewWrap?.classList.remove('mode-edit', 'mode-diff', 'mode-html');
             previewWrap?.classList.add(`mode-${mode}`);
 
             const isHtml = mode === 'html';
             const isEdit = mode === 'edit';
-            const isView = mode === 'view';
-            const isDeviceSurface = isView || isEdit;
+            const isDiff = mode === 'diff';
+            const isDeviceSurface = isEdit || isDiff;
 
             devicePreview?.classList.toggle('hidden', !isDeviceSurface);
             bodyHtmlSource.classList.toggle('hidden', !isHtml);
             htmlToolbar?.classList.toggle('hidden', !isHtml);
             editToolbar?.classList.toggle('hidden', !isEdit);
-            diffPanel?.classList.toggle('hidden', !isEdit);
+            diffPanel?.classList.toggle('hidden', !isDiff);
 
             previewEl.contentEditable = isEdit ? 'true' : 'false';
             previewEl.classList.toggle('kf-editing', isEdit);
+            previewEl.classList.toggle('kf-diffing', isDiff);
             if (isEdit) {
                 previewEl.setAttribute(
                     'aria-label',
-                    'Editable paginated Kobo document with live red and green track changes'
+                    'Editable paginated Kobo document'
                 );
                 previewEl.focus();
+            } else if (isDiff) {
+                previewEl.setAttribute(
+                    'aria-label',
+                    'Paginated Kobo document showing additions in green and removals in red'
+                );
             } else {
                 previewEl.removeAttribute('aria-label');
             }
@@ -280,11 +291,10 @@
                 bodyHtmlSource.value = prettyPrintHtml(currentOutput.bodyHtml);
             }
             if (isDeviceSurface) {
-                // Device and Edit are two states of the same reader. Keep the
-                // current Kobo page when moving between them.
+                // Edit and Diff share one reader. Keep the current Kobo page.
                 renderDevicePreview();
             }
-            if (isEdit) renderDiffPanel();
+            if (isDiff) renderDiffPanel();
             updateEditChrome();
         }
 
@@ -333,9 +343,20 @@
             const bodyW = geometry.bodyWidthMm;
             const bodyH = geometry.bodyHeightMm;
             const cssPxPerMm = 3.2;
+            const widestBodyMm = Math.max(
+                ...Object.values(KOBO_DEVICE_PROFILES).map((candidate) => (
+                    orientation === 'landscape'
+                        ? candidate.bodyHeight
+                        : candidate.bodyWidth
+                ))
+            );
 
             deviceFrame.style.aspectRatio = `${bodyW} / ${bodyH}`;
             deviceFrame.style.setProperty('--device-css-width', `${bodyW * cssPxPerMm}px`);
+            deviceFrame.style.setProperty(
+                '--device-relative-width',
+                `${(bodyW / widestBodyMm) * 100}%`
+            );
             deviceFrame.style.setProperty('--device-radius', `${Math.max(8, bodyW * 0.065)}px`);
             deviceFrame.classList.toggle('has-grip', profile.hasGrip);
             deviceFrame.classList.toggle('is-colour', profile.isColour);
@@ -397,6 +418,7 @@
         function renderDevicePreview({ resetPage = false } = {}) {
             if (!devicePreview || !deviceBookContent) return;
             if (resetPage) devicePageIndex = 0;
+            resetDeviceViewportScroll();
             updateDeviceControlLabels();
             const applied = applyDeviceGeometry();
             if (!applied) return;
@@ -409,19 +431,21 @@
                     canonicalizeBody(currentOutput.bodyHtml, { forExport: true })
                 );
             }
-            if (currentOutput && editMode === 'edit') {
+            if (currentOutput && editMode === 'diff') {
                 const tracked = buildTrackChangesDocument(
                     currentOutput.originalBodyHtml || '',
                     currentOutput.bodyHtml || ''
                 );
                 currentOutput._diffNav = tracked.navItems;
                 paintDiffNavList(tracked);
+                renderedBody = tracked.html || '<p class="kf-tc-empty">No changes yet.</p>';
             }
             deviceReaderHeader.textContent = title;
             deviceBookContent.lang = lang;
             deviceBookContent.innerHTML = renderedBody || '<p>(Empty document)</p>';
             deviceBookContent.contentEditable = editMode === 'edit' ? 'true' : 'false';
             deviceBookContent.classList.toggle('kf-editing', editMode === 'edit');
+            deviceBookContent.classList.toggle('kf-diffing', editMode === 'diff');
             deviceBookContent.querySelectorAll('.kf-note-space').forEach((space) => {
                 // Keep intentional space from collapsing during ordinary text
                 // edits. Advanced users can resize/remove it in HTML mode.
@@ -438,6 +462,69 @@
         function scheduleDevicePagination() {
             clearTimeout(deviceLayoutTimer);
             deviceLayoutTimer = setTimeout(layoutDevicePages, 30);
+        }
+
+        function resetDeviceViewportScroll() {
+            if (!deviceBookViewport) return;
+            if (deviceBookViewport.scrollLeft) deviceBookViewport.scrollLeft = 0;
+            if (deviceBookViewport.scrollTop) deviceBookViewport.scrollTop = 0;
+        }
+
+        function releaseEditablePageLock() {
+            clearTimeout(editPageUnlockTimer);
+            editPageUnlockTimer = null;
+            if (editViewportLockFrame !== null) {
+                cancelAnimationFrame(editViewportLockFrame);
+                editViewportLockFrame = null;
+            }
+            lockedEditPageIndex = null;
+            resetDeviceViewportScroll();
+            if (deviceBookContent) deviceBookContent.style.transition = '';
+        }
+
+        function pinEditableViewport() {
+            if (
+                editMode !== 'edit'
+                || lockedEditPageIndex === null
+                || !deviceBookContent
+            ) {
+                return;
+            }
+            devicePageIndex = Math.max(
+                0,
+                Math.min(lockedEditPageIndex, Math.max(0, devicePageCount - 1))
+            );
+            resetDeviceViewportScroll();
+            const pageWidth = Number(deviceBookContent.dataset.pageWidth || 0);
+            if (pageWidth) {
+                deviceBookContent.style.transition = 'none';
+                deviceBookContent.style.transform = `translate3d(${-devicePageIndex * pageWidth}px,0,0)`;
+            }
+        }
+
+        function beginEditablePageLock() {
+            if (editMode !== 'edit' || !currentOutput || !deviceBookContent) return;
+            if (lockedEditPageIndex === null) lockedEditPageIndex = devicePageIndex;
+            clearTimeout(editPageUnlockTimer);
+            if (editViewportLockFrame !== null) cancelAnimationFrame(editViewportLockFrame);
+            pinEditableViewport();
+            // Chromium may scroll an overflow:hidden contenteditable after the
+            // input event to reveal its caret. Re-pin across two paint frames.
+            editViewportLockFrame = requestAnimationFrame(() => {
+                pinEditableViewport();
+                editViewportLockFrame = requestAnimationFrame(() => {
+                    pinEditableViewport();
+                    editViewportLockFrame = null;
+                });
+            });
+            // Keep the lock through the debounced model sync + repagination.
+            editPageUnlockTimer = setTimeout(() => {
+                pinEditableViewport();
+                lockedEditPageIndex = null;
+                editPageUnlockTimer = null;
+                resetDeviceViewportScroll();
+                if (deviceBookContent) deviceBookContent.style.transition = '';
+            }, 260);
         }
 
         function layoutDevicePages() {
@@ -473,8 +560,6 @@
             requestAnimationFrame(() => {
                 const pageWidth = Math.max(1, Math.floor(deviceBookViewport.clientWidth));
                 const pageHeight = Math.max(1, Math.floor(deviceBookViewport.clientHeight));
-                deviceBookContent.style.transition = 'none';
-                deviceBookContent.style.transform = 'translate3d(0,0,0)';
                 deviceBookContent.style.width = `${pageWidth}px`;
                 deviceBookContent.style.height = `${pageHeight}px`;
                 deviceBookContent.style.columnWidth = `${pageWidth}px`;
@@ -483,19 +568,39 @@
                 requestAnimationFrame(() => {
                     const fullWidth = Math.max(pageWidth, deviceBookContent.scrollWidth);
                     devicePageCount = Math.max(1, Math.ceil((fullWidth - 0.5) / pageWidth));
-                    devicePageIndex = Math.max(0, Math.min(devicePageIndex, devicePageCount - 1));
+                    const requestedPage = (
+                        editMode === 'edit' && lockedEditPageIndex !== null
+                    )
+                        ? lockedEditPageIndex
+                        : devicePageIndex;
+                    devicePageIndex = Math.max(
+                        0,
+                        Math.min(requestedPage, devicePageCount - 1)
+                    );
                     deviceBookContent.dataset.pageWidth = String(pageWidth);
-                    deviceBookContent.style.transition = '';
-                    updateDevicePage();
+                    updateDevicePage({ animate: false });
                 });
             });
         }
 
-        function updateDevicePage() {
+        function updateDevicePage({ animate = true } = {}) {
             const pageWidth = Number(deviceBookContent?.dataset.pageWidth || 0);
+            if (editMode === 'edit' && lockedEditPageIndex !== null) {
+                devicePageIndex = lockedEditPageIndex;
+            }
             devicePageIndex = Math.max(0, Math.min(devicePageIndex, Math.max(0, devicePageCount - 1)));
+            resetDeviceViewportScroll();
             if (deviceBookContent && pageWidth) {
+                if (!animate) deviceBookContent.style.transition = 'none';
                 deviceBookContent.style.transform = `translate3d(${-devicePageIndex * pageWidth}px,0,0)`;
+                if (!animate) {
+                    requestAnimationFrame(() => {
+                        resetDeviceViewportScroll();
+                        if (deviceBookContent && lockedEditPageIndex === null) {
+                            deviceBookContent.style.transition = '';
+                        }
+                    });
+                }
             }
             const label = `Page ${devicePageIndex + 1} of ${devicePageCount}`;
             if (devicePageStatus) devicePageStatus.textContent = label;
@@ -506,6 +611,7 @@
 
         [deviceSelect, deviceOrientation].forEach((control) => {
             control?.addEventListener('change', async () => {
+                releaseEditablePageLock();
                 savePrefs();
                 const output = currentOutput;
                 if (output) {
@@ -519,11 +625,13 @@
             });
         });
         deviceChrome?.addEventListener('change', () => {
+            releaseEditablePageLock();
             savePrefs();
             renderDevicePreview({ resetPage: true });
         });
         [deviceFontSize, deviceMargin].forEach((control) => {
             control?.addEventListener('input', () => {
+                releaseEditablePageLock();
                 updateDeviceControlLabels();
                 devicePageIndex = 0;
                 if (currentOutput && editMode === 'edit') syncBodyFromUi();
@@ -533,10 +641,12 @@
             });
         });
         devicePagePrev?.addEventListener('click', () => {
+            releaseEditablePageLock();
             devicePageIndex -= 1;
             updateDevicePage();
         });
         devicePageNext?.addEventListener('click', () => {
+            releaseEditablePageLock();
             devicePageIndex += 1;
             updateDevicePage();
         });
@@ -544,16 +654,18 @@
             if (editMode === 'edit' && deviceBookContent?.contains(event.target)) return;
             if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
                 event.preventDefault();
+                releaseEditablePageLock();
                 devicePageIndex -= 1;
                 updateDevicePage();
             } else if (event.key === 'ArrowRight' || event.key === 'PageDown') {
                 event.preventDefault();
+                releaseEditablePageLock();
                 devicePageIndex += 1;
                 updateDevicePage();
             }
         });
         window.addEventListener('resize', () => {
-            if (editMode === 'view' || editMode === 'edit') scheduleDevicePagination();
+            if (editMode === 'edit' || editMode === 'diff') scheduleDevicePagination();
         });
         updateDeviceControlLabels();
         applyDeviceGeometry();
@@ -563,6 +675,7 @@
         }
 
         function afterFormat() {
+            beginEditablePageLock();
             markEdited();
             updateToolbarActiveState();
             clearTimeout(commitTimer);
@@ -633,6 +746,211 @@
             afterFormat();
         }
 
+        const EDITABLE_BLOCK_SELECTOR = [
+            'p', 'h1', 'h2', 'h3', 'h4', 'li', 'blockquote',
+            'table', 'th', 'td', '.kf-pdf-block'
+        ].join(',');
+        const USER_SIZE_CLASSES = [
+            'kf-user-size-75',
+            'kf-user-size-88',
+            'kf-user-size-100',
+            'kf-user-size-112',
+            'kf-user-size-125',
+            'kf-user-size-150',
+            'kf-user-size-175'
+        ];
+
+        function selectedEditableBlocks() {
+            const selection = window.getSelection();
+            if (!selection || !selection.rangeCount || !previewEl) return [];
+            const range = selection.getRangeAt(0);
+            let anchor = selection.anchorNode;
+            if (anchor?.nodeType === 3) anchor = anchor.parentElement;
+            const closest = anchor?.closest?.(EDITABLE_BLOCK_SELECTOR);
+            if (range.collapsed) {
+                return closest && previewEl.contains(closest) ? [closest] : [];
+            }
+            const candidates = Array.from(previewEl.querySelectorAll(EDITABLE_BLOCK_SELECTOR))
+                .filter((node) => {
+                    try {
+                        return range.intersectsNode(node);
+                    } catch (_) {
+                        return false;
+                    }
+                });
+            // Keep only the innermost selected blocks. This prevents a range in a
+            // table from styling both the table and every selected cell.
+            const innermost = candidates.filter((node) => (
+                !candidates.some((other) => other !== node && node.contains(other))
+            ));
+            return innermost.length
+                ? innermost
+                : (closest && previewEl.contains(closest) ? [closest] : []);
+        }
+
+        function applyHorizontalAlignment(alignment) {
+            if (!canFormatNow() || !['left', 'center', 'right'].includes(alignment)) return;
+            const blocks = selectedEditableBlocks();
+            blocks.forEach((block) => {
+                block.classList.remove('kf-align-left', 'kf-align-center', 'kf-align-right');
+                block.classList.add(`kf-align-${alignment}`);
+                block.style.removeProperty('text-align');
+                block.setAttribute('data-kf-align', alignment);
+            });
+            afterFormat();
+        }
+
+        function applyVerticalPlacement(position) {
+            if (!canFormatNow() || !['top', 'middle', 'bottom'].includes(position)) return;
+            selectedEditableBlocks().forEach((block) => {
+                block.classList.remove('kf-user-vpos-top', 'kf-user-vpos-middle', 'kf-user-vpos-bottom');
+                block.classList.add(`kf-user-vpos-${position}`);
+                block.setAttribute('data-kf-vpos', position);
+            });
+            afterFormat();
+        }
+
+        function changeSelectedFontSize(step) {
+            if (!canFormatNow()) return;
+            const delta = Number(step) || 0;
+            selectedEditableBlocks().forEach((block) => {
+                let currentIndex = USER_SIZE_CLASSES.findIndex((name) => block.classList.contains(name));
+                if (currentIndex < 0) currentIndex = 2;
+                USER_SIZE_CLASSES.forEach((name) => block.classList.remove(name));
+                if (delta !== 0) {
+                    const nextIndex = Math.max(
+                        0,
+                        Math.min(USER_SIZE_CLASSES.length - 1, currentIndex + delta)
+                    );
+                    block.classList.add(USER_SIZE_CLASSES[nextIndex]);
+                    block.setAttribute('data-kf-font-size', USER_SIZE_CLASSES[nextIndex].replace('kf-user-size-', ''));
+                } else {
+                    block.removeAttribute('data-kf-font-size');
+                }
+            });
+            afterFormat();
+        }
+
+        function placeCaretInside(element, atEnd = false) {
+            if (!element) return;
+            const selection = window.getSelection();
+            if (!selection) return;
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            range.collapse(!atEnd);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            element.closest?.('#deviceBookContent')?.focus();
+        }
+
+        function insertEditableTable(rows = 2, columns = 2) {
+            if (!canFormatNow()) return;
+            const selection = window.getSelection();
+            if (!selection || !selection.rangeCount) return;
+            const table = document.createElement('table');
+            table.className = 'kobo-table kf-user-table';
+            const tbody = document.createElement('tbody');
+            for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+                const row = document.createElement('tr');
+                for (let columnIndex = 0; columnIndex < columns; columnIndex += 1) {
+                    const cell = document.createElement('td');
+                    cell.appendChild(document.createElement('br'));
+                    row.appendChild(cell);
+                }
+                tbody.appendChild(row);
+            }
+            table.appendChild(tbody);
+
+            let anchor = selection.anchorNode;
+            if (anchor?.nodeType === 3) anchor = anchor.parentElement;
+            const block = anchor?.closest?.('p,h1,h2,h3,h4,blockquote,li,table');
+            if (block && block !== previewEl && previewEl.contains(block)) {
+                block.insertAdjacentElement('afterend', table);
+            } else {
+                const range = selection.getRangeAt(0);
+                range.deleteContents();
+                range.insertNode(table);
+            }
+            placeCaretInside(table.querySelector('td'));
+            afterFormat();
+            scheduleDevicePagination();
+        }
+
+        function addTableRow(table) {
+            const tbody = table?.tBodies?.[0] || table?.appendChild(document.createElement('tbody'));
+            const columnCount = Math.max(
+                1,
+                table?.rows?.[0]?.cells?.length || 2
+            );
+            const row = document.createElement('tr');
+            for (let index = 0; index < columnCount; index += 1) {
+                const cell = document.createElement('td');
+                cell.appendChild(document.createElement('br'));
+                row.appendChild(cell);
+            }
+            tbody.appendChild(row);
+            return row;
+        }
+
+        function handleEditorTab(event) {
+            if (event.key !== 'Tab' || !canFormatNow()) return;
+            const selection = window.getSelection();
+            if (!selection || !selection.rangeCount) return;
+            let anchor = selection.anchorNode;
+            if (anchor?.nodeType === 3) anchor = anchor.parentElement;
+            const cell = anchor?.closest?.('th,td');
+            if (cell && previewEl.contains(cell)) {
+                event.preventDefault();
+                const table = cell.closest('table');
+                let cells = Array.from(table.querySelectorAll('th,td'));
+                const currentIndex = cells.indexOf(cell);
+                let targetIndex = currentIndex + (event.shiftKey ? -1 : 1);
+                if (!event.shiftKey && targetIndex >= cells.length) {
+                    addTableRow(table);
+                    cells = Array.from(table.querySelectorAll('th,td'));
+                    targetIndex = cells.length - (table.rows[0]?.cells?.length || 2);
+                    markEdited();
+                    scheduleDevicePagination();
+                }
+                if (targetIndex >= 0 && targetIndex < cells.length) {
+                    placeCaretInside(cells[targetIndex]);
+                }
+                return;
+            }
+
+            const listItem = anchor?.closest?.('li');
+            if (listItem && previewEl.contains(listItem)) {
+                event.preventDefault();
+                try {
+                    document.execCommand(event.shiftKey ? 'outdent' : 'indent', false, null);
+                } catch (_) { /* ignore */ }
+                afterFormat();
+                return;
+            }
+
+            event.preventDefault();
+            if (event.shiftKey) {
+                try {
+                    document.execCommand('outdent', false, null);
+                } catch (_) { /* ignore */ }
+                afterFormat();
+                return;
+            }
+            const range = selection.getRangeAt(0);
+            range.deleteContents();
+            const tab = document.createElement('span');
+            tab.className = 'kf-tab';
+            tab.setAttribute('contenteditable', 'false');
+            tab.setAttribute('aria-label', 'Tab');
+            tab.innerHTML = '&#160;';
+            range.insertNode(tab);
+            range.setStartAfter(tab);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            afterFormat();
+        }
+
         function updateToolbarActiveState() {
             if (!editToolbar || !canFormatNow()) {
                 editToolbar?.querySelectorAll('.tb-btn[data-cmd]').forEach((b) => b.classList.remove('is-active'));
@@ -668,6 +986,10 @@
             btn.addEventListener('click', () => {
                 if (btn.dataset.cmd) runFormatCommand(btn.dataset.cmd);
                 else if (btn.dataset.block) formatBlockTag(btn.dataset.block);
+                else if (btn.dataset.align) applyHorizontalAlignment(btn.dataset.align);
+                else if (btn.dataset.vpos) applyVerticalPlacement(btn.dataset.vpos);
+                else if (btn.dataset.fontStep !== undefined) changeSelectedFontSize(btn.dataset.fontStep);
+                else if (btn === insertTableBtn) insertEditableTable();
             });
         });
 
@@ -675,12 +997,17 @@
             if (editMode === 'edit') updateToolbarActiveState();
         });
 
+        previewEl.addEventListener('beforeinput', () => {
+            if (editMode === 'edit' && currentOutput) beginEditablePageLock();
+        });
         previewEl.addEventListener('input', () => {
             if (editMode !== 'edit' || !currentOutput) return;
+            beginEditablePageLock();
             markEdited();
             clearTimeout(commitTimer);
             commitTimer = setTimeout(refreshDiffLive, 80);
         });
+        previewEl.addEventListener('keydown', handleEditorTab);
 
         previewEl.addEventListener('blur', () => {
             if (editMode === 'edit') {
@@ -700,7 +1027,7 @@
             statusEl.textContent = 'HTML applied and saved to the body that Download will use.';
         });
 
-        cancelHtmlBtn?.addEventListener('click', () => setEditMode(currentOutput ? 'edit' : 'view'));
+        cancelHtmlBtn?.addEventListener('click', () => setEditMode('edit'));
 
         function markEdited() {
             bodyEdited = true;
@@ -1067,7 +1394,7 @@
         }
 
         function jumpToChange(changeId) {
-            if (editMode !== 'edit') setEditMode('edit');
+            if (editMode !== 'diff') setEditMode('diff');
             requestAnimationFrame(() => {
                 const items = currentOutput?._diffNav || [];
                 const item = items.find((candidate) => String(candidate.id) === String(changeId));
@@ -1104,6 +1431,7 @@
 
         function jumpDeviceToElement(element) {
             if (!element || !deviceBookViewport || !deviceBookContent) return;
+            releaseEditablePageLock();
             const pageWidth = Number(deviceBookContent.dataset.pageWidth || 0);
             if (!pageWidth) return;
             const viewportRect = deviceBookViewport.getBoundingClientRect();
@@ -1139,7 +1467,7 @@
             if (!diffBody) return;
             if (diffSummary) {
                 if (tc.added + tc.removed === 0) {
-                    diffSummary.textContent = 'No word or heading differences vs the original import. You can still type in the document above.';
+                    diffSummary.textContent = 'No word or heading differences vs the original import. Return to Edit to make changes.';
                 } else {
                     const headBit = tc.headingChanges
                         ? ` · ${tc.headingChanges} heading change${tc.headingChanges === 1 ? '' : 's'}`
@@ -1149,7 +1477,7 @@
             }
             const rows = [];
             if (!tc.navItems.length) {
-                rows.push('<div class="diff-meta">No changes yet. Type directly on the Kobo screen above.</div>');
+                rows.push('<div class="diff-meta">No changes yet. Return to Edit to revise the Kobo document.</div>');
             } else {
                 tc.navItems.forEach((item, idx) => {
                     const label = item.summary
@@ -1179,7 +1507,7 @@
             );
             currentOutput._diffNav = tc.navItems;
             paintDiffNavList(tc);
-            diffPanel?.classList.toggle('hidden', editMode !== 'edit');
+            diffPanel?.classList.toggle('hidden', editMode !== 'diff');
             updateEditChrome();
         }
 
@@ -1189,14 +1517,19 @@
         }
 
         diffRefreshBtn?.addEventListener('click', () => {
-            if (editMode !== 'edit') setEditMode('edit');
-            else refreshDiffLive();
+            if (editMode !== 'diff') {
+                setEditMode('diff');
+                return;
+            }
+            renderDevicePreview();
+            renderDiffPanel();
         });
 
         /**
          * Canonical body for storage/export:
-         * - tables: class="kobo-table" only
+         * - tables retain only KoboForge-safe classes
          * - PDF page anchors kept as <div class="kf-page-break" data-page="N"></div>
+         * - PDF source-page sections retain page position metadata
          * - chapter markers stripped (preview-only)
          * - page labels converted back to page-break anchors
          */
@@ -1236,6 +1569,26 @@
                 });
             }
 
+            root.querySelectorAll('.kf-pdf-page').forEach((page) => {
+                const sourcePage = Math.max(
+                    1,
+                    Math.round(Number(page.getAttribute('data-source-page')) || 1)
+                );
+                const topPercent = Math.max(
+                    0,
+                    Math.min(100, Math.round(Number(page.getAttribute('data-pdf-top')) || 0))
+                );
+                const zone = page.classList.contains('kf-page-v-bottom')
+                    ? 'bottom'
+                    : (page.classList.contains('kf-page-v-middle') ? 'middle' : 'top');
+                const offsetName = Array.from(page.classList)
+                    .find((name) => /^kf-page-offset-[0-8]$/.test(name))
+                    || 'kf-page-offset-0';
+                page.className = `kf-pdf-page kf-page-v-${zone} ${offsetName}`;
+                page.setAttribute('data-source-page', String(sourcePage));
+                page.setAttribute('data-pdf-top', String(topPercent));
+            });
+
             root.querySelectorAll('.kf-note-space').forEach((space) => {
                 const lines = Math.max(
                     2,
@@ -1256,10 +1609,65 @@
                 }
             });
 
+            root.querySelectorAll('[data-kf-align], .kf-align-left, .kf-align-center, .kf-align-right').forEach((block) => {
+                const alignment = block.getAttribute('data-kf-align')
+                    || (block.classList.contains('kf-align-center') ? 'center'
+                        : block.classList.contains('kf-align-right') ? 'right' : 'left');
+                block.classList.remove('kf-align-left', 'kf-align-center', 'kf-align-right');
+                block.classList.add(`kf-align-${alignment}`);
+                block.style.removeProperty('text-align');
+                if (forExport) block.removeAttribute('data-kf-align');
+                else block.setAttribute('data-kf-align', alignment);
+            });
+
+            root.querySelectorAll('[data-kf-vpos], [class*="kf-user-vpos-"]').forEach((block) => {
+                const position = block.getAttribute('data-kf-vpos')
+                    || (block.classList.contains('kf-user-vpos-bottom') ? 'bottom'
+                        : block.classList.contains('kf-user-vpos-middle') ? 'middle' : 'top');
+                block.classList.remove('kf-user-vpos-top', 'kf-user-vpos-middle', 'kf-user-vpos-bottom');
+                block.classList.add(`kf-user-vpos-${position}`);
+                if (forExport) block.removeAttribute('data-kf-vpos');
+                else block.setAttribute('data-kf-vpos', position);
+            });
+
+            root.querySelectorAll('[data-kf-font-size], [class*="kf-user-size-"]').forEach((block) => {
+                const size = block.getAttribute('data-kf-font-size')
+                    || USER_SIZE_CLASSES
+                        .find((name) => block.classList.contains(name))
+                        ?.replace('kf-user-size-', '')
+                    || '100';
+                USER_SIZE_CLASSES.forEach((name) => block.classList.remove(name));
+                block.classList.add(`kf-user-size-${size}`);
+                if (forExport) block.removeAttribute('data-kf-font-size');
+                else block.setAttribute('data-kf-font-size', size);
+            });
+
+            root.querySelectorAll('.kf-tab').forEach((tab) => {
+                tab.className = 'kf-tab';
+                tab.innerHTML = '&#160;';
+                if (forExport) {
+                    tab.removeAttribute('contenteditable');
+                    tab.removeAttribute('aria-label');
+                } else {
+                    tab.setAttribute('contenteditable', 'false');
+                    tab.setAttribute('aria-label', 'Tab');
+                }
+            });
+
             root.querySelectorAll('table').forEach((table) => {
-                table.setAttribute('class', 'kobo-table');
+                const safeClasses = Array.from(table.classList).filter((name) => (
+                    name === 'kf-user-table'
+                    || name === 'kf-pdf-block'
+                    || /^kf-align-(left|center|right)$/.test(name)
+                    || /^kf-user-vpos-(top|middle|bottom)$/.test(name)
+                    || /^kf-user-size-(75|88|100|112|125|150|175)$/.test(name)
+                ));
+                table.setAttribute('class', ['kobo-table', ...safeClasses].join(' '));
                 table.querySelectorAll('th, td').forEach((cell) => {
-                    cell.removeAttribute('class');
+                    const alignment = Array.from(cell.classList)
+                        .find((name) => /^kf-align-(left|center|right)$/.test(name));
+                    if (alignment) cell.className = alignment;
+                    else cell.removeAttribute('class');
                 });
             });
 
@@ -1331,7 +1739,7 @@
                 });
                 currentOutput.bodyHtml = canonicalizeBody(clone.innerHTML);
             }
-            // view mode: body already lives in currentOutput from last sync
+            // Diff mode is read-only; its body already lives in currentOutput.
             return currentOutput.bodyHtml || '';
         }
 
@@ -1355,7 +1763,7 @@
                 if (editMode === 'html') syncBodyFromUi();
             }
 
-            if (editMode === 'view' || editMode === 'edit') renderDevicePreview();
+            if (editMode === 'edit' || editMode === 'diff') renderDevicePreview();
         }
 
         function lineToTag(line) {
@@ -1619,15 +2027,16 @@
         }
 
         function clearWorkspace() {
+            releaseEditablePageLock();
             documentImageConversionToken += 1;
             currentFile = null;
             currentOutput = null;
             clearEditedFlag();
-            editMode = 'view';
-            previewWrap?.classList.remove('mode-view', 'mode-edit', 'mode-html');
-            previewWrap?.classList.add('mode-view');
+            editMode = 'edit';
+            previewWrap?.classList.remove('mode-edit', 'mode-diff', 'mode-html');
+            previewWrap?.classList.add('mode-edit');
             modeButtons.forEach((b) => {
-                const active = b.dataset.mode === 'view';
+                const active = b.dataset.mode === 'edit';
                 b.classList.toggle('active', active);
                 b.classList.toggle('text-slate-300', active);
                 b.classList.toggle('text-slate-400', !active);
@@ -1642,7 +2051,7 @@
             pageChipsInner.innerHTML = '';
             chapterOutlineWrap.classList.add('hidden');
             chapterOutline.innerHTML = '';
-            previewEl.innerHTML = '<p class="kf-empty-hint">Load a document to edit structure, then switch to Device for a paginated Kobo preview.</p>';
+            previewEl.innerHTML = '<p class="kf-empty-hint">Load a document to edit directly in its paginated Kobo layout.</p>';
             previewEl.contentEditable = 'false';
             previewEl.classList.remove('kf-editing');
             devicePreview?.classList.add('hidden');
@@ -1770,7 +2179,7 @@
                 statusEl.textContent = stats.added + stats.removed
                     ? `EPUB downloaded with your edits (+${stats.added}/−${stats.removed}${headBit} vs import). Nothing left your browser.`
                     : 'EPUB ready. Nothing left your browser.';
-                if (editMode === 'edit') renderDiffPanel();
+                if (editMode === 'diff') renderDiffPanel();
             } catch (error) {
                 console.error('[KoboForge]', error);
                 statusEl.textContent = error.message || 'EPUB build failed.';
@@ -1779,6 +2188,7 @@
         });
 
         async function processFile(file) {
+            releaseEditablePageLock();
             if (bodyEdited && currentOutput) {
                 const ok = confirm('Loading a new file will discard your body edits. Continue?');
                 if (!ok) {
@@ -1827,9 +2237,9 @@
                 currentOutput.bodyHtml = canonical;
                 clearEditedFlag();
                 refreshOutlineAndStats();
-                // Open the converted document on the Kobo chosen beneath the uploader.
+                // Open the converted document directly in the selected Kobo editor.
                 devicePageIndex = 0;
-                setEditMode('view');
+                setEditMode('edit');
                 const targetName = selectedDeviceProfile().name;
                 statusEl.textContent = `${output.status} · Previewing on the ${targetName}.`;
                 downloadBtn.disabled = false;
@@ -1878,7 +2288,7 @@
                     btn.className = 'rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-slate-300 transition hover:border-white/25';
                     btn.textContent = `${i + 1}. ${ch.title}`;
                     btn.addEventListener('click', () => {
-                        // Edit uses the same paginated Kobo surface as Device.
+                        // Outline navigation opens the shared paginated Kobo editor.
                         if (editMode !== 'edit') setEditMode('edit');
                         const heads = previewEl.querySelectorAll('h1, h2');
                         const offset = (chapters[0]?.title === 'Front matter') ? 1 : 0;
@@ -1922,9 +2332,20 @@
                     chip.title = `Jump near PDF source page ${p} in the Kobo layout`;
                     chip.addEventListener('click', () => {
                         if (editMode !== 'edit') setEditMode('edit');
-                        const progress = pages <= 1 ? 0 : (p - 1) / (pages - 1);
-                        devicePageIndex = Math.round(progress * Math.max(0, devicePageCount - 1));
-                        updateDevicePage();
+                        requestAnimationFrame(() => {
+                            const sourceSection = previewEl.querySelector(
+                                `.kf-pdf-page[data-source-page="${p}"]`
+                            );
+                            if (sourceSection) {
+                                jumpDeviceToElement(sourceSection);
+                                return;
+                            }
+                            const progress = pages <= 1 ? 0 : (p - 1) / (pages - 1);
+                            devicePageIndex = Math.round(
+                                progress * Math.max(0, devicePageCount - 1)
+                            );
+                            updateDevicePage();
+                        });
                     });
                     pageChipsInner.appendChild(chip);
                 }
@@ -2016,7 +2437,7 @@
                 });
             }
             if (!items.length) {
-                items.push({ level: 'ok', text: 'No issues flagged. Use Device to page through the selected Kobo profile, then download.' });
+                items.push({ level: 'ok', text: 'No issues flagged. Page through Edit on the selected Kobo profile, then download.' });
             }
 
             diagnosticsEl.innerHTML = items.map((item) => {
@@ -2365,6 +2786,7 @@
             let tableCount = 0;
             let headingCount = 0;
             let noteSpaceCount = 0;
+            let readingColumnPageCount = 0;
             let detectedImageCount = 0;
             const detectedFontFamilies = new Set();
             const emptyPages = [];
@@ -2374,7 +2796,12 @@
             const warnings = [];
 
             for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-                parts.push(`<div class="kf-page-break" data-page="${pageNumber}"></div>`);
+                const pageParts = [];
+                let pageLayout = {
+                    startZone: 'top',
+                    offsetLevel: 0,
+                    topRatio: 0
+                };
                 try {
                     const page = await pdf.getPage(pageNumber);
                     const textContent = await page.getTextContent();
@@ -2394,8 +2821,11 @@
                     const pageBlocks = extractPdfBlocks(textContent.items || [], {
                         preserveTables: preserveTablesEnabled(),
                         fontMetadata,
+                        pageWidth: viewport.width,
                         pageHeight: viewport.height
                     });
+                    pageLayout = pageBlocks.pageLayout || pageLayout;
+                    if (pageLayout.readingColumns > 1) readingColumnPageCount += 1;
                     let pageImages = [];
                     try {
                         pageImages = await extractPdfPageImages(page, operatorList);
@@ -2412,28 +2842,58 @@
                             imageOnlyPages.push(pageNumber);
                         } else {
                             emptyPages.push(pageNumber);
-                            parts.push('<p class="preserve-structure"><em>(No extractable text or image could be recovered from this page.)</em></p>');
+                            pageParts.push('<p class="preserve-structure"><em>(No extractable text or image could be recovered from this page.)</em></p>');
                         }
                     } else {
                         for (const block of pageBlocks) {
+                            if (
+                                block.type === 'spacer'
+                                && pageImages.length
+                                && pageLayout.sideRail === block.sourceColumn
+                            ) {
+                                // This blank area is occupied by an extracted
+                                // image rail in the source PDF, not note space.
+                                continue;
+                            }
+                            const sourceColumn = ['left', 'right'].includes(block.sourceColumn)
+                                ? block.sourceColumn
+                                : '';
+                            const columnAttribute = sourceColumn
+                                ? ` data-pdf-column="${sourceColumn}"`
+                                : '';
+                            const alignment = ['left', 'center', 'right'].includes(block.alignment)
+                                ? block.alignment
+                                : 'left';
+                            const vertical = ['top', 'middle', 'bottom'].includes(block.verticalPosition)
+                                ? block.verticalPosition
+                                : 'top';
                             if (block.type === 'table') {
                                 tableCount += 1;
-                                parts.push(block.html);
+                                pageParts.push(
+                                    block.html.replace(
+                                        'class="kobo-table"',
+                                        `class="kobo-table kf-pdf-block kf-align-${alignment}" data-pdf-vpos="${vertical}"${columnAttribute}`
+                                    )
+                                );
                             } else if (block.type === 'spacer') {
                                 noteSpaceCount += 1;
-                                parts.push(block.html);
+                                pageParts.push(block.html);
                             } else if (block.type === 'heading') {
                                 headingCount += 1;
                                 const tag = block.level === 1 ? 'h1' : 'h2';
-                                parts.push(`<${tag} class="kf-pdf-block">${block.html || escapeHtml(block.text)}</${tag}>`);
+                                pageParts.push(
+                                    `<${tag} class="kf-pdf-block kf-align-${alignment}" data-pdf-vpos="${vertical}"${columnAttribute}>${block.html || escapeHtml(block.text)}</${tag}>`
+                                );
                             } else {
-                                parts.push(`<p class="preserve-structure kf-pdf-block">${block.html || escapeHtml(block.text)}</p>`);
+                                pageParts.push(
+                                    `<p class="preserve-structure kf-pdf-block kf-align-${alignment}" data-pdf-vpos="${vertical}"${columnAttribute}>${block.html || escapeHtml(block.text)}</p>`
+                                );
                             }
                         }
                     }
                     pageImages.forEach((source, imageIndex) => {
                         detectedImageCount += 1;
-                        parts.push(
+                        pageParts.push(
                             `<figure class="kf-document-image"><img src="${source}" alt="PDF page ${pageNumber} image ${imageIndex + 1}"></figure>`
                         );
                     });
@@ -2442,10 +2902,23 @@
                     console.error(`[KoboForge] PDF page ${pageNumber}`, pageErr);
                     failedPages.push(pageNumber);
                     emptyPages.push(pageNumber);
-                    parts.push(
+                    pageParts.push(
                         `<p class="preserve-structure"><em>(Failed to extract page ${pageNumber}: ${escapeHtml(pageErr?.message || 'unknown error')})</em></p>`
                     );
                 }
+                const startZone = ['top', 'middle', 'bottom'].includes(pageLayout.startZone)
+                    ? pageLayout.startZone
+                    : 'top';
+                const offsetLevel = Math.max(0, Math.min(8, Math.round(pageLayout.offsetLevel || 0)));
+                const topPercent = Math.max(
+                    0,
+                    Math.min(100, Math.round((Number(pageLayout.topRatio) || 0) * 100))
+                );
+                parts.push(
+                    `<div class="kf-page-break" data-page="${pageNumber}"></div>`
+                    + `<section class="kf-pdf-page kf-page-v-${startZone} kf-page-offset-${offsetLevel}" data-source-page="${pageNumber}" data-pdf-top="${topPercent}">`
+                    + `${pageParts.join('')}</section>`
+                );
                 setProgress(12 + (pageNumber / total) * 70, `PDF page ${pageNumber}/${total}`);
                 // Yield so progress UI paints between pages (avoids "stuck on page 1")
                 await new Promise((r) => setTimeout(r, 0));
@@ -2469,6 +2942,11 @@
             }
             if (detectedFontFamilies.size) {
                 structureParts.push(`${detectedFontFamilies.size} PDF font profile${detectedFontFamilies.size === 1 ? '' : 's'}`);
+            }
+            if (readingColumnPageCount) {
+                structureParts.push(
+                    `${readingColumnPageCount} page-level reading column layout${readingColumnPageCount === 1 ? '' : 's'}`
+                );
             }
             structureParts.push('line/indent reconstruction');
             if (optimized.imageCount) {
@@ -2498,6 +2976,9 @@
                     : '',
                 detectedFontFamilies.size
                     ? `${detectedFontFamilies.size} source font profile${detectedFontFamilies.size === 1 ? '' : 's'} mapped to Kobo-safe size, family, weight, and style`
+                    : '',
+                readingColumnPageCount
+                    ? `${readingColumnPageCount} page-level multi-column layout${readingColumnPageCount === 1 ? '' : 's'} separated into readable Kobo flow`
                     : ''
             ].filter(Boolean).join('; ');
             return {
@@ -2520,6 +3001,7 @@
                 detectedImageCount,
                 noteSpaceCount,
                 detectedFontCount: detectedFontFamilies.size,
+                readingColumnPageCount,
                 pageCount: total
             };
         }
@@ -2679,6 +3161,10 @@
                 return {
                     y: line.y,
                     xStart: line.xStart,
+                    xEnd: sorted.reduce(
+                        (maximum, part) => Math.max(maximum, part.x + part.width),
+                        line.xStart
+                    ),
                     rawText: `${' '.repeat(Math.min(indentSpaces, 12))}${text.trimEnd()}`,
                     plainText: text.trim(),
                     indentSpaces,
@@ -2699,6 +3185,164 @@
                     }))
                 };
             });
+        }
+
+        function pdfVerticalZone(topRatio) {
+            if (topRatio < 0.28) return 'top';
+            if (topRatio < 0.64) return 'middle';
+            return 'bottom';
+        }
+
+        function detectPdfPageLayout(lines, { pageHeight = 0 } = {}) {
+            const first = lines?.[0];
+            const height = Math.max(Number(pageHeight) || 0, 1);
+            if (!first) {
+                return { startZone: 'top', offsetLevel: 0, topRatio: 0 };
+            }
+            const firstTop = height - (
+                Number(first.y || 0) + Number(first.maxHeight || first.lineHeight || 0)
+            );
+            const topRatio = Math.max(0, Math.min(0.8, firstTop / height));
+            return {
+                startZone: pdfVerticalZone(topRatio),
+                // Eight export-safe classes retain the page's top whitespace
+                // without introducing fixed-position text that cannot reflow.
+                offsetLevel: Math.max(0, Math.min(8, Math.round(topRatio * 16))),
+                topRatio
+            };
+        }
+
+        function detectPdfBlockPosition(sourceLines, {
+            pageWidth = 0,
+            pageHeight = 0
+        } = {}) {
+            const lines = (sourceLines || []).filter(Boolean);
+            const width = Math.max(Number(pageWidth) || 0, 1);
+            const height = Math.max(Number(pageHeight) || 0, 1);
+            if (!lines.length) {
+                return { alignment: 'left', verticalPosition: 'top' };
+            }
+            const left = Math.min(...lines.map((line) => Number(line.xStart) || 0));
+            const rightEdge = Math.max(...lines.map((line) => Number(line.xEnd) || left));
+            const leftRatio = Math.max(0, left / width);
+            const rightRatio = Math.max(0, (width - rightEdge) / width);
+            const occupiedRatio = Math.max(0, Math.min(1, (rightEdge - left) / width));
+            let alignment = 'left';
+            if (occupiedRatio < 0.86 && Math.abs(leftRatio - rightRatio) <= 0.075) {
+                alignment = 'center';
+            } else if (lines.length >= 2) {
+                const startValues = lines.map((line) => Number(line.xStart) || 0);
+                const endValues = lines.map((line) => Number(line.xEnd) || 0);
+                const startSpread = Math.max(...startValues) - Math.min(...startValues);
+                const endSpread = Math.max(...endValues) - Math.min(...endValues);
+                if (endSpread <= width * 0.025 && startSpread > width * 0.04) {
+                    alignment = 'right';
+                } else if (startSpread <= width * 0.025) {
+                    alignment = 'left';
+                } else if (leftRatio > 0.24 && leftRatio - rightRatio >= 0.12) {
+                    alignment = 'right';
+                }
+            } else if (leftRatio > 0.24 && leftRatio - rightRatio >= 0.12) {
+                alignment = 'right';
+            }
+            const blockTop = Math.min(...lines.map((line) => (
+                height - (
+                    Number(line.y || 0)
+                    + Number(line.maxHeight || line.lineHeight || 0)
+                )
+            )));
+            return {
+                alignment,
+                verticalPosition: pdfVerticalZone(Math.max(0, blockTop / height))
+            };
+        }
+
+        function clusterPdfBaselines(items) {
+            const baselines = [];
+            (items || []).forEach((item) => {
+                const y = Number(item?.transform?.[5]);
+                if (!Number.isFinite(y)) return;
+                const existing = baselines.findIndex((value) => Math.abs(value - y) <= 3);
+                if (existing < 0) baselines.push(y);
+            });
+            return baselines;
+        }
+
+        /**
+         * Detect page-level newspaper/brochure columns before visual line
+         * reconstruction. Splitting on item start coordinates prevents unrelated
+         * left- and right-column text at the same height from being interleaved.
+         * Short local two-column runs are left to the table detector instead.
+         */
+        function detectPdfReadingColumns(items, {
+            pageWidth = 0,
+            pageHeight = 0
+        } = {}) {
+            const width = Number(pageWidth) || 0;
+            const height = Math.max(Number(pageHeight) || 0, 1);
+            const eligible = (items || []).filter((item) => (
+                item?.str
+                && String(item.str).trim()
+                && item.transform?.length >= 6
+                && Number.isFinite(Number(item.transform[4]))
+            ));
+            if (width <= 0 || eligible.length < 14) return null;
+
+            const starts = eligible
+                .map((item) => Number(item.transform[4]))
+                .sort((a, b) => a - b);
+            const startClusters = [];
+            starts.forEach((value) => {
+                const previous = startClusters[startClusters.length - 1];
+                if (!previous || value - previous[previous.length - 1] > 8) {
+                    startClusters.push([value]);
+                } else {
+                    previous.push(value);
+                }
+            });
+            const centers = startClusters.map((cluster) => median(cluster));
+            let best = null;
+            for (let index = 0; index < centers.length - 1; index += 1) {
+                const low = centers[index];
+                const high = centers[index + 1];
+                const gap = high - low;
+                const split = (low + high) / 2;
+                if (gap < Math.max(width * 0.055, 28)) continue;
+                if (split < width * 0.18 || split > width * 0.72) continue;
+
+                const leftItems = eligible.filter((item) => Number(item.transform[4]) < split);
+                const rightItems = eligible.filter((item) => Number(item.transform[4]) >= split);
+                const leftLines = clusterPdfBaselines(leftItems);
+                const rightLines = clusterPdfBaselines(rightItems);
+                if (leftLines.length < 7 || rightLines.length < 7) continue;
+                const span = (lines) => (
+                    lines.length
+                        ? (Math.max(...lines) - Math.min(...lines)) / height
+                        : 0
+                );
+                const leftSpan = span(leftLines);
+                const rightSpan = span(rightLines);
+                if (leftSpan < 0.38 || rightSpan < 0.38) continue;
+                const lineBalance = Math.min(leftLines.length, rightLines.length)
+                    / Math.max(leftLines.length, rightLines.length);
+                if (lineBalance < 0.22) continue;
+
+                const score = gap
+                    + Math.min(leftLines.length, rightLines.length) * 4
+                    + Math.min(leftSpan, rightSpan) * 40;
+                if (!best || score > best.score) {
+                    best = {
+                        split,
+                        gap,
+                        score,
+                        leftItems,
+                        rightItems,
+                        leftLineCount: leftLines.length,
+                        rightLineCount: rightLines.length
+                    };
+                }
+            }
+            return best;
         }
 
         function median(arr) {
@@ -2743,8 +3387,9 @@
         }
 
         function lineLooksTabular(line) {
-            // Require clear multi-column geometry. Verse numbers + prose often look
-            // like 2 cells with one gap and must NOT become a <table> (Kobo truncates).
+            // A single two-part line is commonly a verse number plus prose, so the
+            // base signal stays conservative. Stable two-column runs are detected
+            // separately across neighbouring lines.
             if (!line.cells || line.cells.length < 3) return false;
             let bigGaps = 0;
             for (let i = 1; i < line.cells.length; i += 1) {
@@ -2752,6 +3397,78 @@
                 if (gap > Math.max(line.avgCharWidth * 3.5, 18)) bigGaps += 1;
             }
             return bigGaps >= 2;
+        }
+
+        function splitPdfLineIntoColumns(line) {
+            const cells = [...(line?.cells || [])].sort((a, b) => a.x - b.x);
+            if (!cells.length) return [];
+            const threshold = Math.max((line.avgCharWidth || 4) * 4, 20);
+            const columns = [];
+            cells.forEach((cell) => {
+                const previous = columns[columns.length - 1];
+                if (!previous || cell.x - previous.end > threshold) {
+                    columns.push({
+                        x: cell.x,
+                        end: cell.end,
+                        text: (cell.text || '').trim()
+                    });
+                    return;
+                }
+                previous.text = `${previous.text} ${cell.text || ''}`.replace(/\s+/g, ' ').trim();
+                previous.end = Math.max(previous.end, cell.end);
+            });
+            return columns.filter((column) => column.text);
+        }
+
+        function lineLooksLikeTwoColumnRow(line) {
+            const columns = splitPdfLineIntoColumns(line);
+            if (columns.length !== 2) return false;
+            const first = columns[0].text.trim();
+            const second = columns[1].text.trim();
+            if (!first || !second) return false;
+            // Reject the common PDF pattern “12  prose...” while still allowing
+            // labelled rows such as “2) Security     Number”.
+            if (/^\(?\d{1,3}[\).:]?$/.test(first)) return false;
+            if (/^[•●▪◦*-]$/.test(first)) return false;
+            return true;
+        }
+
+        function stableTwoColumnLineIndexes(lines) {
+            const stable = new Set();
+            let index = 0;
+            while (index < lines.length) {
+                if (!lineLooksLikeTwoColumnRow(lines[index])) {
+                    index += 1;
+                    continue;
+                }
+                const run = [];
+                let cursor = index;
+                while (cursor < lines.length && lineLooksLikeTwoColumnRow(lines[cursor])) {
+                    if (run.length) {
+                        const previous = run[run.length - 1];
+                        const gap = previous.y - lines[cursor].y;
+                        if (gap > Math.max(previous.lineHeight * 2.4, 24)) break;
+                    }
+                    run.push(lines[cursor]);
+                    cursor += 1;
+                }
+                if (run.length >= 3) {
+                    const secondStarts = run.map((line) => splitPdfLineIntoColumns(line)[1].x);
+                    const center = median(secondStarts);
+                    const tolerance = Math.max(
+                        median(run.map((line) => line.avgCharWidth || 4)) * 3,
+                        20
+                    );
+                    const matching = run.filter((line) => (
+                        Math.abs(splitPdfLineIntoColumns(line)[1].x - center) <= tolerance
+                    ));
+                    if (matching.length === run.length) {
+                        run.forEach((line) => stable.add(lines.indexOf(line)));
+                    }
+                }
+                index = Math.max(cursor, index + 1);
+            }
+            return stable;
         }
 
         /**
@@ -2827,6 +3544,22 @@
 
         function tryBuildTableFromLines(lines) {
             if (lines.length < 2) return null;
+            if (lines.length >= 3 && lines.every(lineLooksLikeTwoColumnRow)) {
+                const columnGroups = lines.map(splitPdfLineIntoColumns);
+                const secondStarts = columnGroups.map((groups) => groups[1].x);
+                const center = median(secondStarts);
+                const tolerance = Math.max(
+                    median(lines.map((line) => line.avgCharWidth || 4)) * 3,
+                    20
+                );
+                if (secondStarts.every((start) => Math.abs(start - center) <= tolerance)) {
+                    const rows = columnGroups.map((groups) => groups.map((group) => group.text));
+                    const tableHtml = buildTableHtml(rows, {
+                        headerRow: !!lines[0].hasBold
+                    });
+                    if (tableHtml) return tableHtml;
+                }
+            }
             const tabularCount = lines.filter(lineLooksTabular).length;
             if (tabularCount < 2) return null;
             if (tabularCount < Math.ceil(lines.length * 0.5)) return null;
@@ -2912,7 +3645,10 @@
                 return linesToParagraphBlocks(builtLines);
             }
 
-            const flags = builtLines.map(lineLooksTabular);
+            const stableTwoColumn = stableTwoColumnLineIndexes(builtLines);
+            const flags = builtLines.map((line, index) => (
+                lineLooksTabular(line) || stableTwoColumn.has(index)
+            ));
             const blocks = [];
             let proseBuf = [];
             const flushProse = () => {
@@ -2950,7 +3686,11 @@
                     const tableHtml = tryBuildTableFromLines(region);
                     if (tableHtml) {
                         flushProse();
-                        blocks.push({ type: 'table', html: tableHtml });
+                        blocks.push({
+                            type: 'table',
+                            html: tableHtml,
+                            sourceLines: region.slice()
+                        });
                         i = j;
                         continue;
                     }
@@ -2964,14 +3704,8 @@
             return blocks;
         }
 
-        function extractPdfBlocks(items, {
-            preserveTables = true,
-            fontMetadata = {},
-            pageHeight = 0
-        } = {}) {
-            const builtLines = buildPdfLines(items, { fontMetadata });
+        function extractPdfBlocksFromLines(builtLines, preserveTables, pageHeight) {
             if (!builtLines.length) return [];
-
             const whitespace = detectPdfWhitespace(builtLines, { pageHeight });
             const spaceByLine = new Map(
                 whitespace.spaces.map((space) => [space.index, space])
@@ -2987,6 +3721,7 @@
                 blocks.push({
                     type: 'spacer',
                     lines: space.lines,
+                    sourceY: line.y - (space.gap / 2),
                     html: pdfSpacerHtml(space)
                 });
                 segment = [];
@@ -2996,7 +3731,94 @@
             return blocks;
         }
 
+        function extractPdfBlocks(items, {
+            preserveTables = true,
+            fontMetadata = {},
+            pageWidth = 0,
+            pageHeight = 0
+        } = {}) {
+            const builtLines = buildPdfLines(items, { fontMetadata });
+            const blocks = [];
+            blocks.pageLayout = detectPdfPageLayout(builtLines, { pageHeight });
+            if (!builtLines.length) return blocks;
+
+            const readingColumns = detectPdfReadingColumns(items, {
+                pageWidth,
+                pageHeight
+            });
+            if (readingColumns) {
+                [
+                    ['left', readingColumns.leftItems],
+                    ['right', readingColumns.rightItems]
+                ].forEach(([sourceColumn, columnItems]) => {
+                    const columnLines = buildPdfLines(columnItems, { fontMetadata });
+                    extractPdfBlocksFromLines(columnLines, preserveTables, pageHeight)
+                        .forEach((block) => {
+                            block.sourceColumn = sourceColumn;
+                            blocks.push(block);
+                        });
+                });
+                const sourceY = (block) => {
+                    if (Number.isFinite(block.sourceY)) return block.sourceY;
+                    return Math.max(
+                        ...(block.sourceLines || []).map((line) => Number(line.y) || 0),
+                        0
+                    );
+                };
+                blocks.sort((left, right) => {
+                    const vertical = sourceY(right) - sourceY(left);
+                    if (Math.abs(vertical) > 3) return vertical;
+                    if (left.sourceColumn === right.sourceColumn) return 0;
+                    return left.sourceColumn === 'left' ? -1 : 1;
+                });
+                blocks.pageLayout.readingColumns = 2;
+                blocks.pageLayout.columnSplitRatio = readingColumns.split
+                    / Math.max(Number(pageWidth) || 1, 1);
+                const smallerColumnRatio = Math.min(
+                    readingColumns.leftLineCount,
+                    readingColumns.rightLineCount
+                ) / Math.max(
+                    readingColumns.leftLineCount,
+                    readingColumns.rightLineCount
+                );
+                if (smallerColumnRatio <= 0.55) {
+                    blocks.pageLayout.sideRail = readingColumns.leftLineCount
+                        < readingColumns.rightLineCount
+                        ? 'left'
+                        : 'right';
+                }
+            } else {
+                extractPdfBlocksFromLines(builtLines, preserveTables, pageHeight)
+                    .forEach((block) => blocks.push(block));
+            }
+            blocks.forEach((block) => {
+                if (block.type === 'spacer') return;
+                const position = detectPdfBlockPosition(
+                    block.sourceLines,
+                    { pageWidth, pageHeight }
+                );
+                if (
+                    block.sourceColumn
+                    && block.sourceLines?.length >= 2
+                    && position.alignment === 'right'
+                ) {
+                    // Page-column location is stored separately. Keep the prose
+                    // itself left-aligned so narrow Kobos do not become ragged.
+                    position.alignment = 'left';
+                }
+                Object.assign(block, position);
+            });
+            return blocks;
+        }
+
         function linesToParagraphBlocks(builtLines) {
+            const lineAdvances = [];
+            for (let index = 0; index < builtLines.length - 1; index += 1) {
+                const advance = builtLines[index].y - builtLines[index + 1].y;
+                if (advance > 0) lineAdvances.push(advance);
+            }
+            const typicalLineAdvance = median(lineAdvances)
+                || median(builtLines.map((line) => line.lineHeight || 10)) * 1.5;
             // Soft-hyphen join across line breaks
             const joined = [];
             for (let i = 0; i < builtLines.length; i += 1) {
@@ -3039,7 +3861,8 @@
                 blocks.push({
                     type: 'paragraph',
                     text: current.map((line) => line.rawText).join('\n'),
-                    html: current.map((line) => renderPdfLineHtml(line)).join('<br>')
+                    html: current.map((line) => renderPdfLineHtml(line)).join('<br>'),
+                    sourceLines: current.slice()
                 });
                 current = [];
             };
@@ -3080,7 +3903,8 @@
                         text: headingLines.map((item) => item.plainText).join('\n'),
                         html: headingLines
                             .map((item) => renderPdfLineHtml(item, { preserveIndent: false }))
-                            .join('<br>')
+                            .join('<br>'),
+                        sourceLines: headingLines.slice()
                     });
                     previousLine = lastHeadingLine;
                     continue;
@@ -3094,7 +3918,10 @@
 
                 const verticalGap = previousLine.y - line.y;
                 const paragraphBreak =
-                    verticalGap > previousLine.lineHeight * 1.45 ||
+                    verticalGap > Math.max(
+                        previousLine.lineHeight * 1.7,
+                        typicalLineAdvance * 1.42
+                    ) ||
                     Math.abs(line.indentSpaces - previousLine.indentSpaces) >= 6;
 
                 if (paragraphBreak) {
@@ -3343,7 +4170,7 @@
 
             // Large tables must be allowed to break across pages on Kobo
             root.querySelectorAll('table').forEach((table) => {
-                table.setAttribute('class', 'kobo-table');
+                table.classList.add('kobo-table');
                 table.removeAttribute('style');
             });
 
@@ -3396,6 +4223,9 @@
             // Also skip if first element (after optional whitespace/comments) is heading
             const doc = new DOMParser().parseFromString(`<div id="root">${trimmed}</div>`, 'text/html');
             const root = doc.getElementById('root');
+            // PDF source pages already contain their original title/layout. Adding
+            // a synthetic heading here would create a page absent from Edit.
+            if (root?.firstElementChild?.classList?.contains('kf-pdf-page')) return trimmed;
             const first = root?.querySelector?.('h1, h2, h3, p, table, ul, ol, blockquote, div');
             if (first) {
                 const tag = first.tagName.toLowerCase();
@@ -3489,6 +4319,13 @@
                 'h1{font-size:1.45em;}h2{font-size:1.22em;}h3{font-size:1.08em;}',
                 'p{margin:0 0 0.85em;text-align:justify;page-break-inside:auto;page-break-before:auto;page-break-after:auto;}',
                 'h1.kf-pdf-block,h2.kf-pdf-block,h3.kf-pdf-block,p.kf-pdf-block{font-size:1em;font-family:inherit;text-align:left;}',
+                '.kf-pdf-page{display:block;box-sizing:border-box;width:100%;page-break-inside:auto;break-inside:auto;page-break-before:auto;break-before:auto;}',
+                '.kf-pdf-page+.kf-pdf-page{margin-top:1em;}',
+                '.kf-page-offset-0{padding-top:0;}.kf-page-offset-1{padding-top:1.8em;}.kf-page-offset-2{padding-top:3.6em;}.kf-page-offset-3{padding-top:5.4em;}.kf-page-offset-4{padding-top:7.2em;}.kf-page-offset-5{padding-top:9em;}.kf-page-offset-6{padding-top:10.8em;}.kf-page-offset-7{padding-top:12.6em;}.kf-page-offset-8{padding-top:14.4em;}',
+                '.kf-align-left{text-align:left !important;}.kf-align-center{text-align:center !important;}.kf-align-right{text-align:right !important;}',
+                '.kf-user-vpos-top{margin-top:0 !important;}.kf-user-vpos-middle{margin-top:6em !important;}.kf-user-vpos-bottom{margin-top:12em !important;}',
+                '.kf-user-size-75{font-size:.75em !important;}.kf-user-size-88{font-size:.88em !important;}.kf-user-size-100{font-size:1em !important;}.kf-user-size-112{font-size:1.12em !important;}.kf-user-size-125{font-size:1.25em !important;}.kf-user-size-150{font-size:1.5em !important;}.kf-user-size-175{font-size:1.75em !important;}',
+                '.kf-tab{display:inline-block;width:2.5em;min-height:1em;vertical-align:baseline;}',
                 '.kf-pdf-line{display:inline;box-sizing:border-box;max-width:100%;}',
                 '.kf-indent-0{padding-left:0;}.kf-indent-1{padding-left:.75em;}.kf-indent-2{padding-left:1.5em;}.kf-indent-3{padding-left:2.25em;}',
                 '.kf-font-serif{font-family:Georgia,"Times New Roman",Times,serif;}.kf-font-sans{font-family:Arial,Helvetica,sans-serif;}.kf-font-mono{font-family:"Courier New",Courier,monospace;}.kf-font-script{font-family:"Brush Script MT","Segoe Script",cursive;}',
@@ -3542,7 +4379,10 @@
 
             if (!splitChapters || chapters.length === 1) {
                 // Single continuous chapter: ensure one H1 book title if none
-                if (!/<h1[\s>]/i.test(chapters[0].html)) {
+                if (
+                    !/<h1[\s>]/i.test(chapters[0].html)
+                    && !/class=["'][^"']*\bkf-pdf-page\b/i.test(chapters[0].html)
+                ) {
                     chapters[0].html = `<h1>${escapeXml(title)}</h1>${chapters[0].html}`;
                 }
             }
@@ -3875,6 +4715,6 @@ ${spineItems}
             if (currentOutput) {
                 if (editMode === 'edit') syncBodyFromUi();
                 refreshOutlineAndStats();
-                if (editMode === 'view' || editMode === 'edit') renderDevicePreview();
+                if (editMode === 'edit' || editMode === 'diff') renderDevicePreview();
             }
         });

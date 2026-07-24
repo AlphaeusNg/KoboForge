@@ -27,7 +27,7 @@ tools/test_logic.mjs
 - Keep the application static: plain HTML/CSS/JS, no bundler unless requested.
 - Keep all document processing local to the browser.
 - Default to Kobo Libra Colour.
-- Preserve the same device surface between Device and Edit.
+- Preserve the same paginated Kobo surface between Edit and Diff.
 - Package embedded images as EPUB manifest assets, never unresolved data URLs.
 - Bump `js/version.js` for every deployment using `YYYY.MM.DD.N`.
 - GitHub Pages serves the repository root from `main`.

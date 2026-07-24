@@ -11,9 +11,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const htmlPath = join(__dirname, '../index.html');
 const jsPath = join(__dirname, '../js/app.js');
 const cssPath = join(__dirname, '../css/main.css');
+const versionPath = join(__dirname, '../js/version.js');
 const html = readFileSync(htmlPath, 'utf8');
 const script = readFileSync(jsPath, 'utf8');
 const styles = readFileSync(cssPath, 'utf8');
+const versionScript = readFileSync(versionPath, 'utf8');
 const page = [html, script, styles].join('\n');
 
 function assertIncludes(label, needle) {
@@ -22,17 +24,26 @@ function assertIncludes(label, needle) {
 
 // —— Page feature contract ——
 assert.ok(
-    html.includes('rel="stylesheet" href="css/main.css"'),
+    /rel="stylesheet" href="css\/main\.css\?v=[^"]+"/.test(html),
     'KoboForge must load its grouped stylesheet'
 );
 assert.ok(
-    html.includes('type="module" src="js/app.js"'),
+    /type="module" src="js\/app\.js\?v=[^"]+"/.test(html),
     'KoboForge must load its grouped application module'
 );
+const deploymentVersion = versionScript.match(/\bid:\s*"([^"]+)"/)?.[1];
+assert.ok(deploymentVersion, 'deployment version must be declared');
+for (const asset of ['css/main.css', 'js/version.js', 'js/app.js']) {
+    assert.ok(
+        html.includes(`${asset}?v=${deploymentVersion}`),
+        `${asset} must be cache-busted with the deployment version`
+    );
+}
 assert.ok(!html.includes('<script type="module">'), 'application code must not remain inline');
 
 const features = [
     ['edit mode', 'data-mode="edit"'],
+    ['diff mode', 'data-mode="diff"'],
     ['html mode', 'data-mode="html"'],
     ['canonicalize export', 'forExport'],
     ['page break round-trip', 'kf-page-break'],
@@ -46,12 +57,18 @@ const features = [
     ['confirm discard', 'Re-extracting will discard'],
     ['Kobo device profiles', 'KOBO_DEVICE_PROFILES'],
     ['paginated device surface', 'function layoutDevicePages'],
+    ['physically scaled device stage', '--device-relative-width'],
+    ['locked edit viewport', 'function beginEditablePageLock'],
     ['device page controls', 'devicePageNext'],
     ['automatic document image optimizer', 'function optimizeDocumentImages'],
     ['PDF image extraction', 'function extractPdfPageImages'],
     ['PDF intentional whitespace detector', 'function detectPdfWhitespace'],
     ['PDF embedded font metadata', 'function collectPdfFontMetadata'],
     ['PDF portable typography runs', 'function renderPdfRunsHtml'],
+    ['PDF source-page layout', 'function detectPdfPageLayout'],
+    ['PDF block position', 'function detectPdfBlockPosition'],
+    ['PDF page-level reading columns', 'function detectPdfReadingColumns'],
+    ['PDF stable two-column tables', 'function stableTwoColumnLineIndexes'],
     ['EPUB image assets', 'function extractEmbeddedImagesForEpub'],
     ['Floyd–Steinberg dithering', 'Floyd–Steinberg'],
 ];
@@ -260,11 +277,19 @@ const deviceSpecs = [
     ['Elipsa body width', 'bodyWidth: 193'],
 ];
 for (const [label, needle] of deviceSpecs) assertIncludes(label, needle);
+assert.ok(page.includes('widestBodyMm') && page.includes('--device-relative-width'),
+    'smaller Kobo bodies must stay proportionally smaller when the phone width is constrained');
+assert.ok(
+    ![...styles.matchAll(/\.device-stage\s*\{([^}]*)\}/g)]
+        .some((match) => /min-height\s*:/.test(match[1])),
+    'device stage must size to its frame instead of reserving empty fixed height'
+);
 
 // ensureChapterTitle behavior (mirror)
 function ensureChapterTitle(html, title) {
     const trimmed = (html || '').trim();
     if (/^<h[12][\s>]/i.test(trimmed)) return trimmed;
+    if (/^<section[^>]*\bkf-pdf-page\b/i.test(trimmed)) return trimmed;
     return `<h1>${escapeHtml(title)}</h1>${trimmed}`;
 }
 assert.equal(
@@ -275,6 +300,14 @@ assert.equal(
 assert.match(
     ensureChapterTitle('<p>only prose</p>', 'Doc'),
     /^<h1>Doc<\/h1>/
+);
+assert.equal(
+    ensureChapterTitle(
+        '<section class="kf-pdf-page kf-page-offset-2"><p>Source page</p></section>',
+        'PDF title'
+    ),
+    '<section class="kf-pdf-page kf-page-offset-2"><p>Source page</p></section>',
+    'PDF source pages must not gain a synthetic title page absent from Edit'
 );
 
 assert.ok(page.includes("root.querySelectorAll('.kf-page-label')"), 'page labels canonicalize to stable anchors');
@@ -309,12 +342,11 @@ assert.ok(page.includes('.kf-font-script') && page.includes('.kf-size-175'),
     'PDF font family and relative size classes must be styled');
 assert.ok(page.includes('kf-gap-before-3') && page.includes('margin-inline-start'),
     'wide PDF item gaps must remain visually separated in the device editor');
-assert.ok(page.includes("let editMode = 'view'"), 'empty workspace defaults to Device');
-assert.ok(page.includes("setEditMode('view')") && page.includes('Previewing on the ${targetName}'),
-    'import opens the selected Kobo Device preview');
-assert.ok(page.includes('mode-view'), 'View mode class for device preview');
+assert.ok(page.includes("let editMode = 'edit'"), 'empty workspace defaults to Edit');
+assert.ok(page.includes("setEditMode('edit')"), 'import opens the selected Kobo editor');
+assert.ok(!html.includes('data-mode="view"'), 'separate Device mode removed');
 assert.ok(page.includes('#f4f1e8') || page.includes('f4f1e8'), 'Kobo e-ink paper background on preview');
-assert.ok(!page.includes('id="einkToggle"'), 'standalone e-ink toggle removed (View is the device sim)');
+assert.ok(!page.includes('id="einkToggle"'), 'standalone e-ink toggle removed');
 assert.ok(page.includes("id=\"splitChapters\"") && !page.match(/id="splitChapters"[^>]*checked/),
     'chapter split off by default for continuous Kobo reading');
 assert.ok(page.includes('tag === \'h1\'') || page.includes('tag === "h1"'), 'spine splits H1 only');
@@ -323,14 +355,15 @@ assert.ok(page.includes('function syncBodyFromUi'), 'edit surface must flush int
 assert.ok(page.includes('function bodyHtmlForExport') && page.includes('syncBodyFromUi()'), 'download path syncs edits');
 assert.ok(page.includes('originalBodyHtml'), 'snapshot original import for diff');
 assert.ok(page.includes('function lineDiff'), 'git-like edit history');
-assert.ok(page.includes('id="diffPanel"') && page.includes('Edit history'), 'change index integrated into Edit');
+assert.ok(page.includes('id="diffPanel"') && page.includes('Edit history'), 'Diff change index');
 assert.ok(page.includes('function htmlToDiffLines'), 'structure-aware diff lines');
 assert.ok(page.includes("repeat(level)") || page.includes("'#'.repeat"), 'headings encoded for diff');
 assert.ok(page.includes('diff-h-tag') || page.includes('headingChanges'), 'heading change badges/stats');
 assert.ok(page.includes('function wordDiffOps') || page.includes('function buildWordLevelDiff'), 'word-level diff');
 assert.ok(page.includes('compressWordOps'), 'word context compression');
 assert.ok(page.includes('diff-w-add') && page.includes('diff-w-del'), 'inline word add/del styles');
-assert.ok(!page.includes('data-mode="diff"') && !page.includes('id="showDiffBtn"'), 'separate Diff controls removed');
+assert.ok(page.includes('data-mode="diff"') && !page.includes('id="showDiffBtn"'),
+    'Diff is a first-class mode on the shared Kobo surface');
 assert.ok(
     !html.includes('id="imageDropzone"')
         && !html.includes('id="imageFileInput"')
@@ -342,15 +375,47 @@ assert.ok(page.includes('kf-tc-del') && page.includes('kf-tc-ins'), 'Google Docs
 assert.ok(page.includes('function jumpToChange'), 'clickable jump to change');
 assert.ok(page.includes('function refreshDiffLive'), 'live track-changes refresh while typing');
 assert.ok(
-    page.includes("const isDeviceSurface = isView || isEdit")
+    page.includes("const isDeviceSurface = isEdit || isDiff")
         && page.includes("deviceBookContent.contentEditable = editMode === 'edit'"),
-    'Edit reuses the paginated Kobo device surface'
+    'Edit and Diff reuse the paginated Kobo device surface'
 );
 assert.ok(
-    page.includes("diffPanel?.classList.toggle('hidden', !isEdit)")
+    page.includes("diffPanel?.classList.toggle('hidden', !isDiff)")
         && page.includes('without replacing the editable DOM'),
-    'Edit owns the change index without repainting away formatting'
+    'Diff owns the change index while Edit refresh preserves the DOM'
 );
+assert.ok(page.includes('updateDevicePage({ animate: false })')
+    && page.includes("deviceBookContent.style.transition = 'none'"),
+    'repagination refreshes the current Kobo page without a slide');
+assert.ok(page.includes("previewEl.addEventListener('beforeinput'")
+    && page.includes('lockedEditPageIndex')
+    && page.includes('deviceBookViewport.scrollLeft = 0')
+    && page.includes('overflow-anchor: none'),
+    'content deletion must keep the active Kobo page transform and hidden viewport locked');
+assert.ok(page.includes('data-align="left"')
+    && page.includes('data-align="center"')
+    && page.includes('data-align="right"'),
+    'horizontal placement controls');
+assert.ok(page.includes('data-vpos="top"')
+    && page.includes('data-vpos="middle"')
+    && page.includes('data-vpos="bottom"'),
+    'vertical placement controls');
+assert.ok(page.includes('data-font-step="1"') && page.includes('changeSelectedFontSize'),
+    'block font-size controls');
+assert.ok(page.includes('function handleEditorTab') && page.includes("event.key !== 'Tab'"),
+    'Word-like Tab editing');
+assert.ok(page.includes('id="insertTableBtn"') && page.includes('function insertEditableTable'),
+    'editable table insertion');
+assert.ok(page.includes('class="kf-pdf-page') && page.includes('data-source-page='),
+    'PDF pages become explicit source-page sections');
+assert.ok(page.includes('.kf-pdf-page + .kf-pdf-page')
+    && page.includes('break-before: auto')
+    && page.includes('margin-top: 1em'),
+    'source PDF pages keep soft boundaries that allow normal Kobo reflow');
+assert.ok(page.includes('data-pdf-vpos=') && page.includes('kf-align-${alignment}'),
+    'PDF coordinate-derived placement survives into editable blocks');
+assert.ok(page.includes('data-pdf-column=') && page.includes('sideRail'),
+    'page-level columns are separated without treating image rails as note space');
 const dropzonePos = page.indexOf('id="dropzone"');
 const koboSetupPos = page.indexOf('id="koboPreviewSetup"');
 const titleInputPos = page.indexOf('id="bookTitle"');

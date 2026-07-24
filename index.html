@@ -18,7 +18,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap">
-    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/main.css?v=2026.07.24.4">
 
 </head>
 <body class="text-slate-50 antialiased">
@@ -191,9 +191,9 @@
                     <ol class="mt-4 list-decimal space-y-2 pl-5 text-sm leading-7 text-slate-300">
                         <li>Import a document (DOCX, PDF, TXT, or Markdown).</li>
                         <li>Choose your Kobo; detected DOCX/PDF images are optimized for it automatically.</li>
-                        <li>Page through the converted output in <strong class="text-slate-100">Device</strong>, which opens automatically.</li>
-                        <li>Fix structure in <strong class="text-slate-100">Edit</strong> or <strong class="text-slate-100">HTML</strong>.</li>
-                        <li>Review live red/green changes in <strong class="text-slate-100">Edit</strong>, then export.</li>
+                        <li>Edit directly in the selected Kobo view, which opens automatically.</li>
+                        <li>Use alignment, font-size, table, and Word-style Tab controls in <strong class="text-slate-100">Edit</strong>.</li>
+                        <li>Switch to <strong class="text-slate-100">Diff</strong> to see red/green changes directly on the Kobo, then export.</li>
                     </ol>
                 </div>
             </div>
@@ -210,15 +210,15 @@
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <div class="flex rounded-2xl border border-white/10 bg-slate-950/40 p-1" role="group" aria-label="Preview mode">
-                            <button type="button" data-mode="view" class="mode-btn active rounded-xl px-3 py-1.5 text-xs font-medium text-slate-300 transition" title="Paginated preview on a selected Kobo screen">Device</button>
-                            <button type="button" data-mode="edit" class="mode-btn rounded-xl px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:text-slate-200" title="Edit directly on the selected Kobo screen with live track changes">Edit</button>
+                            <button type="button" data-mode="edit" class="mode-btn active rounded-xl px-3 py-1.5 text-xs font-medium text-slate-300 transition" title="Edit directly on the selected Kobo screen">Edit</button>
+                            <button type="button" data-mode="diff" class="mode-btn rounded-xl px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:text-slate-200" title="Show red and green changes directly on the Kobo screen">Diff</button>
                             <button type="button" data-mode="html" class="mode-btn rounded-xl px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:text-slate-200" title="Raw HTML source for precise fixes">HTML</button>
                         </div>
                     </div>
                 </div>
                 <p class="text-xs leading-5 text-slate-500">
-                    <strong class="font-medium text-slate-400">Device</strong> opens after import using the Kobo selected under Import.
-                    <strong class="font-medium text-slate-400">Edit</strong> keeps that exact device view editable, with formatting, pagination, red/green track changes, and a live change index.
+                    <strong class="font-medium text-slate-400">Edit</strong> opens after import using the Kobo selected under Import.
+                    <strong class="font-medium text-slate-400">Diff</strong> paints additions green and removals red directly on that same paginated screen.
                 </p>
                 </div>
 
@@ -282,7 +282,27 @@
                         <button type="button" data-block="h2" class="tb-btn tb-btn-wide block-fmt-btn" title="Heading 2">H2</button>
                         <button type="button" data-block="h3" class="tb-btn tb-btn-wide block-fmt-btn" title="Heading 3">H3</button>
                     </div>
-                    <p class="m-0 px-1 text-[10px] leading-4 text-slate-500">Select text, then tap a style. Bold/italic/underline work on Kobo. Toolbar sticks above the keyboard on phones.</p>
+                    <div class="tb-row" role="group" aria-label="Horizontal alignment">
+                        <span class="tb-label">Align</span>
+                        <button type="button" data-align="left" class="tb-btn tb-btn-wide" title="Align left">Left</button>
+                        <button type="button" data-align="center" class="tb-btn tb-btn-wide" title="Align center">Center</button>
+                        <button type="button" data-align="right" class="tb-btn tb-btn-wide" title="Align right">Right</button>
+                    </div>
+                    <div class="tb-row" role="group" aria-label="Vertical placement and font size">
+                        <span class="tb-label">Place</span>
+                        <button type="button" data-vpos="top" class="tb-btn tb-btn-wide" title="Place near top">Top</button>
+                        <button type="button" data-vpos="middle" class="tb-btn tb-btn-wide" title="Place near middle">Middle</button>
+                        <button type="button" data-vpos="bottom" class="tb-btn tb-btn-wide" title="Place near bottom">Bottom</button>
+                        <span class="tb-label">Size</span>
+                        <button type="button" data-font-step="-1" class="tb-btn" title="Decrease font size" aria-label="Decrease font size">A−</button>
+                        <button type="button" data-font-step="1" class="tb-btn" title="Increase font size" aria-label="Increase font size">A+</button>
+                        <button type="button" data-font-step="0" class="tb-btn tb-btn-wide" title="Reset font size">Reset</button>
+                    </div>
+                    <div class="tb-row" role="group" aria-label="Insert content">
+                        <span class="tb-label">Insert</span>
+                        <button type="button" id="insertTableBtn" class="tb-btn tb-btn-wide" title="Insert an editable 2 by 2 table">Table 2×2</button>
+                    </div>
+                    <p class="m-0 px-1 text-[10px] leading-4 text-slate-500">Tab inserts a paragraph tab, indents lists, and moves through table cells (adding a row from the last cell). Toolbar sticks above the keyboard on phones.</p>
                 </div>
                 <div id="htmlToolbar" class="mt-3 hidden flex flex-wrap gap-2">
                     <button type="button" id="applyHtmlBtn" class="rounded-2xl bg-[#C9A227] px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-[#d9b844]">Apply HTML</button>
@@ -294,9 +314,9 @@
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <div>
                             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#C9A227]">Edit history</div>
-                            <p id="diffSummary" class="mt-1 text-xs text-slate-400">Changes update while you type. Click a row to jump to its Kobo page.</p>
+                            <p id="diffSummary" class="mt-1 text-xs text-slate-400">Changes appear directly on the Kobo in Diff. Click a row to jump.</p>
                         </div>
-                        <button type="button" id="diffRefreshBtn" class="rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300 hover:border-[#C9A227]/40">Refresh</button>
+                        <button type="button" id="diffRefreshBtn" class="rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300 hover:border-[#C9A227]/40">Update diff</button>
                     </div>
                     <div id="diffBody" class="mt-3 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/50 p-2" aria-live="polite"></div>
                 </div>
@@ -362,7 +382,7 @@
                     <div class="text-xs font-semibold uppercase tracking-[0.22em] text-[#C9A227]">4. EPUB export</div>
                     <h2 id="export-heading" class="mt-2 text-2xl font-semibold tracking-tight">Download EPUB</h2>
                     <p class="mt-2 text-sm leading-6 text-slate-400">
-                        Download always pulls the latest Edit/HTML body first, then builds the EPUB. Track changes and their jump list are built directly into <strong class="font-medium text-slate-300">Edit</strong>.
+                        Download always pulls the latest Edit/HTML body first, then builds the EPUB. Switch to <strong class="font-medium text-slate-300">Diff</strong> for the in-Kobo red/green changes and jump list.
                     </p>
                     <p id="exportEditHint" class="mt-2 hidden text-xs font-medium text-amber-300/90"></p>
                 </div>
@@ -396,8 +416,8 @@
         <span id="site-version" class="font-mono text-slate-500" title="Bump js/version.js on each deploy">v—</span>
     </footer>
     <script src="https://alphaeusng.github.io/js/kofi-support.js" data-auto-footer defer></script>
-    <script src="js/version.js"></script>
+    <script src="js/version.js?v=2026.07.24.4"></script>
 
-    <script type="module" src="js/app.js"></script>
+    <script type="module" src="js/app.js?v=2026.07.24.4"></script>
 </body>
 </html>
