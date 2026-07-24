@@ -557,9 +557,9 @@ assert.ok(page.includes('ratio >= 1.55'), 'conservative PDF heading size thresho
 assert.ok(page.includes('function syncBodyFromUi'), 'edit surface must flush into model before export');
 assert.ok(page.includes('function bodyHtmlForExport') && page.includes('syncBodyFromUi()'), 'download path syncs edits');
 assert.ok(page.includes('originalBodyHtml'), 'snapshot original import for diff');
-assert.ok(page.includes('function lineDiff'), 'git-like edit history');
+assert.ok(page.includes('function sequenceDiff'), 'sequence-aware edit history');
 assert.ok(page.includes('id="diffPanel"') && page.includes('Edit history'), 'Diff change index');
-assert.ok(page.includes('function htmlToDiffLines'), 'structure-aware diff lines');
+assert.ok(page.includes('function layoutDiffEntries'), 'structure-aware diff entries');
 assert.ok(page.includes("repeat(level)") || page.includes("'#'.repeat"), 'headings encoded for diff');
 assert.ok(page.includes('diff-h-tag') || page.includes('headingChanges'), 'heading change badges/stats');
 assert.ok(page.includes('function wordDiffOps') || page.includes('function buildWordLevelDiff'), 'word-level diff');
@@ -575,6 +575,28 @@ assert.ok(
 );
 assert.ok(page.includes('function buildTrackChangesDocument'), 'full-document track changes');
 assert.ok(page.includes('kf-tc-del') && page.includes('kf-tc-ins'), 'Google Docs style del/ins');
+assert.ok(
+    page.includes('function semanticElementSignature')
+        && page.includes('function inlineTraitText')
+        && page.includes("bold: 'Bold'")
+        && page.includes("strikethrough: 'Strikethrough'"),
+    'edit history detects semantic inline formatting even when words do not change'
+);
+assert.ok(
+    page.includes('function entryMovementDetails')
+        && page.includes('sharedMoveKeys')
+        && page.includes('Image width:')
+        && page.includes('Table cells or structure changed')
+        && page.includes('sharedUniqueLayoutKeys'),
+    'edit history names image movement/resizing and table structure changes'
+);
+assert.ok(
+    page.includes('structuredChanges')
+        && page.includes('formatChangeDetailsHtml')
+        && page.includes('diff-event-chip')
+        && page.includes('kf-tc-format-change'),
+    'non-word edits render as jumpable history chips and marked Kobo blocks'
+);
 assert.ok(page.includes('function jumpToChange'), 'clickable jump to change');
 assert.ok(page.includes('function refreshDiffLive'), 'live track-changes refresh while typing');
 assert.ok(

@@ -3,7 +3,7 @@
             buildFixedLayoutPublicationFiles,
             fixedLayoutDownloadName,
             resolveEpubLayoutMode
-        } from './fixed-layout.js?v=2026.07.24.12';
+        } from './fixed-layout.js?v=2026.07.24.13';
         import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
@@ -460,7 +460,7 @@
             } else if (isDiff) {
                 previewEl.setAttribute(
                     'aria-label',
-                    'Paginated Kobo document showing additions in green and removals in red'
+                    'Paginated Kobo document showing text, formatting, object, and placement changes'
                 );
             } else {
                 previewEl.removeAttribute('aria-label');
@@ -1508,7 +1508,7 @@
                     addTableRow(table);
                     cells = Array.from(table.querySelectorAll('th,td'));
                     targetIndex = cells.length - (table.rows[0]?.cells?.length || 2);
-                    markEdited();
+                    afterFormat();
                     scheduleDevicePagination();
                 }
                 if (targetIndex >= 0 && targetIndex < cells.length) {
@@ -1691,7 +1691,10 @@
         function markEdited() {
             bodyEdited = true;
             editedBadge?.classList.remove('hidden');
-            updateEditChrome();
+            if (exportEditHint) {
+                exportEditHint.classList.remove('hidden');
+                exportEditHint.textContent = 'Edits will be included in Download.';
+            }
         }
 
         function clearEditedFlag() {
@@ -1701,7 +1704,7 @@
             hideDiffPanel();
         }
 
-        function updateEditChrome() {
+        function updateEditChrome(precomputedChanges = null) {
             const hasDoc = !!currentOutput;
             if (!exportEditHint) return;
             if (!hasDoc) {
@@ -1710,11 +1713,11 @@
                 return;
             }
             syncBodyFromUi();
-            const stats = diffStats(
-                htmlToDiffLines(currentOutput.originalBodyHtml || ''),
-                htmlToDiffLines(currentOutput.bodyHtml || '')
+            const stats = precomputedChanges || buildTrackChangesDocument(
+                currentOutput.originalBodyHtml || '',
+                currentOutput.bodyHtml || ''
             );
-            const changed = stats.added + stats.removed > 0;
+            const changed = stats.navItems.length > 0;
             bodyEdited = changed || bodyEdited;
             if (changed) {
                 editedBadge?.classList.remove('hidden');
@@ -1722,7 +1725,10 @@
                 const headBit = stats.headingChanges
                     ? ` · ${stats.headingChanges} heading change${stats.headingChanges === 1 ? '' : 's'}`
                     : '';
-                exportEditHint.textContent = `Edits will be included in Download: +${stats.added} / −${stats.removed} words${headBit} vs original import.`;
+                const structureBit = stats.structuredChanges
+                    ? ` · ${stats.structuredChanges} formatting/object edit${stats.structuredChanges === 1 ? '' : 's'}`
+                    : '';
+                exportEditHint.textContent = `Edits will be included in Download: +${stats.added} / −${stats.removed} words${headBit}${structureBit} vs original import.`;
             } else if (bodyEdited) {
                 exportEditHint.classList.remove('hidden');
                 exportEditHint.textContent = 'Body marked edited (structure/HTML). Download will use the current body.';
@@ -1732,85 +1738,13 @@
             }
         }
 
-        /** @deprecated alias */
-        function htmlToPlainLines(html) {
-            return htmlToDiffLines(html);
-        }
-
-        function isHeadingDiffLine(line) {
-            return /^#{1,6}\s/.test(line || '');
-        }
-
         function parseHeadingDiffLine(line) {
             const m = /^(#{1,6})\s+(.*)$/.exec(line || '');
             if (!m) return null;
             return { level: m[1].length, text: m[2], hashes: m[1] };
         }
 
-        /**
-         * Serialize body HTML for diffing.
-         * Headings become "# Title" / "## Title" so H1↔H2 promotions and new headers
-         * show up even when the plain text is unchanged.
-         */
-        function htmlToDiffLines(html) {
-            const tmp = document.createElement('div');
-            tmp.innerHTML = html || '';
-            tmp.querySelectorAll('.kf-page-break, .kf-page-label, .kf-chapter-marker').forEach((el) => el.remove());
-
-            const lines = [];
-
-            function pushTextBlock(raw) {
-                String(raw || '')
-                    .replace(/\r\n/g, '\n')
-                    .split('\n')
-                    .map((s) => s.replace(/\s+/g, ' ').trim())
-                    .filter(Boolean)
-                    .forEach((s) => lines.push(s));
-            }
-
-            function walk(node) {
-                if (!node) return;
-                if (node.nodeType === 3) return;
-                if (node.nodeType !== 1) return;
-                const tag = node.tagName.toLowerCase();
-                if (tag === 'script' || tag === 'style') return;
-
-                if (/^h[1-6]$/.test(tag)) {
-                    const level = Number(tag.charAt(1)) || 1;
-                    const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
-                    if (text) lines.push(`${'#'.repeat(level)} ${text}`);
-                    return;
-                }
-
-                if (tag === 'p' || tag === 'li' || tag === 'blockquote') {
-                    const clone = node.cloneNode(true);
-                    clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
-                    pushTextBlock(clone.textContent || '');
-                    return;
-                }
-
-                if (tag === 'tr') {
-                    const cells = Array.from(node.children)
-                        .filter((c) => /^(th|td)$/i.test(c.tagName))
-                        .map((c) => (c.textContent || '').replace(/\s+/g, ' ').trim())
-                        .filter(Boolean);
-                    if (cells.length) lines.push(cells.join(' | '));
-                    return;
-                }
-
-                if (tag === 'table') {
-                    Array.from(node.querySelectorAll('tr')).forEach(walk);
-                    return;
-                }
-
-                Array.from(node.childNodes).forEach(walk);
-            }
-
-            Array.from(tmp.childNodes).forEach(walk);
-            return lines;
-        }
-
-        /** LCS sequence diff (words or lines). */
+        /** LCS sequence diff for layout entries and word tokens. */
         function sequenceDiff(aItems, bItems) {
             const n = aItems.length;
             const m = bItems.length;
@@ -1853,10 +1787,6 @@
                 j += 1;
             }
             return ops;
-        }
-
-        function lineDiff(aLines, bLines) {
-            return sequenceDiff(aLines, bLines);
         }
 
         function tokenizeWords(text) {
@@ -1937,91 +1867,6 @@
             return Math.max(0, changes);
         }
 
-        /**
-         * Align lines, then expand changed pairs into word-level diffs.
-         * Returns flat list of display hunks (each hunk is word ops with context).
-         */
-        function buildWordLevelDiff(aLines, bLines) {
-            const lineOps = lineDiff(aLines, bLines);
-            const hunks = [];
-            let wordAdded = 0;
-            let wordRemoved = 0;
-            let headingChanges = 0;
-            let i = 0;
-
-            while (i < lineOps.length) {
-                const op = lineOps[i];
-                if (op.type === 'same') {
-                    i += 1;
-                    continue;
-                }
-
-                // Collect consecutive del block then add block (classic replace region)
-                const dels = [];
-                const adds = [];
-                while (i < lineOps.length && lineOps[i].type === 'del') {
-                    dels.push(lineOps[i].text);
-                    i += 1;
-                }
-                while (i < lineOps.length && lineOps[i].type === 'add') {
-                    adds.push(lineOps[i].text);
-                    i += 1;
-                }
-
-                // Pair line-by-line where possible for tighter word diffs
-                const maxPair = Math.max(dels.length, adds.length);
-                if (maxPair === 0) continue;
-
-                // If both sides have content, word-diff joined sides as one span when
-                // lengths differ a lot; else pair 1:1 for cleaner local hunks
-                if (dels.length === adds.length) {
-                    for (let k = 0; k < dels.length; k += 1) {
-                        const wOps = compressWordOps(wordDiffOps(dels[k], adds[k]), 2);
-                        const c = countWordChanges(wOps);
-                        wordAdded += c.added;
-                        wordRemoved += c.removed;
-                        headingChanges += countHeadingChangesFromWordOps(wOps);
-                        if (c.added + c.removed > 0) hunks.push(wOps);
-                    }
-                } else if (dels.length === 0) {
-                    // pure insert of line(s) — still word-level tokens (all adds)
-                    const wOps = compressWordOps(wordDiffOps('', adds.join(' ')), 2);
-                    const c = countWordChanges(wOps);
-                    wordAdded += c.added;
-                    wordRemoved += c.removed;
-                    headingChanges += countHeadingChangesFromWordOps(wOps);
-                    if (c.added + c.removed > 0) hunks.push(wOps);
-                } else if (adds.length === 0) {
-                    const wOps = compressWordOps(wordDiffOps(dels.join(' '), ''), 2);
-                    const c = countWordChanges(wOps);
-                    wordAdded += c.added;
-                    wordRemoved += c.removed;
-                    headingChanges += countHeadingChangesFromWordOps(wOps);
-                    if (c.added + c.removed > 0) hunks.push(wOps);
-                } else {
-                    // unequal multi-line replace → one word-level span
-                    const wOps = compressWordOps(wordDiffOps(dels.join(' '), adds.join(' ')), 2);
-                    const c = countWordChanges(wOps);
-                    wordAdded += c.added;
-                    wordRemoved += c.removed;
-                    headingChanges += countHeadingChangesFromWordOps(wOps);
-                    if (c.added + c.removed > 0) hunks.push(wOps);
-                }
-            }
-
-            return { hunks, added: wordAdded, removed: wordRemoved, headingChanges };
-        }
-
-        function diffStats(aLines, bLines) {
-            const result = buildWordLevelDiff(aLines, bLines);
-            return {
-                added: result.added,
-                removed: result.removed,
-                headingChanges: result.headingChanges,
-                hunks: result.hunks
-            };
-        }
-
         function formatWordOpsHtml(wordOps) {
             return wordOps.map((op) => {
                 if (op.type === 'ellipsis') {
@@ -2050,6 +1895,16 @@
                 }
                 return '';
             }).join(' ');
+        }
+
+        function formatChangeDetailsHtml(details) {
+            if (!details?.length) return '';
+            return '<div class="diff-event-list">'
+                + details.map((detail) => (
+                    `<span class="diff-event-chip is-${escapeHtml(detail.tone || 'change')}">`
+                    + `${escapeHtml(detail.label || 'Structured edit')}</span>`
+                )).join('')
+                + '</div>';
         }
 
         function jumpToChange(changeId) {
@@ -2120,19 +1975,25 @@
             currentOutput._diffNav = tc.navItems;
             paintDiffNavList(tc);
             scheduleDevicePagination();
-            updateEditChrome();
+            updateEditChrome(tc);
         }
 
         function paintDiffNavList(tc) {
             if (!diffBody) return;
             if (diffSummary) {
-                if (tc.added + tc.removed === 0) {
-                    diffSummary.textContent = 'No word or heading differences vs the original import. Return to Edit to make changes.';
+                if (!tc.navItems.length) {
+                    diffSummary.textContent = 'No differences vs the original import. Return to Edit to make changes.';
                 } else {
+                    const wordBit = tc.added + tc.removed
+                        ? `+${tc.added} words · −${tc.removed} words`
+                        : 'No word changes';
                     const headBit = tc.headingChanges
                         ? ` · ${tc.headingChanges} heading change${tc.headingChanges === 1 ? '' : 's'}`
                         : '';
-                    diffSummary.textContent = `+${tc.added} words · −${tc.removed} words${headBit} — live · click a row to jump`;
+                    const structureBit = tc.structuredChanges
+                        ? ` · ${tc.structuredChanges} formatting/object edit${tc.structuredChanges === 1 ? '' : 's'}`
+                        : '';
+                    diffSummary.textContent = `${wordBit}${headBit}${structureBit} — live · click a row to jump`;
                 }
             }
             const rows = [];
@@ -2144,9 +2005,10 @@
                         ? escapeHtml(item.summary.slice(0, 72)) + (item.summary.length > 72 ? '…' : '')
                         : `Change ${idx + 1}`;
                     rows.push(
-                        `<button type="button" class="diff-hunk" data-change-id="${item.id}" title="Jump to this change">`
+                        `<button type="button" class="diff-hunk is-${escapeHtml(item.category || 'text')}" data-change-id="${item.id}" title="Jump to this change">`
                         + `<span class="diff-w-ctx">#${idx + 1}</span> `
                         + formatWordOpsHtml(item.wordOps)
+                        + formatChangeDetailsHtml(item.details)
                         + `<div class="diff-meta" style="padding-left:0;padding-top:0.25rem">${label}</div>`
                         + `</button>`
                     );
@@ -2168,7 +2030,7 @@
             currentOutput._diffNav = tc.navItems;
             paintDiffNavList(tc);
             diffPanel?.classList.toggle('hidden', editMode !== 'diff');
-            updateEditChrome();
+            updateEditChrome(tc);
         }
 
         function hideDiffPanel() {
@@ -2443,39 +2305,391 @@
             return h ? h.text : String(line || '');
         }
 
-        function wordOpsToTrackHtml(ops, changeId) {
-            const parts = [];
+        function formattedTextTokenRecords(element) {
+            if (!element) return [];
+            const records = [];
+            const walker = element.ownerDocument.createTreeWalker(
+                element,
+                NodeFilter.SHOW_TEXT
+            );
+            let node = walker.nextNode();
+            while (node) {
+                if (!node.parentElement?.closest?.('.kf-tc-del')) {
+                    const pattern = /\S+/g;
+                    let match = pattern.exec(node.nodeValue || '');
+                    while (match) {
+                        records.push({
+                            node,
+                            start: match.index,
+                            end: match.index + match[0].length
+                        });
+                        match = pattern.exec(node.nodeValue || '');
+                    }
+                }
+                node = walker.nextNode();
+            }
+            return records;
+        }
+
+        function applyWordOpsToFormattedElement(element, ops, changeId) {
+            const currentRecords = formattedTextTokenRecords(element);
+            const addedRecordIndexes = [];
+            const deletionGroups = [];
+            let currentIndex = 0;
             ops.forEach((op) => {
-                if (op.type === 'ellipsis') return; // full doc never uses ellipsis
-                if (isHeadingToken(op.text)) {
-                    // Level lives on the block tag; still mark level swaps inline
-                    if (op.type === 'del') {
-                        parts.push(`<del class="kf-tc-del" data-diff="${changeId}"><span class="diff-h-tag">${escapeHtml(op.text.replace(':', ''))}</span></del> `);
-                    } else if (op.type === 'add') {
-                        parts.push(`<ins class="kf-tc-ins" data-diff="${changeId}"><span class="diff-h-tag">${escapeHtml(op.text.replace(':', ''))}</span></ins> `);
+                if (op.type === 'ellipsis' || isHeadingToken(op.text)) return;
+                if (op.type === 'del') {
+                    const existing = deletionGroups[deletionGroups.length - 1];
+                    if (existing?.position === currentIndex) {
+                        existing.tokens.push(op.text);
+                    } else {
+                        deletionGroups.push({
+                            position: currentIndex,
+                            tokens: [op.text]
+                        });
                     }
                     return;
                 }
-                if (op.type === 'same') {
-                    parts.push(escapeHtml(op.text));
-                    parts.push(' ');
-                } else if (op.type === 'del') {
-                    parts.push(`<del class="kf-tc-del" data-diff="${changeId}">${escapeHtml(op.text)}</del> `);
-                } else if (op.type === 'add') {
-                    parts.push(`<ins class="kf-tc-ins" data-diff="${changeId}">${escapeHtml(op.text)}</ins> `);
-                }
+                if (op.type === 'add') addedRecordIndexes.push(currentIndex);
+                currentIndex += 1;
             });
-            return parts.join('').replace(/\s+$/, '');
+
+            addedRecordIndexes.sort((left, right) => right - left).forEach((index) => {
+                const record = currentRecords[index];
+                if (!record?.node?.parentNode) return;
+                const range = element.ownerDocument.createRange();
+                range.setStart(record.node, record.start);
+                range.setEnd(record.node, record.end);
+                const wrapper = element.ownerDocument.createElement('ins');
+                wrapper.className = 'kf-tc-ins';
+                wrapper.setAttribute('data-diff', String(changeId));
+                range.surroundContents(wrapper);
+            });
+
+            const updatedRecords = formattedTextTokenRecords(element);
+            deletionGroups.sort((left, right) => right.position - left.position)
+                .forEach((group) => {
+                    const removed = element.ownerDocument.createElement('del');
+                    removed.className = 'kf-tc-del';
+                    removed.setAttribute('data-diff', String(changeId));
+                    removed.textContent = group.tokens.join(' ');
+                    const target = updatedRecords[group.position];
+                    if (target?.node?.parentNode) {
+                        const addedWrapper = target.node.parentElement?.closest?.(
+                            'ins.kf-tc-ins'
+                        );
+                        if (addedWrapper && element.contains(addedWrapper)) {
+                            addedWrapper.parentNode.insertBefore(removed, addedWrapper);
+                            addedWrapper.parentNode.insertBefore(
+                                element.ownerDocument.createTextNode(' '),
+                                addedWrapper
+                            );
+                        } else {
+                            const range = element.ownerDocument.createRange();
+                            range.setStart(target.node, target.start);
+                            range.collapse(true);
+                            range.insertNode(element.ownerDocument.createTextNode(' '));
+                            range.insertNode(removed);
+                        }
+                    } else {
+                        if (element.textContent && !/\s$/.test(element.textContent)) {
+                            element.appendChild(element.ownerDocument.createTextNode(' '));
+                        }
+                        element.appendChild(removed);
+                    }
+                });
         }
 
         const LAYOUT_DIFF_TEXT_SELECTOR = 'h1,h2,h3,h4,h5,h6,p,li,blockquote';
-        const LAYOUT_DIFF_OBJECT_SELECTOR = 'figure.kf-document-image,table,img';
+        const LAYOUT_DIFF_OBJECT_SELECTOR = 'figure.kf-document-image,table,img,.kf-note-space';
+        const TRANSIENT_DIFF_CLASSES = new Set([
+            'kf-editable-image', 'kf-image-selected', 'kf-tc-block',
+            'kf-tc-object-add', 'kf-tc-object-del', 'kf-tc-format-change',
+            'kf-tc-removed-block', 'kf-edit-jump', 'is-flash',
+            'preserve-structure'
+        ]);
+
+        function compactText(value) {
+            return String(value || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function shortChangeText(value, limit = 42) {
+            const text = compactText(value);
+            if (!text) return '';
+            return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+        }
+
+        function semanticElementSignature(element, { ignoreText = false } = {}) {
+            if (!element) return '';
+            const clone = element.cloneNode(true);
+            [clone, ...clone.querySelectorAll('*')].forEach((node) => {
+                Array.from(node.classList || []).forEach((name) => {
+                    if (TRANSIENT_DIFF_CLASSES.has(name) || name.startsWith('kf-tc-')) {
+                        node.classList.remove(name);
+                    }
+                });
+                if (!node.className) node.removeAttribute?.('class');
+                [
+                    'contenteditable', 'tabindex', 'draggable', 'aria-selected',
+                    'data-tooltip', 'title', 'data-diff'
+                ].forEach((name) => node.removeAttribute?.(name));
+                if (/^kf-change-/.test(node.id || '')) node.removeAttribute('id');
+            });
+            if (ignoreText) {
+                clone.querySelectorAll('br').forEach((br) => br.remove());
+                const walker = clone.ownerDocument.createTreeWalker(
+                    clone,
+                    NodeFilter.SHOW_TEXT
+                );
+                let node = walker.nextNode();
+                while (node) {
+                    node.nodeValue = '';
+                    node = walker.nextNode();
+                }
+            }
+            const listParents = element.matches?.('li')
+                ? (() => {
+                    const tags = [];
+                    let parent = element.parentElement;
+                    while (parent && parent !== element.closest('.kf-pdf-page')) {
+                        if (parent.matches('ul,ol')) tags.push(parent.tagName.toLowerCase());
+                        parent = parent.parentElement;
+                    }
+                    return tags.join('>');
+                })()
+                : '';
+            return `${listParents}|${clone.outerHTML}`;
+        }
+
+        function inlineTraitText(element, trait) {
+            if (!element) return '';
+            const texts = [];
+            const walker = element.ownerDocument.createTreeWalker(
+                element,
+                NodeFilter.SHOW_TEXT
+            );
+            let node = walker.nextNode();
+            while (node) {
+                const text = compactText(node.nodeValue);
+                if (text) {
+                    let parent = node.parentElement;
+                    let active = false;
+                    while (parent) {
+                        const decoration = [
+                            parent.style?.textDecoration,
+                            parent.style?.textDecorationLine
+                        ].filter(Boolean).join(' ').toLowerCase();
+                        const weight = String(parent.style?.fontWeight || '').toLowerCase();
+                        const fontStyle = String(parent.style?.fontStyle || '').toLowerCase();
+                        if (
+                            (trait === 'bold' && (
+                                parent.matches('strong,b')
+                                || weight === 'bold'
+                                || Number(weight) >= 600
+                            ))
+                            || (trait === 'italic' && (
+                                parent.matches('em,i') || fontStyle === 'italic'
+                            ))
+                            || (trait === 'underline' && (
+                                parent.matches('u') || decoration.includes('underline')
+                            ))
+                            || (trait === 'strikethrough' && (
+                                parent.matches('s,strike,del')
+                                || decoration.includes('line-through')
+                            ))
+                        ) {
+                            active = true;
+                            break;
+                        }
+                        if (parent === element) break;
+                        parent = parent.parentElement;
+                    }
+                    if (active) texts.push(text);
+                }
+                node = walker.nextNode();
+            }
+            return compactText(texts.join(' '));
+        }
+
+        function elementDiffText(element) {
+            if (!element) return '';
+            const clone = element.cloneNode(true);
+            clone.querySelectorAll('br').forEach((br) => br.replaceWith(' '));
+            return compactText(clone.textContent);
+        }
+
+        function explicitLineBreakCount(element) {
+            if (!element) return 0;
+            let count = element.querySelectorAll('br').length;
+            const walker = element.ownerDocument.createTreeWalker(
+                element,
+                NodeFilter.SHOW_TEXT
+            );
+            let node = walker.nextNode();
+            while (node) {
+                count += (node.nodeValue?.match(/\n/g) || []).length;
+                node = walker.nextNode();
+            }
+            return count;
+        }
+
+        function classValue(element, prefix, fallback = '') {
+            const found = Array.from(element?.classList || [])
+                .find((name) => name.startsWith(prefix));
+            return found ? found.slice(prefix.length) : fallback;
+        }
+
+        function entryFormatState(element, type) {
+            const target = element;
+            const img = type === 'image'
+                ? (element?.matches?.('img') ? element : element?.querySelector?.('img'))
+                : null;
+            const tag = target?.tagName?.toLowerCase?.() || type;
+            return {
+                tag,
+                bold: type === 'text' ? inlineTraitText(target, 'bold') : '',
+                italic: type === 'text' ? inlineTraitText(target, 'italic') : '',
+                underline: type === 'text' ? inlineTraitText(target, 'underline') : '',
+                strikethrough: type === 'text'
+                    ? inlineTraitText(target, 'strikethrough')
+                    : '',
+                alignment: target?.getAttribute?.('data-kf-align')
+                    || classValue(target, 'kf-align-', '')
+                    || target?.style?.textAlign
+                    || '',
+                vertical: target?.getAttribute?.('data-kf-vpos')
+                    || classValue(target, 'kf-user-vpos-', '')
+                    || '',
+                fontSize: target?.getAttribute?.('data-kf-font-size')
+                    || classValue(target, 'kf-user-size-', '')
+                    || target?.style?.fontSize
+                    || '',
+                fontFamily: target?.style?.fontFamily || '',
+                width: img
+                    ? (img.getAttribute('data-kf-width') || img.style?.width || '100')
+                    : '',
+                linkTargets: type === 'text'
+                    ? Array.from(target?.querySelectorAll?.('a[href]') || [])
+                        .map((link) => link.getAttribute('href'))
+                        .join(' | ')
+                    : '',
+                lineBreaks: type === 'text' ? explicitLineBreakCount(target) : 0,
+                signature: semanticElementSignature(target, { ignoreText: true })
+            };
+        }
+
+        function changeDetail(label, tone = 'change') {
+            return { label, tone };
+        }
+
+        function elementKindLabel(entry) {
+            if (entry.type === 'image') return 'Image';
+            if (entry.type === 'table') return 'Table';
+            if (entry.type === 'space') return 'Writing space';
+            const tag = entry.format?.tag || entry.element?.tagName?.toLowerCase?.() || 'text';
+            if (/^h[1-6]$/.test(tag)) return `Heading ${tag.slice(1)}`;
+            if (tag === 'blockquote') return 'Block quote';
+            if (tag === 'li') return 'List item';
+            return 'Paragraph';
+        }
+
+        function describeEntryChanges(originalEntry, currentEntry) {
+            const details = [];
+            const before = originalEntry?.format || {};
+            const after = currentEntry?.format || {};
+            const traitLabels = {
+                bold: 'Bold',
+                italic: 'Italic',
+                underline: 'Underline',
+                strikethrough: 'Strikethrough'
+            };
+            Object.entries(traitLabels).forEach(([trait, label]) => {
+                if ((before[trait] || '') === (after[trait] || '')) return;
+                if (!before[trait] && after[trait]) {
+                    details.push(changeDetail(
+                        `${label} added to “${shortChangeText(after[trait])}”`,
+                        'add'
+                    ));
+                } else if (before[trait] && !after[trait]) {
+                    details.push(changeDetail(
+                        `${label} removed from “${shortChangeText(before[trait])}”`,
+                        'remove'
+                    ));
+                } else {
+                    details.push(changeDetail(`${label} formatting changed`));
+                }
+            });
+            if (before.tag && after.tag && before.tag !== after.tag) {
+                details.push(changeDetail(
+                    `${elementKindLabel(originalEntry)} → ${elementKindLabel(currentEntry)}`
+                ));
+            }
+            if ((before.alignment || '') !== (after.alignment || '')) {
+                details.push(changeDetail(
+                    `Alignment: ${before.alignment || 'default'} → ${after.alignment || 'default'}`
+                ));
+            }
+            if ((before.vertical || '') !== (after.vertical || '')) {
+                details.push(changeDetail(
+                    `Placement: ${before.vertical || 'default'} → ${after.vertical || 'default'}`
+                ));
+            }
+            if ((before.fontSize || '') !== (after.fontSize || '')) {
+                details.push(changeDetail(
+                    `Font size: ${before.fontSize || 'default'} → ${after.fontSize || 'default'}`
+                ));
+            }
+            if ((before.fontFamily || '') !== (after.fontFamily || '')) {
+                details.push(changeDetail(
+                    `Font: ${before.fontFamily || 'default'} → ${after.fontFamily || 'default'}`
+                ));
+            }
+            if ((before.width || '') !== (after.width || '')) {
+                const widthLabel = (value) => (
+                    /^\d+(?:\.\d+)?$/.test(String(value || ''))
+                        ? `${value}%`
+                        : (value || 'auto')
+                );
+                details.push(changeDetail(
+                    `Image width: ${widthLabel(before.width)} → ${widthLabel(after.width)}`
+                ));
+            }
+            if ((before.linkTargets || '') !== (after.linkTargets || '')) {
+                details.push(changeDetail('Link target changed'));
+            }
+            if ((before.lineBreaks || 0) !== (after.lineBreaks || 0)) {
+                details.push(changeDetail(
+                    `Line breaks: ${before.lineBreaks || 0} → ${after.lineBreaks || 0}`
+                ));
+            }
+            if (
+                originalEntry?.type === 'table'
+                && originalEntry.key !== currentEntry?.key
+            ) {
+                details.push(changeDetail('Table cells or structure changed'));
+            }
+            if (
+                before.signature !== after.signature
+                && !details.length
+            ) {
+                const fallback = {
+                    image: 'Image position or formatting changed',
+                    table: 'Table formatting or structure changed',
+                    space: 'Writing-space size or structure changed'
+                };
+                details.push(changeDetail(
+                    fallback[originalEntry?.type] || 'Formatting or structure changed'
+                ));
+            }
+            return details;
+        }
 
         function layoutDiffEntries(root) {
             if (!root) return [];
             return Array.from(root.querySelectorAll(
                 `${LAYOUT_DIFF_TEXT_SELECTOR},${LAYOUT_DIFF_OBJECT_SELECTOR}`
             )).filter((element) => {
+                if (element.matches('.kf-note-space')) return true;
                 if (element.matches('figure.kf-document-image,table')) {
                     return !element.parentElement?.closest?.('figure.kf-document-image,table');
                 }
@@ -2492,29 +2706,43 @@
                         || img?.getAttribute('src')
                         || img?.getAttribute('alt')
                         || 'image';
-                    const width = img?.getAttribute('data-kf-width')
-                        || img?.style?.width
-                        || '100';
-                    return {
+                    const entry = {
                         type: 'image',
-                        key: `[[image:${source}:${width}]]`,
+                        key: `[[image:${source}]]`,
+                        identity: source,
                         label: img?.getAttribute('alt') || 'Image',
                         element
                     };
+                    entry.format = entryFormatState(element, entry.type);
+                    return entry;
                 }
                 if (element.matches('table')) {
-                    const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
+                    const text = elementDiffText(element);
                     const cells = element.querySelectorAll('th,td').length;
-                    return {
+                    const entry = {
                         type: 'table',
                         key: `[[table:${cells}:${text}]]`,
                         label: 'Table',
                         element
                     };
+                    entry.format = entryFormatState(element, entry.type);
+                    return entry;
+                }
+                if (element.matches('.kf-note-space')) {
+                    const lines = element.getAttribute('data-space-lines')
+                        || classValue(element, 'kf-space-', 'auto');
+                    const entry = {
+                        type: 'space',
+                        key: `[[space:${lines}]]`,
+                        label: 'Writing space',
+                        element
+                    };
+                    entry.format = entryFormatState(element, entry.type);
+                    return entry;
                 }
                 const tag = element.tagName.toLowerCase();
-                const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
-                return {
+                const text = elementDiffText(element);
+                const entry = {
                     type: 'text',
                     key: /^h[1-6]$/.test(tag)
                         ? `${'#'.repeat(Number(tag.charAt(1)) || 1)} ${text}`
@@ -2522,6 +2750,8 @@
                     label: text,
                     element
                 };
+                entry.format = entryFormatState(element, entry.type);
+                return entry;
             });
         }
 
@@ -2531,11 +2761,25 @@
                 navItems: [],
                 added: 0,
                 removed: 0,
-                headingChanges: 0
+                headingChanges: 0,
+                structuredChanges: 0,
+                sharedMoveKeys: new Set(),
+                sharedImageKeys: new Set(),
+                sharedImageChanges: new Map()
             };
         }
 
-        function recordLayoutChange(acc, wordOps, summary, { countWords = true } = {}) {
+        function recordLayoutChange(
+            acc,
+            wordOps,
+            summary,
+            {
+                countWords = true,
+                details = [],
+                category = 'text',
+                structured = !countWords && details.length > 0
+            } = {}
+        ) {
             const id = acc.nextId;
             acc.nextId += 1;
             if (countWords) {
@@ -2544,10 +2788,13 @@
                 acc.removed += counts.removed;
                 acc.headingChanges += countHeadingChangesFromWordOps(wordOps);
             }
+            if (structured) acc.structuredChanges += 1;
             acc.navItems.push({
                 id,
                 summary: summary || '',
-                wordOps: compressWordOps(wordOps, 2)
+                wordOps: compressWordOps(wordOps, 2),
+                details,
+                category
             });
             return id;
         }
@@ -2566,11 +2813,45 @@
             element.appendChild(wrapper);
         }
 
+        function entryMovementDetails(entry, direction, acc) {
+            if (acc?.sharedMoveKeys?.has(entry.key)) {
+                const details = [changeDetail(
+                    `${elementKindLabel(entry)} moved ${
+                        direction === 'add' ? 'to' : 'from'
+                    } this position`,
+                    direction
+                )];
+                if (
+                    entry.type === 'image'
+                    && direction === 'add'
+                    && accSharedImageKey(entry, acc)
+                ) {
+                    const pair = acc.sharedImageChanges.get(entry.key);
+                    if (pair) details.push(...describeEntryChanges(pair.original, pair.current));
+                }
+                return details;
+            }
+            return [changeDetail(
+                `${elementKindLabel(entry)} ${direction === 'add' ? 'added' : 'removed'}`,
+                direction
+            )];
+        }
+
+        function accSharedImageKey(entry, acc) {
+            return !!(
+                entry?.type === 'image'
+                && acc?.sharedImageKeys?.has(entry.key)
+            );
+        }
+
         function markLayoutEntryAdded(entry, acc) {
             const label = entry.type === 'text' ? entry.key : entry.label;
             const ops = wordDiffOps('', label);
             const id = recordLayoutChange(acc, ops, label, {
-                countWords: entry.type === 'text'
+                countWords: entry.type === 'text',
+                details: entryMovementDetails(entry, 'add', acc),
+                category: entry.type,
+                structured: entry.type !== 'text'
             });
             markChangedElement(entry.element, id);
             if (entry.type === 'text') {
@@ -2585,7 +2866,10 @@
             const label = entry.type === 'text' ? entry.key : entry.label;
             const ops = wordDiffOps(label, '');
             const id = recordLayoutChange(acc, ops, label, {
-                countWords: entry.type === 'text'
+                countWords: entry.type === 'text',
+                details: entryMovementDetails(entry, 'remove', acc),
+                category: entry.type,
+                structured: entry.type !== 'text'
             });
             markChangedElement(entry.element, id);
             entry.element.classList.add('kf-tc-removed-block');
@@ -2599,13 +2883,99 @@
 
         function markLayoutEntryReplacement(originalEntry, currentEntry, acc) {
             const ops = wordDiffOps(originalEntry.key, currentEntry.key);
+            const details = describeEntryChanges(originalEntry, currentEntry);
             const id = recordLayoutChange(
                 acc,
                 ops,
-                plainFromDiffLine(currentEntry.key) || plainFromDiffLine(originalEntry.key)
+                plainFromDiffLine(currentEntry.key) || plainFromDiffLine(originalEntry.key),
+                {
+                    details,
+                    category: currentEntry.type,
+                    structured: details.length > 0
+                }
             );
             markChangedElement(currentEntry.element, id);
-            currentEntry.element.innerHTML = wordOpsToTrackHtml(ops, id) || '&#160;';
+            if (details.length) currentEntry.element.classList.add('kf-tc-format-change');
+            applyWordOpsToFormattedElement(currentEntry.element, ops, id);
+        }
+
+        function markLayoutEntryMetadataChange(originalEntry, currentEntry, acc) {
+            if (
+                !originalEntry
+                || !currentEntry
+                || originalEntry.format?.signature === currentEntry.format?.signature
+            ) {
+                return false;
+            }
+            const details = describeEntryChanges(originalEntry, currentEntry);
+            const id = recordLayoutChange(
+                acc,
+                [],
+                currentEntry.label || originalEntry.label || elementKindLabel(currentEntry),
+                {
+                    countWords: false,
+                    details,
+                    category: currentEntry.type,
+                    structured: true
+                }
+            );
+            markChangedElement(currentEntry.element, id);
+            currentEntry.element.classList.add(
+                currentEntry.type === 'image' || currentEntry.type === 'table'
+                    ? 'kf-tc-object-add'
+                    : 'kf-tc-format-change'
+            );
+            currentEntry.element.setAttribute('data-diff', String(id));
+            if (currentEntry.type === 'image' && currentEntry.element.parentNode) {
+                const previous = originalEntry.element.cloneNode(true);
+                previous.removeAttribute('id');
+                previous.classList.remove('kf-editable-image', 'kf-image-selected');
+                previous.classList.add('kf-tc-object-del', 'kf-tc-removed-block');
+                previous.setAttribute('data-diff', String(id));
+                previous.querySelectorAll?.('[id^="kf-change-"]').forEach((node) => {
+                    node.removeAttribute('id');
+                });
+                currentEntry.element.parentNode.insertBefore(
+                    previous,
+                    currentEntry.element
+                );
+            }
+            return true;
+        }
+
+        function markLayoutObjectReplacement(originalEntry, currentEntry, acc) {
+            const details = describeEntryChanges(originalEntry, currentEntry);
+            if (!details.length) {
+                details.push(changeDetail(`${elementKindLabel(currentEntry)} changed`));
+            }
+            const id = recordLayoutChange(
+                acc,
+                [],
+                currentEntry.label || originalEntry.label || elementKindLabel(currentEntry),
+                {
+                    countWords: false,
+                    details,
+                    category: currentEntry.type,
+                    structured: true
+                }
+            );
+            const previous = originalEntry.element.cloneNode(true);
+            previous.removeAttribute('id');
+            previous.classList.remove('kf-editable-image', 'kf-image-selected');
+            previous.classList.add('kf-tc-object-del', 'kf-tc-removed-block');
+            previous.setAttribute('data-diff', String(id));
+            previous.querySelectorAll?.('[id^="kf-change-"]').forEach((node) => {
+                node.removeAttribute('id');
+            });
+            if (currentEntry.element.parentNode) {
+                currentEntry.element.parentNode.insertBefore(
+                    previous,
+                    currentEntry.element
+                );
+            }
+            markChangedElement(currentEntry.element, id);
+            currentEntry.element.classList.add('kf-tc-object-add');
+            currentEntry.element.setAttribute('data-diff', String(id));
         }
 
         function insertRemovedLayoutEntry(originalEntry, cloneContainer, beforeEntry, acc) {
@@ -2645,6 +3015,11 @@
 
             while (operationIndex < operations.length) {
                 if (operations[operationIndex].type === 'same') {
+                    markLayoutEntryMetadataChange(
+                        originalEntries[originalIndex],
+                        cloneEntries[currentIndex],
+                        acc
+                    );
                     originalIndex += 1;
                     currentIndex += 1;
                     operationIndex += 1;
@@ -2680,6 +3055,8 @@
                     if (!originalEntry || !currentEntry) continue;
                     if (originalEntry.type === 'text' && currentEntry.type === 'text') {
                         markLayoutEntryReplacement(originalEntry, currentEntry, acc);
+                    } else if (originalEntry.type === currentEntry.type) {
+                        markLayoutObjectReplacement(originalEntry, currentEntry, acc);
                     } else {
                         insertRemovedLayoutEntry(
                             originalEntry,
@@ -2710,6 +3087,52 @@
             }
         }
 
+        function sharedUniqueImages(originalLayoutEntries, currentLayoutEntries) {
+            const entries = (layoutEntries) => {
+                const map = new Map();
+                layoutEntries
+                    .filter((entry) => entry.type === 'image')
+                    .forEach((entry) => {
+                        const items = map.get(entry.key) || [];
+                        items.push(entry);
+                        map.set(entry.key, items);
+                    });
+                return map;
+            };
+            const originalEntries = entries(originalLayoutEntries);
+            const currentEntries = entries(currentLayoutEntries);
+            const changes = new Map();
+            Array.from(originalEntries.entries()).forEach(([key, items]) => {
+                const currentItems = currentEntries.get(key) || [];
+                if (items.length === 1 && currentItems.length === 1) {
+                    changes.set(key, {
+                        original: items[0],
+                        current: currentItems[0]
+                    });
+                }
+            });
+            return changes;
+        }
+
+        function sharedUniqueLayoutKeys(originalLayoutEntries, currentLayoutEntries) {
+            const counts = (layoutEntries) => {
+                const map = new Map();
+                layoutEntries.forEach((entry) => {
+                    map.set(entry.key, (map.get(entry.key) || 0) + 1);
+                });
+                return map;
+            };
+            const originalCounts = counts(originalLayoutEntries);
+            const currentCounts = counts(currentLayoutEntries);
+            return new Set(
+                Array.from(originalCounts.entries())
+                    .filter(([key, count]) => (
+                        count === 1 && currentCounts.get(key) === 1
+                    ))
+                    .map(([key]) => key)
+            );
+        }
+
         function pdfPageMap(root) {
             const map = new Map();
             root?.querySelectorAll?.('.kf-pdf-page').forEach((page, index) => {
@@ -2717,6 +3140,50 @@
                 map.set(key, page);
             });
             return map;
+        }
+
+        function pdfPageLayoutState(page) {
+            return {
+                top: page?.getAttribute?.('data-pdf-top') || '',
+                vertical: classValue(page, 'kf-page-v-', 'top'),
+                offset: classValue(page, 'kf-page-offset-', '0'),
+                sourcePage: page?.getAttribute?.('data-source-page') || ''
+            };
+        }
+
+        function markPdfPageMetadataChange(originalPage, clonePage, acc) {
+            const before = pdfPageLayoutState(originalPage);
+            const after = pdfPageLayoutState(clonePage);
+            const details = [];
+            if (before.vertical !== after.vertical) {
+                details.push(changeDetail(
+                    `Page placement: ${before.vertical} → ${after.vertical}`
+                ));
+            }
+            if (before.offset !== after.offset || before.top !== after.top) {
+                details.push(changeDetail('Source-page writing space changed'));
+            }
+            if (before.sourcePage !== after.sourcePage) {
+                details.push(changeDetail(
+                    `PDF page: ${before.sourcePage || '?'} → ${after.sourcePage || '?'}`
+                ));
+            }
+            if (!details.length) return false;
+            const id = recordLayoutChange(
+                acc,
+                [],
+                `PDF page ${after.sourcePage || before.sourcePage || ''}`.trim(),
+                {
+                    countWords: false,
+                    details,
+                    category: 'placement',
+                    structured: true
+                }
+            );
+            markChangedElement(clonePage, id);
+            clonePage.classList.add('kf-tc-format-change');
+            clonePage.setAttribute('data-diff', String(id));
+            return true;
         }
 
         /**
@@ -2742,7 +3209,8 @@
                     navItems: [],
                     added: 0,
                     removed: 0,
-                    headingChanges: 0
+                    headingChanges: 0,
+                    structuredChanges: 0
                 };
             }
 
@@ -2751,6 +3219,17 @@
                     '.kf-page-break,.kf-page-label,.kf-chapter-marker'
                 ).forEach((element) => element.remove());
             });
+            const originalLayoutEntries = layoutDiffEntries(originalRoot);
+            const currentLayoutEntries = layoutDiffEntries(currentRoot);
+            acc.sharedMoveKeys = sharedUniqueLayoutKeys(
+                originalLayoutEntries,
+                currentLayoutEntries
+            );
+            acc.sharedImageChanges = sharedUniqueImages(
+                originalLayoutEntries,
+                currentLayoutEntries
+            );
+            acc.sharedImageKeys = new Set(acc.sharedImageChanges.keys());
 
             const originalPages = pdfPageMap(originalRoot);
             const currentPages = pdfPageMap(currentRoot);
@@ -2767,6 +3246,7 @@
                     if (currentPage) {
                         const clonePage = currentPage.cloneNode(true);
                         if (originalPage) {
+                            markPdfPageMetadataChange(originalPage, clonePage, acc);
                             annotateLayoutDiffContainer(
                                 originalPage,
                                 currentPage,
@@ -2807,7 +3287,8 @@
                 navItems: acc.navItems,
                 added: acc.added,
                 removed: acc.removed,
-                headingChanges: acc.headingChanges
+                headingChanges: acc.headingChanges,
+                structuredChanges: acc.structuredChanges
             };
         }
 
@@ -3029,18 +3510,27 @@
                     ? currentOutput.bodyHtml
                     : bodyHtmlForExport();
                 const stats = layout === 'fixed'
-                    ? { added: 0, removed: 0, headingChanges: 0 }
-                    : diffStats(
-                        htmlToDiffLines(currentOutput.originalBodyHtml || ''),
-                        htmlToDiffLines(bodyHtml)
+                    ? {
+                        added: 0,
+                        removed: 0,
+                        headingChanges: 0,
+                        structuredChanges: 0,
+                        navItems: []
+                    }
+                    : buildTrackChangesDocument(
+                        currentOutput.originalBodyHtml || '',
+                        bodyHtml
                     );
                 const headBit = stats.headingChanges
                     ? `, ${stats.headingChanges} heading`
                     : '';
+                const structureBit = stats.structuredChanges
+                    ? `, ${stats.structuredChanges} formatting/object`
+                    : '';
                 statusEl.textContent = layout === 'fixed'
                     ? 'Building standards-based fixed-layout EPUB 3 locally…'
-                    : stats.added + stats.removed
-                        ? `Building EPUB with your edits (+${stats.added}/−${stats.removed}${headBit})…`
+                    : stats.navItems.length
+                        ? `Building EPUB with your edits (+${stats.added}/−${stats.removed}${headBit}${structureBit})…`
                         : 'Building reflowable EPUB locally…';
                 setProgress(20, 'Building EPUB');
                 const split = !!(splitChaptersEl && splitChaptersEl.checked);
@@ -3068,8 +3558,8 @@
                 savePrefs();
                 statusEl.textContent = layout === 'fixed'
                     ? 'Fixed-layout EPUB downloaded as .fxl.kepub.epub for accurate Kobo sideload testing. Nothing left your browser.'
-                    : stats.added + stats.removed
-                        ? `EPUB downloaded with your edits (+${stats.added}/−${stats.removed}${headBit} vs import). Nothing left your browser.`
+                    : stats.navItems.length
+                        ? `EPUB downloaded with your edits (+${stats.added}/−${stats.removed}${headBit}${structureBit} vs import). Nothing left your browser.`
                         : 'Reflowable EPUB ready. Nothing left your browser.';
                 if (editMode === 'diff') renderDiffPanel();
             } catch (error) {

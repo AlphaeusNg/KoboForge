@@ -18,7 +18,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap">
-    <link rel="stylesheet" href="css/main.css?v=2026.07.24.12">
+    <link rel="stylesheet" href="css/main.css?v=2026.07.24.13">
 
 </head>
 <body class="text-slate-50 antialiased">
@@ -270,7 +270,7 @@
                 </div>
                 <p class="text-xs leading-5 text-slate-500">
                     <strong class="font-medium text-slate-400">Edit</strong> opens after import using the Kobo selected under Import.
-                    <strong class="font-medium text-slate-400">Diff</strong> paints additions green and removals red directly on that same paginated screen.
+                    <strong class="font-medium text-slate-400">Diff</strong> marks words, formatting, image movement/resizing, tables, and placement directly on that same paginated screen.
                 </p>
                 </div>
 
@@ -372,7 +372,7 @@
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <div>
                             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#C9A227]">Edit history</div>
-                            <p id="diffSummary" class="mt-1 text-xs text-slate-400">Changes appear directly on the Kobo in Diff. Click a row to jump.</p>
+                            <p id="diffSummary" class="mt-1 text-xs text-slate-400">Every text, formatting, object, and placement change appears here. Click a row to jump.</p>
                         </div>
                         <button type="button" id="diffRefreshBtn" class="icon-control border border-white/15 bg-white/5 text-slate-300" title="Update diff" data-tooltip="Update diff" aria-label="Update diff"><svg class="ui-icon" aria-hidden="true"><use href="#icon-refresh"></use></svg></button>
                     </div>
@@ -452,9 +452,9 @@
         <span id="site-version" class="font-mono text-slate-500" title="Bump js/version.js on each deploy">v—</span>
     </footer>
     <script src="https://alphaeusng.github.io/js/kofi-support.js?v=2026.07.24.7" data-auto-footer defer></script>
-    <script src="js/version.js?v=2026.07.24.12"></script>
+    <script src="js/version.js?v=2026.07.24.13"></script>
 
-    <script type="module" src="js/app.js?v=2026.07.24.12"></script>
+    <script type="module" src="js/app.js?v=2026.07.24.13"></script>
     <div id="controlTooltip" role="status" aria-live="polite"></div>
 </body>
 </html>

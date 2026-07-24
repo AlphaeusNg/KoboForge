@@ -16,6 +16,9 @@ before exporting a Kobo-friendly EPUB.
 - Responsive device staging that shrinks with the selected Kobo on phones
 - Direct editing in the paginated Kobo view, with a layout-identical in-device
   Diff mode that overlays red removals and green additions
+- Comprehensive Edit History for word, heading, bold/italic/underline/strike,
+  alignment, placement, font-size, link, image movement/resize, table, writing
+  space, and source-page layout changes
 - Compact icon-only phone controls with hover/tap labels, separate horizontally
   scrollable text and image/table rows, and pinned page arrows beside them
 - Selectable inline images with Kobo-view cut, copy, paste, and delete controls
