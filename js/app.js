@@ -3,7 +3,7 @@
             buildFixedLayoutPublicationFiles,
             fixedLayoutDownloadName,
             resolveEpubLayoutMode
-        } from './fixed-layout.js?v=2026.07.24.15';
+        } from './fixed-layout.js?v=2026.07.24.16';
         import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
