@@ -371,13 +371,14 @@ body {
     display: block;
     box-sizing: border-box;
     width: 100%;
+    min-height: var(--reader-page-height, 100%);
     break-inside: auto;
 }
 
 #deviceBookContent .kf-pdf-page + .kf-pdf-page {
-    margin-top: 1em;
-    page-break-before: auto;
-    break-before: auto;
+    margin-top: 0;
+    page-break-before: always;
+    break-before: column;
 }
 
 #deviceBookContent .kf-page-offset-0 { padding-top: 0; }
@@ -607,7 +608,7 @@ body {
     position: static;
     width: auto;
     min-width: 0;
-    height: 2.15rem;
+    height: 4.05rem;
     flex: 1 1 auto;
     padding: 0;
     overflow: hidden;
@@ -617,15 +618,28 @@ body {
     display: flex;
     width: 100%;
     height: 100%;
-    flex-flow: row nowrap;
+    flex-flow: column nowrap;
+    gap: 0.2rem;
+    overflow: hidden;
+}
+
+#editToolbar .tb-lane {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 1.9rem;
+    flex: 1 1 0;
     align-items: center;
     gap: 0.24rem;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior: contain;
     touch-action: pan-x;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+    scrollbar-width: none;
+}
+
+#editToolbar .tb-lane::-webkit-scrollbar {
+    display: none;
 }
 
 #editToolbar .tb-row {
@@ -633,6 +647,7 @@ body {
     width: max-content;
     min-width: max-content;
     flex-wrap: nowrap;
+    align-items: center;
     gap: 0.22rem;
     padding-right: 0.26rem;
     border-right: 1px solid rgba(255, 255, 255, 0.09);
@@ -671,6 +686,45 @@ body {
 #editToolbar .tb-btn:disabled {
     cursor: not-allowed;
     opacity: 0.3;
+}
+
+.image-size-control {
+    display: flex;
+    width: 8.2rem;
+    height: 1.9rem;
+    flex: none;
+    align-items: center;
+    gap: 0.28rem;
+    padding: 0 0.4rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0.55rem;
+    background: rgba(255, 255, 255, 0.05);
+    color: #cbd5e1;
+}
+
+#imageEditControls.hidden,
+#imageSizeControl.hidden {
+    display: none;
+}
+
+.image-size-control .ui-icon {
+    width: 0.85rem;
+    height: 0.85rem;
+    flex: none;
+}
+
+.image-size-control input {
+    width: 4rem;
+    min-width: 0;
+    accent-color: #C9A227;
+}
+
+.image-size-control output {
+    min-width: 2.1rem;
+    color: #cbd5e1;
+    font-size: 0.62rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
 }
 
 .tb-icon-text {
@@ -725,7 +779,11 @@ body {
 
     #editToolbar,
     #editToolbar .tb-scroll {
-        height: 1.9rem;
+        height: 3.64rem;
+    }
+
+    #editToolbar .tb-lane {
+        min-height: 1.72rem;
     }
 
     #editToolbar .tb-btn,
@@ -733,6 +791,16 @@ body {
         width: 1.72rem;
         height: 1.72rem;
         border-radius: 0.45rem;
+    }
+
+    .image-size-control {
+        width: 7.4rem;
+        height: 1.72rem;
+        border-radius: 0.45rem;
+    }
+
+    .image-size-control input {
+        width: 3.3rem;
     }
 }
 
@@ -848,6 +916,23 @@ body {
     padding: 0 0.12em;
     border-radius: 0.15em;
     font-weight: 600;
+}
+
+#deviceBookContent .kf-tc-removed-block {
+    opacity: 0.78;
+}
+
+#deviceBookContent .kf-tc-object-add {
+    outline: max(2px, 0.16em) solid rgba(22, 163, 74, 0.72);
+    outline-offset: max(1px, 0.1em);
+    background: rgba(22, 163, 74, 0.08);
+}
+
+#deviceBookContent .kf-tc-object-del,
+#deviceBookContent .kf-tc-removed-page {
+    outline: max(2px, 0.16em) solid rgba(225, 29, 72, 0.68);
+    outline-offset: max(1px, 0.1em);
+    background: rgba(220, 38, 38, 0.07);
 }
 
 #deviceBookContent .kf-edit-jump {

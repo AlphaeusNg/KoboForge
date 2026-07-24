@@ -3,7 +3,7 @@
             buildFixedLayoutPublicationFiles,
             fixedLayoutDownloadName,
             resolveEpubLayoutMode
-        } from './fixed-layout.js?v=2026.07.24.11';
+        } from './fixed-layout.js?v=2026.07.24.12';
         import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
@@ -37,6 +37,9 @@
         const imageCopyBtn = document.getElementById('imageCopyBtn');
         const imagePasteBtn = document.getElementById('imagePasteBtn');
         const imageDeleteBtn = document.getElementById('imageDeleteBtn');
+        const imageSizeControl = document.getElementById('imageSizeControl');
+        const imageSizeRange = document.getElementById('imageSizeRange');
+        const imageSizeValue = document.getElementById('imageSizeValue');
         const diffPanel = document.getElementById('diffPanel');
         const diffBody = document.getElementById('diffBody');
         const diffSummary = document.getElementById('diffSummary');
@@ -765,6 +768,7 @@
             requestAnimationFrame(() => {
                 const pageWidth = Math.max(1, Math.floor(deviceBookViewport.clientWidth));
                 const pageHeight = Math.max(1, Math.floor(deviceBookViewport.clientHeight));
+                deviceBookContent.style.setProperty('--reader-page-height', `${pageHeight}px`);
                 const fixedPageCount = fixedPreview
                     ? Math.max(1, deviceBookContent.querySelectorAll('.kf-fixed-preview-page').length)
                     : 1;
@@ -928,6 +932,15 @@
             return img;
         }
 
+        function normalizedImageWidth(img) {
+            const stored = Number(img?.getAttribute('data-kf-width'));
+            const styled = Number.parseFloat(img?.style?.width || '');
+            const value = Number.isFinite(stored) && stored > 0
+                ? stored
+                : (Number.isFinite(styled) && styled > 0 ? styled : 100);
+            return Math.max(25, Math.min(100, Math.round(value / 5) * 5));
+        }
+
         function updateImageEditControls({ reveal = false } = {}) {
             if (!imageEditControls) return;
             const hasSelection = !!(
@@ -941,9 +954,15 @@
             if (imageCopyBtn) imageCopyBtn.disabled = !hasSelection;
             if (imageDeleteBtn) imageDeleteBtn.disabled = !hasSelection;
             if (imagePasteBtn) imagePasteBtn.disabled = !hasClipboardImage;
+            imageSizeControl?.classList.toggle('hidden', !hasSelection);
+            if (hasSelection && imageSizeRange) {
+                const width = normalizedImageWidth(selectedEditableImage);
+                imageSizeRange.value = String(width);
+                if (imageSizeValue) imageSizeValue.textContent = `${width}%`;
+            }
             if (reveal && !imageEditControls.classList.contains('hidden')) {
-                const scroller = editToolbar?.querySelector('.tb-scroll');
-                if (scroller) scroller.scrollLeft = 0;
+                const lane = editToolbar?.querySelector('[data-toolbar-row="objects"]');
+                if (lane) lane.scrollLeft = 0;
             }
         }
 
@@ -983,12 +1002,18 @@
             previewEl.querySelectorAll('img').forEach((img) => {
                 img.classList.toggle('kf-editable-image', editable);
                 img.classList.remove('kf-image-selected');
+                const width = normalizedImageWidth(img);
+                img.setAttribute('data-kf-width', String(width));
+                img.style.width = `${width}%`;
                 if (editable) {
                     img.tabIndex = 0;
                     img.draggable = false;
                     img.setAttribute('aria-selected', 'false');
-                    img.setAttribute('data-tooltip', 'Select image to cut, copy, paste or delete');
-                    img.title = 'Select image to cut, copy, paste or delete';
+                    img.setAttribute(
+                        'data-tooltip',
+                        'Select image to resize, cut, copy, paste or delete'
+                    );
+                    img.title = 'Select image to resize, cut, copy, paste or delete';
                 } else {
                     img.removeAttribute('tabindex');
                     img.removeAttribute('draggable');
@@ -998,6 +1023,19 @@
                 }
             });
             updateImageEditControls();
+        }
+
+        function resizeSelectedImage(width) {
+            if (!selectedEditableImage || !previewEl?.contains(selectedEditableImage)) return;
+            const normalized = Math.max(
+                25,
+                Math.min(100, Math.round(Number(width || 100) / 5) * 5)
+            );
+            selectedEditableImage.setAttribute('data-kf-width', String(normalized));
+            selectedEditableImage.style.width = `${normalized}%`;
+            if (imageSizeRange) imageSizeRange.value = String(normalized);
+            if (imageSizeValue) imageSizeValue.textContent = `${normalized}%`;
+            finishImageEdit(`Image width set to ${normalized}%.`);
         }
 
         function cleanImageClipboardMarkup(img) {
@@ -1181,6 +1219,9 @@
                 img.alt = source.getAttribute('alt') || 'Pasted image';
                 const imageId = source.getAttribute('data-kf-image-id');
                 if (imageId) img.setAttribute('data-kf-image-id', imageId);
+                const width = normalizedImageWidth(source);
+                img.setAttribute('data-kf-width', String(width));
+                img.style.width = `${width}%`;
                 accepted.appendChild(img);
             });
             return accepted.innerHTML;
@@ -1555,6 +1596,9 @@
         imageCopyBtn?.addEventListener('click', copySelectedImage);
         imagePasteBtn?.addEventListener('click', pasteImageFromToolbar);
         imageDeleteBtn?.addEventListener('click', () => removeSelectedImage());
+        imageSizeRange?.addEventListener('input', () => {
+            resizeSelectedImage(imageSizeRange.value);
+        });
 
         previewEl.addEventListener('pointerdown', (event) => {
             if (editMode !== 'edit') return;
@@ -2022,12 +2066,13 @@
                     deviceBookContent.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote,th,td')
                 );
                 const prefix = needle.slice(0, 48);
-                const el = prefix
+                const direct = deviceBookContent.querySelector(`#kf-change-${CSS.escape(String(changeId))}`);
+                const el = direct || (prefix
                     ? blocks.find((block) => (
                         (block.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase()
                             .includes(prefix)
                     ))
-                    : null;
+                    : null);
                 if (el) {
                     jumpDeviceToElement(el);
                     el.classList.add('kf-edit-jump');
@@ -2270,6 +2315,10 @@
             });
 
             root.querySelectorAll('img').forEach((img) => {
+                const width = normalizedImageWidth(img);
+                img.style.width = `${width}%`;
+                if (forExport) img.removeAttribute('data-kf-width');
+                else img.setAttribute('data-kf-width', String(width));
                 img.classList.remove('kf-editable-image', 'kf-image-selected');
                 if (!img.className) img.removeAttribute('class');
                 ['tabindex', 'draggable', 'aria-selected', 'data-tooltip', 'title'].forEach((name) => {
@@ -2389,12 +2438,6 @@
             if (editMode === 'edit' || editMode === 'diff') renderDevicePreview();
         }
 
-        function lineToTag(line) {
-            const h = parseHeadingDiffLine(line);
-            if (h) return `h${h.level}`;
-            return 'p';
-        }
-
         function plainFromDiffLine(line) {
             const h = parseHeadingDiffLine(line);
             return h ? h.text : String(line || '');
@@ -2425,140 +2468,346 @@
             return parts.join('').replace(/\s+$/, '');
         }
 
-        function wrapBlock(tag, innerHtml, changeId, hasChange) {
-            const idAttr = hasChange ? ` id="kf-change-${changeId}"` : '';
-            const cls = hasChange ? ' class="kf-tc-block"' : '';
-            const t = /^h[1-6]$/.test(tag) ? tag : 'p';
-            return `<${t}${idAttr}${cls}>${innerHtml || '&#160;'}</${t}>`;
+        const LAYOUT_DIFF_TEXT_SELECTOR = 'h1,h2,h3,h4,h5,h6,p,li,blockquote';
+        const LAYOUT_DIFF_OBJECT_SELECTOR = 'figure.kf-document-image,table,img';
+
+        function layoutDiffEntries(root) {
+            if (!root) return [];
+            return Array.from(root.querySelectorAll(
+                `${LAYOUT_DIFF_TEXT_SELECTOR},${LAYOUT_DIFF_OBJECT_SELECTOR}`
+            )).filter((element) => {
+                if (element.matches('figure.kf-document-image,table')) {
+                    return !element.parentElement?.closest?.('figure.kf-document-image,table');
+                }
+                if (element.matches('img')) {
+                    return !element.closest('figure.kf-document-image,table');
+                }
+                if (element.closest('figure.kf-document-image,table')) return false;
+                if (element.querySelector(LAYOUT_DIFF_TEXT_SELECTOR)) return false;
+                return !!(element.textContent || '').replace(/\s+/g, ' ').trim();
+            }).map((element) => {
+                if (element.matches('figure.kf-document-image,img')) {
+                    const img = element.matches('img') ? element : element.querySelector('img');
+                    const source = img?.getAttribute('data-kf-image-id')
+                        || img?.getAttribute('src')
+                        || img?.getAttribute('alt')
+                        || 'image';
+                    const width = img?.getAttribute('data-kf-width')
+                        || img?.style?.width
+                        || '100';
+                    return {
+                        type: 'image',
+                        key: `[[image:${source}:${width}]]`,
+                        label: img?.getAttribute('alt') || 'Image',
+                        element
+                    };
+                }
+                if (element.matches('table')) {
+                    const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
+                    const cells = element.querySelectorAll('th,td').length;
+                    return {
+                        type: 'table',
+                        key: `[[table:${cells}:${text}]]`,
+                        label: 'Table',
+                        element
+                    };
+                }
+                const tag = element.tagName.toLowerCase();
+                const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
+                return {
+                    type: 'text',
+                    key: /^h[1-6]$/.test(tag)
+                        ? `${'#'.repeat(Number(tag.charAt(1)) || 1)} ${text}`
+                        : text,
+                    label: text,
+                    element
+                };
+            });
         }
 
-        /**
-         * Full-document track changes (like Google Docs):
-         * - removed words: red strikeout
-         * - added words: green highlight
-         * - unchanged blocks rendered normally
-         * Each change region gets id="kf-change-N" for jump-from-index.
-         */
-        function buildTrackChangesDocument(originalHtml, currentHtml) {
-            const aLines = htmlToDiffLines(originalHtml);
-            const bLines = htmlToDiffLines(currentHtml);
-            const lineOps = lineDiff(aLines, bLines);
-            const parts = [];
-            const navItems = [];
-            let changeId = 0;
-            let wordAdded = 0;
-            let wordRemoved = 0;
-            let headingChanges = 0;
-            let i = 0;
+        function trackAccumulator() {
+            return {
+                nextId: 0,
+                navItems: [],
+                added: 0,
+                removed: 0,
+                headingChanges: 0
+            };
+        }
 
-            function pushNav(id, wordOps, summary) {
-                navItems.push({
-                    id,
-                    summary: summary || '',
-                    wordOps: compressWordOps(wordOps, 2)
-                });
+        function recordLayoutChange(acc, wordOps, summary, { countWords = true } = {}) {
+            const id = acc.nextId;
+            acc.nextId += 1;
+            if (countWords) {
+                const counts = countWordChanges(wordOps);
+                acc.added += counts.added;
+                acc.removed += counts.removed;
+                acc.headingChanges += countHeadingChangesFromWordOps(wordOps);
             }
+            acc.navItems.push({
+                id,
+                summary: summary || '',
+                wordOps: compressWordOps(wordOps, 2)
+            });
+            return id;
+        }
 
-            while (i < lineOps.length) {
-                const op = lineOps[i];
-                if (op.type === 'same') {
-                    const tag = lineToTag(op.text);
-                    const text = plainFromDiffLine(op.text);
-                    const h = parseHeadingDiffLine(op.text);
-                    const inner = h
-                        ? escapeHtml(text)
-                        : escapeHtml(text);
-                    parts.push(wrapBlock(tag, inner, 0, false));
-                    i += 1;
+        function markChangedElement(element, id) {
+            element.id = `kf-change-${id}`;
+            element.classList.add('kf-tc-block');
+        }
+
+        function wrapElementContents(element, tag, className, id) {
+            const wrapper = document.createElement(tag);
+            wrapper.className = className;
+            wrapper.setAttribute('data-diff', String(id));
+            while (element.firstChild) wrapper.appendChild(element.firstChild);
+            if (!wrapper.childNodes.length) wrapper.innerHTML = '&#160;';
+            element.appendChild(wrapper);
+        }
+
+        function markLayoutEntryAdded(entry, acc) {
+            const label = entry.type === 'text' ? entry.key : entry.label;
+            const ops = wordDiffOps('', label);
+            const id = recordLayoutChange(acc, ops, label, {
+                countWords: entry.type === 'text'
+            });
+            markChangedElement(entry.element, id);
+            if (entry.type === 'text') {
+                wrapElementContents(entry.element, 'ins', 'kf-tc-ins', id);
+            } else {
+                entry.element.classList.add('kf-tc-object-add');
+                entry.element.setAttribute('data-diff', String(id));
+            }
+        }
+
+        function markLayoutEntryRemoved(entry, acc) {
+            const label = entry.type === 'text' ? entry.key : entry.label;
+            const ops = wordDiffOps(label, '');
+            const id = recordLayoutChange(acc, ops, label, {
+                countWords: entry.type === 'text'
+            });
+            markChangedElement(entry.element, id);
+            entry.element.classList.add('kf-tc-removed-block');
+            if (entry.type === 'text') {
+                wrapElementContents(entry.element, 'del', 'kf-tc-del', id);
+            } else {
+                entry.element.classList.add('kf-tc-object-del');
+                entry.element.setAttribute('data-diff', String(id));
+            }
+        }
+
+        function markLayoutEntryReplacement(originalEntry, currentEntry, acc) {
+            const ops = wordDiffOps(originalEntry.key, currentEntry.key);
+            const id = recordLayoutChange(
+                acc,
+                ops,
+                plainFromDiffLine(currentEntry.key) || plainFromDiffLine(originalEntry.key)
+            );
+            markChangedElement(currentEntry.element, id);
+            currentEntry.element.innerHTML = wordOpsToTrackHtml(ops, id) || '&#160;';
+        }
+
+        function insertRemovedLayoutEntry(originalEntry, cloneContainer, beforeEntry, acc) {
+            const clone = originalEntry.element.cloneNode(true);
+            const staging = document.createElement('div');
+            staging.appendChild(clone);
+            const clonedEntry = layoutDiffEntries(staging)[0];
+            const entry = clonedEntry || {
+                ...originalEntry,
+                element: clone
+            };
+            const node = clonedEntry?.element || clone;
+            markLayoutEntryRemoved(entry, acc);
+            if (beforeEntry?.element?.parentNode) {
+                beforeEntry.element.parentNode.insertBefore(node, beforeEntry.element);
+            } else if (node.matches('li')) {
+                const lists = cloneContainer.querySelectorAll('ul,ol');
+                const list = lists[lists.length - 1];
+                if (list) list.appendChild(node);
+                else cloneContainer.appendChild(node);
+            } else {
+                cloneContainer.appendChild(node);
+            }
+        }
+
+        function annotateLayoutDiffContainer(originalContainer, currentContainer, cloneContainer, acc) {
+            const originalEntries = layoutDiffEntries(originalContainer);
+            const currentEntries = layoutDiffEntries(currentContainer);
+            const cloneEntries = layoutDiffEntries(cloneContainer);
+            const operations = sequenceDiff(
+                originalEntries.map((entry) => entry.key),
+                currentEntries.map((entry) => entry.key)
+            );
+            let operationIndex = 0;
+            let originalIndex = 0;
+            let currentIndex = 0;
+
+            while (operationIndex < operations.length) {
+                if (operations[operationIndex].type === 'same') {
+                    originalIndex += 1;
+                    currentIndex += 1;
+                    operationIndex += 1;
                     continue;
                 }
 
-                const dels = [];
-                const adds = [];
-                while (i < lineOps.length && lineOps[i].type === 'del') {
-                    dels.push(lineOps[i].text);
-                    i += 1;
+                const removed = [];
+                const added = [];
+                while (
+                    operationIndex < operations.length
+                    && operations[operationIndex].type === 'del'
+                ) {
+                    removed.push(originalEntries[originalIndex]);
+                    originalIndex += 1;
+                    operationIndex += 1;
                 }
-                while (i < lineOps.length && lineOps[i].type === 'add') {
-                    adds.push(lineOps[i].text);
-                    i += 1;
+                while (
+                    operationIndex < operations.length
+                    && operations[operationIndex].type === 'add'
+                ) {
+                    added.push({
+                        source: currentEntries[currentIndex],
+                        clone: cloneEntries[currentIndex]
+                    });
+                    currentIndex += 1;
+                    operationIndex += 1;
                 }
 
-                if (dels.length === adds.length) {
-                    for (let k = 0; k < dels.length; k += 1) {
-                        const id = changeId;
-                        changeId += 1;
-                        const tag = lineToTag(adds[k]) || lineToTag(dels[k]);
-                        const wOps = wordDiffOps(dels[k], adds[k]);
-                        const c = countWordChanges(wOps);
-                        wordAdded += c.added;
-                        wordRemoved += c.removed;
-                        headingChanges += countHeadingChangesFromWordOps(wOps);
-                        const inner = wordOpsToTrackHtml(wOps, id);
-                        parts.push(wrapBlock(tag, inner, id, true));
-                        pushNav(id, wOps, plainFromDiffLine(adds[k]) || plainFromDiffLine(dels[k]));
+                const paired = Math.min(removed.length, added.length);
+                for (let index = 0; index < paired; index += 1) {
+                    const originalEntry = removed[index];
+                    const currentEntry = added[index]?.clone;
+                    if (!originalEntry || !currentEntry) continue;
+                    if (originalEntry.type === 'text' && currentEntry.type === 'text') {
+                        markLayoutEntryReplacement(originalEntry, currentEntry, acc);
+                    } else {
+                        insertRemovedLayoutEntry(
+                            originalEntry,
+                            cloneContainer,
+                            currentEntry,
+                            acc
+                        );
+                        markLayoutEntryAdded(currentEntry, acc);
                     }
-                } else if (dels.length === 0) {
-                    adds.forEach((line) => {
-                        const id = changeId;
-                        changeId += 1;
-                        const tag = lineToTag(line);
-                        const text = plainFromDiffLine(line);
-                        const wOps = wordDiffOps('', line);
-                        const c = countWordChanges(wOps);
-                        wordAdded += c.added;
-                        wordRemoved += c.removed;
-                        headingChanges += countHeadingChangesFromWordOps(wOps);
-                        parts.push(wrapBlock(
-                            tag,
-                            `<ins class="kf-tc-ins" data-diff="${id}">${escapeHtml(text)}</ins>`,
-                            id,
-                            true
-                        ));
-                        pushNav(id, wOps, text);
-                    });
-                } else if (adds.length === 0) {
-                    dels.forEach((line) => {
-                        const id = changeId;
-                        changeId += 1;
-                        const tag = lineToTag(line);
-                        const text = plainFromDiffLine(line);
-                        const wOps = wordDiffOps(line, '');
-                        const c = countWordChanges(wOps);
-                        wordAdded += c.added;
-                        wordRemoved += c.removed;
-                        headingChanges += countHeadingChangesFromWordOps(wOps);
-                        parts.push(wrapBlock(
-                            tag,
-                            `<del class="kf-tc-del" data-diff="${id}">${escapeHtml(text)}</del>`,
-                            id,
-                            true
-                        ));
-                        pushNav(id, wOps, text);
-                    });
-                } else {
-                    // Unequal multi-line replace → one continuous track-changes block
-                    const id = changeId;
-                    changeId += 1;
-                    const left = dels.join(' ');
-                    const right = adds.join(' ');
-                    const wOps = wordDiffOps(left, right);
-                    const c = countWordChanges(wOps);
-                    wordAdded += c.added;
-                    wordRemoved += c.removed;
-                    headingChanges += countHeadingChangesFromWordOps(wOps);
-                    const tag = lineToTag(adds[0] || dels[0]);
-                    parts.push(wrapBlock(tag, wordOpsToTrackHtml(wOps, id), id, true));
-                    pushNav(id, wOps, plainFromDiffLine(adds[0] || dels[0]));
                 }
+
+                const firstUnpairedCurrent = added[paired]?.clone
+                    || cloneEntries[currentIndex]
+                    || null;
+                removed.slice(paired).forEach((entry) => {
+                    if (entry) {
+                        insertRemovedLayoutEntry(
+                            entry,
+                            cloneContainer,
+                            firstUnpairedCurrent,
+                            acc
+                        );
+                    }
+                });
+                added.slice(paired).forEach(({ clone }) => {
+                    if (clone) markLayoutEntryAdded(clone, acc);
+                });
+            }
+        }
+
+        function pdfPageMap(root) {
+            const map = new Map();
+            root?.querySelectorAll?.('.kf-pdf-page').forEach((page, index) => {
+                const key = String(page.getAttribute('data-source-page') || index + 1);
+                map.set(key, page);
+            });
+            return map;
+        }
+
+        /**
+         * Layout-aware track changes:
+         * clone the current Edit DOM, preserve its PDF pages, tables, images,
+         * positioning classes, and note spaces, then annotate changes in-place.
+         */
+        function buildTrackChangesDocument(originalHtml, currentHtml) {
+            const originalDoc = new DOMParser().parseFromString(
+                `<div id="root">${originalHtml || ''}</div>`,
+                'text/html'
+            );
+            const currentDoc = new DOMParser().parseFromString(
+                `<div id="root">${currentHtml || ''}</div>`,
+                'text/html'
+            );
+            const originalRoot = originalDoc.getElementById('root');
+            const currentRoot = currentDoc.getElementById('root');
+            const acc = trackAccumulator();
+            if (!originalRoot || !currentRoot) {
+                return {
+                    html: currentHtml || '<p class="kf-tc-empty">No content.</p>',
+                    navItems: [],
+                    added: 0,
+                    removed: 0,
+                    headingChanges: 0
+                };
+            }
+
+            [originalRoot, currentRoot].forEach((root) => {
+                root.querySelectorAll(
+                    '.kf-page-break,.kf-page-label,.kf-chapter-marker'
+                ).forEach((element) => element.remove());
+            });
+
+            const originalPages = pdfPageMap(originalRoot);
+            const currentPages = pdfPageMap(currentRoot);
+            let html = '';
+            if (originalPages.size || currentPages.size) {
+                const output = document.createElement('div');
+                const keys = Array.from(new Set([
+                    ...originalPages.keys(),
+                    ...currentPages.keys()
+                ])).sort((left, right) => Number(left) - Number(right));
+                keys.forEach((key) => {
+                    const originalPage = originalPages.get(key);
+                    const currentPage = currentPages.get(key);
+                    if (currentPage) {
+                        const clonePage = currentPage.cloneNode(true);
+                        if (originalPage) {
+                            annotateLayoutDiffContainer(
+                                originalPage,
+                                currentPage,
+                                clonePage,
+                                acc
+                            );
+                        } else {
+                            layoutDiffEntries(clonePage).forEach((entry) => {
+                                markLayoutEntryAdded(entry, acc);
+                            });
+                        }
+                        output.appendChild(clonePage);
+                        return;
+                    }
+                    if (originalPage) {
+                        const clonePage = originalPage.cloneNode(true);
+                        clonePage.classList.add('kf-tc-removed-page');
+                        layoutDiffEntries(clonePage).forEach((entry) => {
+                            markLayoutEntryRemoved(entry, acc);
+                        });
+                        output.appendChild(clonePage);
+                    }
+                });
+                html = output.innerHTML;
+            } else {
+                const cloneRoot = currentRoot.cloneNode(true);
+                annotateLayoutDiffContainer(
+                    originalRoot,
+                    currentRoot,
+                    cloneRoot,
+                    acc
+                );
+                html = cloneRoot.innerHTML;
             }
 
             return {
-                html: parts.join('\n') || '<p class="kf-tc-empty">No content.</p>',
-                navItems,
-                added: wordAdded,
-                removed: wordRemoved,
-                headingChanges
+                html: html || '<p class="kf-tc-empty">No content.</p>',
+                navItems: acc.navItems,
+                added: acc.added,
+                removed: acc.removed,
+                headingChanges: acc.headingChanges
             };
         }
 
@@ -5403,8 +5652,8 @@
                 'h1{font-size:1.45em;}h2{font-size:1.22em;}h3{font-size:1.08em;}',
                 'p{margin:0 0 0.85em;text-align:justify;page-break-inside:auto;page-break-before:auto;page-break-after:auto;}',
                 'h1.kf-pdf-block,h2.kf-pdf-block,h3.kf-pdf-block,p.kf-pdf-block{font-size:1em;font-family:inherit;text-align:left;}',
-                '.kf-pdf-page{display:block;box-sizing:border-box;width:100%;page-break-inside:auto;break-inside:auto;page-break-before:auto;break-before:auto;}',
-                '.kf-pdf-page+.kf-pdf-page{margin-top:1em;}',
+                '.kf-pdf-page{display:block;box-sizing:border-box;width:100%;page-break-inside:auto;break-inside:auto;}',
+                '.kf-pdf-page+.kf-pdf-page{margin-top:0;page-break-before:always;break-before:page;}',
                 '.kf-page-offset-0{padding-top:0;}.kf-page-offset-1{padding-top:1.8em;}.kf-page-offset-2{padding-top:3.6em;}.kf-page-offset-3{padding-top:5.4em;}.kf-page-offset-4{padding-top:7.2em;}.kf-page-offset-5{padding-top:9em;}.kf-page-offset-6{padding-top:10.8em;}.kf-page-offset-7{padding-top:12.6em;}.kf-page-offset-8{padding-top:14.4em;}',
                 '.kf-align-left{text-align:left !important;}.kf-align-center{text-align:center !important;}.kf-align-right{text-align:right !important;}',
                 '.kf-user-vpos-top{margin-top:0 !important;}.kf-user-vpos-middle{margin-top:6em !important;}.kf-user-vpos-bottom{margin-top:12em !important;}',

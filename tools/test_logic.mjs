@@ -494,8 +494,17 @@ assert.ok(
     html.includes('id="imageCutBtn"')
         && html.includes('id="imageCopyBtn"')
         && html.includes('id="imagePasteBtn"')
-        && html.includes('id="imageDeleteBtn"'),
-    'selected images expose compact cut, copy, paste, and delete controls'
+        && html.includes('id="imageDeleteBtn"')
+        && html.includes('id="imageSizeRange"')
+        && page.includes('function resizeSelectedImage'),
+    'selected images expose compact editing and persistent width controls'
+);
+assert.ok(
+    html.includes('data-toolbar-row="text"')
+        && html.includes('data-toolbar-row="objects"')
+        && html.indexOf('data-toolbar-row="text"')
+            < html.indexOf('data-toolbar-row="objects"'),
+    'text controls and image/table controls occupy separate toolbar rows'
 );
 assert.ok(
     page.includes("previewEl.addEventListener('copy'")
@@ -612,9 +621,10 @@ assert.ok(
 );
 assert.ok(page.includes('#editToolbar {')
     && page.includes('position: static')
+    && page.includes('#editToolbar .tb-lane')
     && page.includes('touch-action: pan-x')
     && page.includes('overflow-x: auto'),
-    'phone adjustment palette stays in-flow and scrolls horizontally');
+    'phone adjustment rows stay in-flow and scroll horizontally');
 assert.ok(page.includes("event.pointerType !== 'touch'")
     && page.includes("showControlTooltip(target, { temporary: true })"),
     'touch presses reveal the same word labels as hover/focus');
@@ -625,9 +635,17 @@ assert.ok(page.includes('id="insertTableBtn"') && page.includes('function insert
 assert.ok(page.includes('class="kf-pdf-page') && page.includes('data-source-page='),
     'PDF pages become explicit source-page sections');
 assert.ok(page.includes('.kf-pdf-page + .kf-pdf-page')
-    && page.includes('break-before: auto')
-    && page.includes('margin-top: 1em'),
-    'source PDF pages keep soft boundaries that allow normal Kobo reflow');
+    && page.includes('min-height: var(--reader-page-height')
+    && page.includes("style.setProperty('--reader-page-height'")
+    && page.includes('break-before: column')
+    && page.includes('page-break-before:always;break-before:page'),
+    'source PDF page divisions lock to Kobo pages in Edit, Diff, and EPUB');
+assert.ok(page.includes('function annotateLayoutDiffContainer')
+    && page.includes('function pdfPageMap')
+    && page.includes('clonePage = currentPage.cloneNode(true)')
+    && page.includes('kf-tc-object-add')
+    && page.includes('kf-tc-object-del'),
+    'Diff annotates a clone of the Edit layout, including pages, images, and tables');
 assert.ok(page.includes('data-pdf-vpos=') && page.includes('kf-align-${alignment}'),
     'PDF coordinate-derived placement survives into editable blocks');
 assert.ok(page.includes('data-pdf-column=') && page.includes('sideRail'),

@@ -14,11 +14,12 @@ before exporting a Kobo-friendly EPUB.
 - Published Kobo screen resolutions, pixel densities, and body proportions
 - Kobo Libra Colour default, plus Clara BW/Colour, Sage, and Elipsa 2E
 - Responsive device staging that shrinks with the selected Kobo on phones
-- Direct editing in the paginated Kobo view, with a separate in-device Diff mode
-- Compact icon-only phone controls with hover/tap labels, a horizontally
-  scrollable formatting bar above the Kobo, and pinned page arrows beside it
+- Direct editing in the paginated Kobo view, with a layout-identical in-device
+  Diff mode that overlays red removals and green additions
+- Compact icon-only phone controls with hover/tap labels, separate horizontally
+  scrollable text and image/table rows, and pinned page arrows beside them
 - Selectable inline images with Kobo-view cut, copy, paste, and delete controls
-  plus standard keyboard and clipboard-event support
+  plus dynamic width resizing and standard keyboard/clipboard-event support
 - Compact conversion summary with three facts and one high-level observation
 - Locked edit pagination: deletion reflows later paragraphs without viewport drift
 - Left/center/right and top/middle/bottom placement, font sizing, Word-style
@@ -26,7 +27,8 @@ before exporting a Kobo-friendly EPUB.
 - DOCX image extraction and automatic Kobo-targeted resizing/tone mapping
 - PDF image extraction with inline scan-page fallback
 - Robust PDF whitespace analysis that preserves large worksheet/note regions
-- PDF source-page boundaries and coordinate-aware vertical/horizontal placement
+- PDF source-page divisions locked to Kobo page starts, with coordinate-aware
+  vertical/horizontal placement and preserved intentional writing space
 - Page-level reading-column separation that prevents left/right text interleaving
 - Sentence-aware PDF line joining that reflows visual lines into real paragraphs
 - Conservative PDF table detection requiring ruled-grid or distinct header evidence
