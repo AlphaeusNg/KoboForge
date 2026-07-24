@@ -3,7 +3,7 @@
             buildFixedLayoutPublicationFiles,
             fixedLayoutDownloadName,
             resolveEpubLayoutMode
-        } from './fixed-layout.js?v=2026.07.24.8';
+        } from './fixed-layout.js?v=2026.07.24.9';
         import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
@@ -82,7 +82,6 @@
         const devicePageStatus = document.getElementById('devicePageStatus');
         const deviceButtonOne = document.getElementById('deviceButtonOne');
         const deviceButtonTwo = document.getElementById('deviceButtonTwo');
-        const devicePreviewTarget = document.getElementById('devicePreviewTarget');
         const controlTooltip = document.getElementById('controlTooltip');
         const epubLayoutMode = document.getElementById('epubLayoutMode');
         const epubLayoutResolved = document.getElementById('epubLayoutResolved');
@@ -427,7 +426,6 @@
             htmlToolbar?.classList.toggle('hidden', !isHtml);
             const fixedPreview = resolvedEpubLayout() === 'fixed';
             editToolbar?.classList.toggle('hidden', !isEdit || fixedPreview);
-            document.body.classList.toggle('kf-toolbar-open', isEdit && !fixedPreview);
             diffPanel?.classList.toggle('hidden', !isDiff);
 
             previewEl.contentEditable = isEdit && !fixedPreview ? 'true' : 'false';
@@ -564,9 +562,6 @@
             if (devicePhysicalSpec) {
                 devicePhysicalSpec.textContent = `${bodyW.toFixed(bodyW % 1 ? 1 : 0)}×${bodyH.toFixed(bodyH % 1 ? 1 : 0)} mm body · ${orientation}`;
             }
-            if (devicePreviewTarget) {
-                devicePreviewTarget.textContent = profile.name;
-            }
             deviceFrame.setAttribute(
                 'aria-label',
                 `${profile.name}, ${orientation}, ${geometry.screenWidthPx} by ${geometry.screenHeightPx} screen`
@@ -628,7 +623,6 @@
             deviceBookContent.classList.toggle('kf-diffing', editMode === 'diff' && !fixedPreview);
             deviceBookContent.classList.toggle('kf-fixed-preview', fixedPreview);
             editToolbar?.classList.toggle('hidden', editMode !== 'edit' || fixedPreview);
-            document.body.classList.toggle('kf-toolbar-open', editMode === 'edit' && !fixedPreview);
             deviceBookContent.querySelectorAll('.kf-note-space').forEach((space) => {
                 // Keep intentional space from collapsing during ordinary text
                 // edits. Advanced users can resize/remove it in HTML mode.
@@ -2279,7 +2273,6 @@
             bodyHtmlSource.classList.add('hidden');
             htmlToolbar.classList.add('hidden');
             editToolbar?.classList.add('hidden');
-            document.body.classList.remove('kf-toolbar-open');
             statusEl.textContent = 'Waiting for a document.';
             bookTitleInput.value = '';
             if (fileInput) fileInput.value = '';

@@ -240,55 +240,21 @@ body {
     right: var(--reader-margin, 18px);
     left: var(--reader-margin, 18px);
     z-index: 3;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 2px;
+    display: block;
     color: #625f56;
     font-family: Arial, sans-serif;
     font-size: var(--reader-chrome-size, 7px);
     line-height: 1;
+    pointer-events: none;
 }
 
 #deviceReaderTitle {
+    display: block;
     overflow: hidden;
     text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-
-.device-page-arrow {
-    display: grid;
-    width: max(12px, calc(var(--reader-chrome-size, 7px) * 2));
-    height: max(12px, calc(var(--reader-chrome-size, 7px) * 2));
-    place-items: center;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: #625f56;
-}
-
-.device-page-arrow .ui-icon {
-    width: max(8px, calc(var(--reader-chrome-size, 7px) * 1.3));
-    height: max(8px, calc(var(--reader-chrome-size, 7px) * 1.3));
-    stroke-width: 2.4;
-}
-
-.device-page-arrow:hover,
-.device-page-arrow:focus-visible {
-    background: rgba(98, 95, 86, 0.12);
-    color: #211f1b;
-    outline: none;
-}
-
-.device-page-arrow:disabled {
-    opacity: 0.24;
-}
-
-#devicePagePrev { grid-column: 1; }
-#deviceReaderTitle { grid-column: 2; }
-#devicePageNext { grid-column: 3; }
 
 #deviceReaderFooter {
     bottom: var(--reader-chrome-offset, 9px);
@@ -608,33 +574,38 @@ body {
 #deviceBookContent sub { font-size: 0.75em; vertical-align: sub; }
 #deviceBookContent sup { font-size: 0.75em; vertical-align: super; }
 
-/* Compact formatting palette: fixed on phones, scrollable on both axes. */
+/* Compact in-preview controls: never float over the Kobo page. */
+#devicePreviewControls {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.42rem 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(8, 13, 23, 0.72);
+}
+
 #editToolbar {
-    position: fixed;
-    width: min(13rem, calc(100vw - 1rem));
-    right: auto;
-    bottom: max(0.5rem, env(safe-area-inset-bottom));
-    left: 50%;
-    z-index: 40;
-    height: min(7rem, 32dvh);
-    padding: 0.4rem;
-    border-radius: 0.8rem;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(8, 13, 23, 0.94);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
-    transform: translateX(-50%);
+    position: static;
+    width: auto;
+    min-width: 0;
+    height: 2.15rem;
+    flex: 1 1 auto;
+    padding: 0;
+    overflow: hidden;
 }
 
 #editToolbar .tb-scroll {
     display: flex;
     width: 100%;
     height: 100%;
-    flex-direction: column;
-    gap: 0.28rem;
-    overflow: auto;
+    flex-flow: row nowrap;
+    align-items: center;
+    gap: 0.24rem;
+    overflow-x: auto;
+    overflow-y: hidden;
     overscroll-behavior: contain;
-    touch-action: pan-x pan-y;
+    touch-action: pan-x;
     scrollbar-width: thin;
     scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
 }
@@ -644,13 +615,15 @@ body {
     width: max-content;
     min-width: max-content;
     flex-wrap: nowrap;
-    gap: 0.28rem;
+    gap: 0.22rem;
+    padding-right: 0.26rem;
+    border-right: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 #editToolbar .tb-btn {
     display: grid;
-    width: 2rem;
-    height: 2rem;
+    width: 1.9rem;
+    height: 1.9rem;
     flex: none;
     place-items: center;
     padding: 0;
@@ -681,36 +654,62 @@ body {
     letter-spacing: -0.06em;
 }
 
-body.kf-toolbar-open {
-    padding-bottom: 7.75rem;
+.preview-page-nav {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.18rem;
+    margin-left: auto;
+    padding-left: 0.34rem;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-@media (min-width: 768px) {
-    #editToolbar {
-        position: static;
-        width: 100%;
-        height: auto;
-        margin-top: 0.75rem;
-        padding: 0.45rem;
-        box-shadow: none;
-        transform: none;
+.preview-page-arrow {
+    display: grid;
+    width: 1.9rem;
+    height: 1.9rem;
+    flex: none;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0.55rem;
+    background: rgba(255, 255, 255, 0.05);
+    color: #e2e8f0;
+}
+
+.preview-page-arrow .ui-icon {
+    width: 0.9rem;
+    height: 0.9rem;
+    stroke-width: 2.4;
+}
+
+.preview-page-arrow:hover,
+.preview-page-arrow:focus-visible {
+    border-color: rgba(201, 162, 39, 0.45);
+    color: #f8fafc;
+    outline: none;
+}
+
+.preview-page-arrow:disabled {
+    opacity: 0.28;
+}
+
+@media (max-width: 767px) {
+    #devicePreviewControls {
+        gap: 0.28rem;
+        padding: 0.34rem 0.38rem;
     }
 
+    #editToolbar,
     #editToolbar .tb-scroll {
-        height: auto;
-        flex-flow: row wrap;
-        overflow: visible;
+        height: 1.9rem;
     }
 
-    #editToolbar .tb-row {
-        width: auto;
-        min-width: 0;
-        padding-right: 0.28rem;
-        border-right: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    body.kf-toolbar-open {
-        padding-bottom: 0;
+    #editToolbar .tb-btn,
+    .preview-page-arrow {
+        width: 1.72rem;
+        height: 1.72rem;
+        border-radius: 0.45rem;
     }
 }
 

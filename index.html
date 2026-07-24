@@ -18,7 +18,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap">
-    <link rel="stylesheet" href="css/main.css?v=2026.07.24.8">
+    <link rel="stylesheet" href="css/main.css?v=2026.07.24.9">
 
 </head>
 <body class="text-slate-50 antialiased">
@@ -279,21 +279,56 @@
 
                 <div id="previewWrap" class="mt-4 mode-edit">
                 <div id="devicePreview" class="hidden" tabindex="0" aria-label="Paginated Kobo device preview">
-                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-5 py-4">
-                        <div>
-                            <div class="text-[10px] font-semibold uppercase tracking-[0.17em] text-[#C9A227]">Selected device output</div>
-                            <p class="mt-1 text-xs text-slate-400">Change the Kobo model or reading settings directly beneath the uploader.</p>
+                    <div id="devicePreviewControls">
+                        <div id="editToolbar" class="hidden" role="toolbar" aria-label="Text formatting">
+                            <div class="tb-scroll" tabindex="0" aria-label="Formatting controls; scroll horizontally">
+                                <div class="tb-row" role="group" aria-label="Inline style">
+                                    <button type="button" data-cmd="bold" class="tb-btn" title="Bold" data-tooltip="Bold" aria-label="Bold"><svg class="ui-icon" aria-hidden="true"><use href="#icon-bold"></use></svg></button>
+                                    <button type="button" data-cmd="italic" class="tb-btn" title="Italic" data-tooltip="Italic" aria-label="Italic"><svg class="ui-icon" aria-hidden="true"><use href="#icon-italic"></use></svg></button>
+                                    <button type="button" data-cmd="underline" class="tb-btn" title="Underline" data-tooltip="Underline" aria-label="Underline"><svg class="ui-icon" aria-hidden="true"><use href="#icon-underline"></use></svg></button>
+                                    <button type="button" data-cmd="strikeThrough" class="tb-btn" title="Strikethrough" data-tooltip="Strikethrough" aria-label="Strikethrough"><svg class="ui-icon" aria-hidden="true"><use href="#icon-strike"></use></svg></button>
+                                    <button type="button" data-cmd="removeFormat" class="tb-btn" title="Clear formatting" data-tooltip="Clear formatting" aria-label="Clear formatting"><svg class="ui-icon" aria-hidden="true"><use href="#icon-eraser"></use></svg></button>
+                                </div>
+                                <div class="tb-row" role="group" aria-label="Lists and quote">
+                                    <button type="button" data-cmd="insertUnorderedList" class="tb-btn" title="Bullet list" data-tooltip="Bullet list" aria-label="Bullet list"><svg class="ui-icon" aria-hidden="true"><use href="#icon-list"></use></svg></button>
+                                    <button type="button" data-cmd="insertOrderedList" class="tb-btn" title="Numbered list" data-tooltip="Numbered list" aria-label="Numbered list"><svg class="ui-icon" aria-hidden="true"><use href="#icon-list-ordered"></use></svg></button>
+                                    <button type="button" data-block="blockquote" class="tb-btn block-fmt-btn" title="Block quote" data-tooltip="Block quote" aria-label="Block quote"><svg class="ui-icon" aria-hidden="true"><use href="#icon-quote"></use></svg></button>
+                                </div>
+                                <div class="tb-row" role="group" aria-label="Paragraph and headings">
+                                    <button type="button" data-block="p" class="tb-btn block-fmt-btn" title="Paragraph" data-tooltip="Paragraph" aria-label="Paragraph"><svg class="ui-icon" aria-hidden="true"><use href="#icon-paragraph"></use></svg></button>
+                                    <button type="button" data-block="h1" class="tb-btn block-fmt-btn" title="Heading 1" data-tooltip="Heading 1" aria-label="Heading 1"><span class="tb-icon-text" aria-hidden="true">H1</span></button>
+                                    <button type="button" data-block="h2" class="tb-btn block-fmt-btn" title="Heading 2" data-tooltip="Heading 2" aria-label="Heading 2"><span class="tb-icon-text" aria-hidden="true">H2</span></button>
+                                    <button type="button" data-block="h3" class="tb-btn block-fmt-btn" title="Heading 3" data-tooltip="Heading 3" aria-label="Heading 3"><span class="tb-icon-text" aria-hidden="true">H3</span></button>
+                                </div>
+                                <div class="tb-row" role="group" aria-label="Horizontal alignment">
+                                    <button type="button" data-align="left" class="tb-btn" title="Align left" data-tooltip="Align left" aria-label="Align left"><svg class="ui-icon" aria-hidden="true"><use href="#icon-align-left"></use></svg></button>
+                                    <button type="button" data-align="center" class="tb-btn" title="Align center" data-tooltip="Align center" aria-label="Align center"><svg class="ui-icon" aria-hidden="true"><use href="#icon-align-center"></use></svg></button>
+                                    <button type="button" data-align="right" class="tb-btn" title="Align right" data-tooltip="Align right" aria-label="Align right"><svg class="ui-icon" aria-hidden="true"><use href="#icon-align-right"></use></svg></button>
+                                </div>
+                                <div class="tb-row" role="group" aria-label="Vertical placement and font size">
+                                    <button type="button" data-vpos="top" class="tb-btn" title="Place near top" data-tooltip="Place near top" aria-label="Place near top"><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-top"></use></svg></button>
+                                    <button type="button" data-vpos="middle" class="tb-btn" title="Place near middle" data-tooltip="Place near middle" aria-label="Place near middle"><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-middle"></use></svg></button>
+                                    <button type="button" data-vpos="bottom" class="tb-btn" title="Place near bottom" data-tooltip="Place near bottom" aria-label="Place near bottom"><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-bottom"></use></svg></button>
+                                    <button type="button" data-font-step="-1" class="tb-btn" title="Decrease font size" data-tooltip="Decrease font size" aria-label="Decrease font size"><svg class="ui-icon" aria-hidden="true"><use href="#icon-font-minus"></use></svg></button>
+                                    <button type="button" data-font-step="1" class="tb-btn" title="Increase font size" data-tooltip="Increase font size" aria-label="Increase font size"><svg class="ui-icon" aria-hidden="true"><use href="#icon-font-plus"></use></svg></button>
+                                    <button type="button" data-font-step="0" class="tb-btn" title="Reset font size" data-tooltip="Reset font size" aria-label="Reset font size"><svg class="ui-icon" aria-hidden="true"><use href="#icon-font-reset"></use></svg></button>
+                                </div>
+                                <div class="tb-row" role="group" aria-label="Insert content">
+                                    <button type="button" id="insertTableBtn" class="tb-btn" title="Insert 2 by 2 table" data-tooltip="Insert 2 by 2 table" aria-label="Insert 2 by 2 table"><svg class="ui-icon" aria-hidden="true"><use href="#icon-table"></use></svg></button>
+                                </div>
+                            </div>
                         </div>
-                        <span id="devicePreviewTarget" class="device-spec-pill rounded-full px-3 py-1.5 text-xs text-slate-300">Kobo Libra Colour</span>
+                        <div class="preview-page-nav" role="group" aria-label="Page navigation">
+                            <button type="button" id="devicePagePrev" class="preview-page-arrow" title="Previous page" data-tooltip="Previous page" aria-label="Previous page" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button>
+                            <button type="button" id="devicePageNext" class="preview-page-arrow" title="Next page" data-tooltip="Next page" aria-label="Next page" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron-right"></use></svg></button>
+                        </div>
                     </div>
 
                     <div class="device-stage">
                         <div id="deviceFrame" role="img" aria-label="Kobo device frame">
                             <div id="deviceScreen">
                                 <div id="deviceReaderHeader">
-                                    <button type="button" id="devicePagePrev" class="device-page-arrow" title="Previous page" data-tooltip="Previous page" aria-label="Previous page" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button>
                                     <span id="deviceReaderTitle">KoboForge preview</span>
-                                    <button type="button" id="devicePageNext" class="device-page-arrow" title="Next page" data-tooltip="Next page" aria-label="Next page" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron-right"></use></svg></button>
                                 </div>
                                 <div id="deviceBookViewport">
                                     <div id="deviceBookContent" lang="en" spellcheck="true"></div>
@@ -307,44 +342,6 @@
                     <span id="devicePageStatus" class="sr-only" aria-live="polite">Page 1 of 1</span>
                 </div>
                 <textarea id="bodyHtmlSource" class="mt-0 hidden max-h-[62vh] min-h-[480px] w-full resize-y rounded-[1.75rem] border border-white/10 bg-slate-950/50 px-4 py-4 text-slate-200 outline-none focus:border-[#C9A227]" spellcheck="false" aria-label="Body HTML source"></textarea>
-                <div id="editToolbar" class="hidden" role="toolbar" aria-label="Text formatting">
-                    <div class="tb-scroll" tabindex="0" aria-label="Formatting controls; scroll horizontally and vertically">
-                        <div class="tb-row" role="group" aria-label="Inline style">
-                            <button type="button" data-cmd="bold" class="tb-btn" title="Bold" data-tooltip="Bold" aria-label="Bold"><svg class="ui-icon" aria-hidden="true"><use href="#icon-bold"></use></svg></button>
-                            <button type="button" data-cmd="italic" class="tb-btn" title="Italic" data-tooltip="Italic" aria-label="Italic"><svg class="ui-icon" aria-hidden="true"><use href="#icon-italic"></use></svg></button>
-                            <button type="button" data-cmd="underline" class="tb-btn" title="Underline" data-tooltip="Underline" aria-label="Underline"><svg class="ui-icon" aria-hidden="true"><use href="#icon-underline"></use></svg></button>
-                            <button type="button" data-cmd="strikeThrough" class="tb-btn" title="Strikethrough" data-tooltip="Strikethrough" aria-label="Strikethrough"><svg class="ui-icon" aria-hidden="true"><use href="#icon-strike"></use></svg></button>
-                            <button type="button" data-cmd="removeFormat" class="tb-btn" title="Clear formatting" data-tooltip="Clear formatting" aria-label="Clear formatting"><svg class="ui-icon" aria-hidden="true"><use href="#icon-eraser"></use></svg></button>
-                        </div>
-                        <div class="tb-row" role="group" aria-label="Lists and quote">
-                            <button type="button" data-cmd="insertUnorderedList" class="tb-btn" title="Bullet list" data-tooltip="Bullet list" aria-label="Bullet list"><svg class="ui-icon" aria-hidden="true"><use href="#icon-list"></use></svg></button>
-                            <button type="button" data-cmd="insertOrderedList" class="tb-btn" title="Numbered list" data-tooltip="Numbered list" aria-label="Numbered list"><svg class="ui-icon" aria-hidden="true"><use href="#icon-list-ordered"></use></svg></button>
-                            <button type="button" data-block="blockquote" class="tb-btn block-fmt-btn" title="Block quote" data-tooltip="Block quote" aria-label="Block quote"><svg class="ui-icon" aria-hidden="true"><use href="#icon-quote"></use></svg></button>
-                        </div>
-                        <div class="tb-row" role="group" aria-label="Paragraph and headings">
-                            <button type="button" data-block="p" class="tb-btn block-fmt-btn" title="Paragraph" data-tooltip="Paragraph" aria-label="Paragraph"><svg class="ui-icon" aria-hidden="true"><use href="#icon-paragraph"></use></svg></button>
-                            <button type="button" data-block="h1" class="tb-btn block-fmt-btn" title="Heading 1" data-tooltip="Heading 1" aria-label="Heading 1"><span class="tb-icon-text" aria-hidden="true">H1</span></button>
-                            <button type="button" data-block="h2" class="tb-btn block-fmt-btn" title="Heading 2" data-tooltip="Heading 2" aria-label="Heading 2"><span class="tb-icon-text" aria-hidden="true">H2</span></button>
-                            <button type="button" data-block="h3" class="tb-btn block-fmt-btn" title="Heading 3" data-tooltip="Heading 3" aria-label="Heading 3"><span class="tb-icon-text" aria-hidden="true">H3</span></button>
-                        </div>
-                        <div class="tb-row" role="group" aria-label="Horizontal alignment">
-                            <button type="button" data-align="left" class="tb-btn" title="Align left" data-tooltip="Align left" aria-label="Align left"><svg class="ui-icon" aria-hidden="true"><use href="#icon-align-left"></use></svg></button>
-                            <button type="button" data-align="center" class="tb-btn" title="Align center" data-tooltip="Align center" aria-label="Align center"><svg class="ui-icon" aria-hidden="true"><use href="#icon-align-center"></use></svg></button>
-                            <button type="button" data-align="right" class="tb-btn" title="Align right" data-tooltip="Align right" aria-label="Align right"><svg class="ui-icon" aria-hidden="true"><use href="#icon-align-right"></use></svg></button>
-                        </div>
-                        <div class="tb-row" role="group" aria-label="Vertical placement and font size">
-                            <button type="button" data-vpos="top" class="tb-btn" title="Place near top" data-tooltip="Place near top" aria-label="Place near top"><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-top"></use></svg></button>
-                            <button type="button" data-vpos="middle" class="tb-btn" title="Place near middle" data-tooltip="Place near middle" aria-label="Place near middle"><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-middle"></use></svg></button>
-                            <button type="button" data-vpos="bottom" class="tb-btn" title="Place near bottom" data-tooltip="Place near bottom" aria-label="Place near bottom"><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-bottom"></use></svg></button>
-                            <button type="button" data-font-step="-1" class="tb-btn" title="Decrease font size" data-tooltip="Decrease font size" aria-label="Decrease font size"><svg class="ui-icon" aria-hidden="true"><use href="#icon-font-minus"></use></svg></button>
-                            <button type="button" data-font-step="1" class="tb-btn" title="Increase font size" data-tooltip="Increase font size" aria-label="Increase font size"><svg class="ui-icon" aria-hidden="true"><use href="#icon-font-plus"></use></svg></button>
-                            <button type="button" data-font-step="0" class="tb-btn" title="Reset font size" data-tooltip="Reset font size" aria-label="Reset font size"><svg class="ui-icon" aria-hidden="true"><use href="#icon-font-reset"></use></svg></button>
-                        </div>
-                        <div class="tb-row" role="group" aria-label="Insert content">
-                            <button type="button" id="insertTableBtn" class="tb-btn" title="Insert 2 by 2 table" data-tooltip="Insert 2 by 2 table" aria-label="Insert 2 by 2 table"><svg class="ui-icon" aria-hidden="true"><use href="#icon-table"></use></svg></button>
-                        </div>
-                    </div>
-                </div>
                 <div id="htmlToolbar" class="mt-3 hidden flex flex-wrap gap-2">
                     <button type="button" id="applyHtmlBtn" class="icon-control bg-[#C9A227] text-slate-950" title="Apply HTML" data-tooltip="Apply HTML" aria-label="Apply HTML"><svg class="ui-icon" aria-hidden="true"><use href="#icon-check"></use></svg></button>
                     <button type="button" id="cancelHtmlBtn" class="icon-control border border-white/15 bg-white/5 text-slate-300" title="Back to Edit" data-tooltip="Back to Edit" aria-label="Back to Edit"><svg class="ui-icon" aria-hidden="true"><use href="#icon-back"></use></svg></button>
@@ -457,9 +454,9 @@
         <span id="site-version" class="font-mono text-slate-500" title="Bump js/version.js on each deploy">v—</span>
     </footer>
     <script src="https://alphaeusng.github.io/js/kofi-support.js?v=2026.07.24.7" data-auto-footer defer></script>
-    <script src="js/version.js?v=2026.07.24.8"></script>
+    <script src="js/version.js?v=2026.07.24.9"></script>
 
-    <script type="module" src="js/app.js?v=2026.07.24.8"></script>
+    <script type="module" src="js/app.js?v=2026.07.24.9"></script>
     <div id="controlTooltip" role="status" aria-live="polite"></div>
 </body>
 </html>

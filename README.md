@@ -15,8 +15,8 @@ before exporting a Kobo-friendly EPUB.
 - Kobo Libra Colour default, plus Clara BW/Colour, Sage, and Elipsa 2E
 - Responsive device staging that shrinks with the selected Kobo on phones
 - Direct editing in the paginated Kobo view, with a separate in-device Diff mode
-- Compact icon-only phone controls with hover/tap labels, fixed two-axis
-  formatting palette, and page arrows inside the Kobo header
+- Compact icon-only phone controls with hover/tap labels, a horizontally
+  scrollable formatting bar above the Kobo, and pinned page arrows beside it
 - Locked edit pagination: deletion reflows later paragraphs without viewport drift
 - Left/center/right and top/middle/bottom placement, font sizing, Word-style
   Tab behavior, editable table insertion, and HTML source mode

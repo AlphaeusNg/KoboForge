@@ -51,6 +51,32 @@ assert.ok(
     'fixed-layout module must be cache-busted with the deployment version'
 );
 assert.ok(!html.includes('<script type="module">'), 'application code must not remain inline');
+assert.ok(
+    !html.includes('Selected device output'),
+    'obsolete selected-device copy must not consume preview space'
+);
+const previewControlsAt = html.indexOf('id="devicePreviewControls"');
+const inlineToolbarAt = html.indexOf('id="editToolbar"');
+const deviceStageAt = html.indexOf('class="device-stage"');
+assert.ok(
+    previewControlsAt >= 0
+    && inlineToolbarAt > previewControlsAt
+    && inlineToolbarAt < deviceStageAt,
+    'formatting controls must live in the compact bar above the Kobo'
+);
+assert.ok(
+    html.indexOf('id="devicePagePrev"') < deviceStageAt
+    && html.indexOf('id="devicePageNext"') < deviceStageAt,
+    'page arrows must live beside the compact preview controls'
+);
+assert.ok(
+    !/#editToolbar\s*\{[^}]*position:\s*fixed/s.test(styles),
+    'phone formatting controls must never float over the Kobo preview'
+);
+assert.ok(
+    !page.includes('kf-toolbar-open'),
+    'removed floating-toolbar body padding must not return'
+);
 
 const features = [
     ['edit mode', 'data-mode="edit"'],
@@ -527,14 +553,14 @@ assert.ok(
     'every compact formatting icon exposes hover/tap and assistive labels'
 );
 assert.ok(
-    /id="deviceReaderHeader"[\s\S]*id="devicePagePrev"[\s\S]*id="devicePageNext"[\s\S]*<\/div>/.test(html),
-    'previous and next arrows live inside the Kobo reader header'
+    /id="devicePreviewControls"[\s\S]*id="devicePagePrev"[\s\S]*id="devicePageNext"[\s\S]*class="device-stage"/.test(html),
+    'previous and next arrows share the compact bar above the Kobo'
 );
 assert.ok(page.includes('#editToolbar {')
-    && page.includes('position: fixed')
-    && page.includes('touch-action: pan-x pan-y')
-    && page.includes('overflow: auto'),
-    'phone adjustment palette stays fixed and scrolls on both axes');
+    && page.includes('position: static')
+    && page.includes('touch-action: pan-x')
+    && page.includes('overflow-x: auto'),
+    'phone adjustment palette stays in-flow and scrolls horizontally');
 assert.ok(page.includes("event.pointerType !== 'touch'")
     && page.includes("showControlTooltip(target, { temporary: true })"),
     'touch presses reveal the same word labels as hover/focus');
