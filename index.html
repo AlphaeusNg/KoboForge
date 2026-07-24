@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KoboForge • Kobo EPUB Converter</title>
-    <meta name="description" content="Private client-side EPUB conversion with accurate Kobo device profiles, paginated editing, and automatic optimization of DOCX and PDF images.">
+    <meta name="description" content="Private client-side Kobo EPUB conversion with automatic fixed-layout PDF preservation, reflowable editing, accurate device profiles, and inline image optimization.">
     <meta name="theme-color" content="#080d17">
     <link rel="canonical" href="https://alphaeusng.github.io/KoboForge/">
     <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
@@ -18,7 +18,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap">
-    <link rel="stylesheet" href="css/main.css?v=2026.07.24.7">
+    <link rel="stylesheet" href="css/main.css?v=2026.07.24.8">
 
 </head>
 <body class="text-slate-50 antialiased">
@@ -78,7 +78,7 @@
         <div class="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-[#C9A227]">Client-side Processing</div>
         <h1 class="heading-serif max-w-4xl text-6xl leading-none text-slate-50 md:text-7xl">KoboForge</h1>
         <p class="mt-6 max-w-4xl text-2xl leading-relaxed text-slate-200">
-            Convert → edit directly on your Kobo → export. Text and detected document images stay together without uploading your files.
+            Convert → preview on your Kobo → edit reflowable text or lock exact PDF pages → export. Nothing is uploaded.
         </p>
         <div class="mt-8 flex flex-wrap gap-3 text-sm text-slate-300">
             <div class="rounded-full border border-white/10 bg-white/5 px-4 py-1.5">Runs fully in your browser</div>
@@ -86,6 +86,7 @@
             <div class="rounded-full border border-white/10 bg-white/5 px-4 py-1.5">Edit body before export</div>
             <div class="rounded-full border border-white/10 bg-white/5 px-4 py-1.5">Paginated Kobo device profiles</div>
             <div class="rounded-full border border-white/10 bg-white/5 px-4 py-1.5">Embedded images auto-optimized</div>
+            <div class="rounded-full border border-white/10 bg-white/5 px-4 py-1.5">Auto fixed-layout EPUB 3</div>
         </div>
     </header>
 
@@ -124,6 +125,23 @@
                         </div>
                     </div>
                     <input id="fileInput" type="file" accept=".docx,.pdf,.txt,.md,.markdown" class="hidden">
+                </div>
+
+                <div id="epubLayoutSetup" class="mt-5 rounded-3xl border border-white/10 bg-slate-950/35 p-5">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <label class="device-control block min-w-0 flex-1">
+                            <span class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.17em] text-slate-500">EPUB layout</span>
+                            <select id="epubLayoutMode" class="rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-[#C9A227]">
+                                <option value="auto" selected>Auto · inspect the PDF design</option>
+                                <option value="reflowable">Reflowable · editable, resizable text</option>
+                                <option value="fixed">Fixed layout · exact PDF pages</option>
+                            </select>
+                        </label>
+                        <span id="epubLayoutResolved" class="device-spec-pill w-fit shrink-0 rounded-full px-3 py-1.5 text-xs text-slate-300">Auto · waiting for PDF</span>
+                    </div>
+                    <p id="epubLayoutHint" class="mt-3 text-xs leading-5 text-slate-400">
+                        Auto keeps ordinary documents reflowable and switches graphic-heavy PDFs to a fixed-layout EPUB 3 facsimile. Fixed layout preserves exact positions, fonts, sidebars, image wraps, and writing space, but its text cannot be resized or edited like a normal ebook.
+                    </p>
                 </div>
 
                 <div id="koboPreviewSetup" class="mt-6 rounded-3xl border border-[#C9A227]/25 bg-[#C9A227]/[0.06] p-5">
@@ -219,10 +237,10 @@
                     <div class="text-xs font-semibold uppercase tracking-[0.18em] text-[#C9A227]">Workflow</div>
                     <ol class="mt-4 list-decimal space-y-2 pl-5 text-sm leading-7 text-slate-300">
                         <li>Import a document (DOCX, PDF, TXT, or Markdown).</li>
+                        <li>Keep Auto, or choose exact fixed pages versus editable reflowable text.</li>
                         <li>Choose your Kobo; detected DOCX/PDF images are optimized for it automatically.</li>
-                        <li>Edit directly in the selected Kobo view, which opens automatically.</li>
-                        <li>Use alignment, font-size, table, and Word-style Tab controls in <strong class="text-slate-100">Edit</strong>.</li>
-                        <li>Switch to <strong class="text-slate-100">Diff</strong> to see red/green changes directly on the Kobo, then export.</li>
+                        <li>For Reflowable, edit directly in the selected Kobo view and use Diff before export.</li>
+                        <li>For Fixed, page through the locked source-faithful Kobo preview, then export.</li>
                     </ol>
                 </div>
             </div>
@@ -381,7 +399,7 @@
                         <div id="statTables" class="mt-2 text-lg font-semibold text-slate-100">—</div>
                     </div>
                     <div class="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4">
-                        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Chapters</div>
+                        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Spine items</div>
                         <div id="statChapters" class="mt-2 text-lg font-semibold text-slate-100">—</div>
                     </div>
                     <div class="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4">
@@ -439,9 +457,9 @@
         <span id="site-version" class="font-mono text-slate-500" title="Bump js/version.js on each deploy">v—</span>
     </footer>
     <script src="https://alphaeusng.github.io/js/kofi-support.js?v=2026.07.24.7" data-auto-footer defer></script>
-    <script src="js/version.js?v=2026.07.24.7"></script>
+    <script src="js/version.js?v=2026.07.24.8"></script>
 
-    <script type="module" src="js/app.js?v=2026.07.24.7"></script>
+    <script type="module" src="js/app.js?v=2026.07.24.8"></script>
     <div id="controlTooltip" role="status" aria-live="polite"></div>
 </body>
 </html>

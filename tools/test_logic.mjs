@@ -6,6 +6,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import {
+    analyzePdfLayoutComplexity,
+    buildFixedLayoutPublicationFiles,
+    fixedLayoutDownloadName,
+    resolveEpubLayoutMode,
+    scorePdfDesignPage
+} from '../js/fixed-layout.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const htmlPath = join(__dirname, '../index.html');
@@ -39,6 +46,10 @@ for (const asset of ['css/main.css', 'js/version.js', 'js/app.js']) {
         `${asset} must be cache-busted with the deployment version`
     );
 }
+assert.ok(
+    script.includes(`./fixed-layout.js?v=${deploymentVersion}`),
+    'fixed-layout module must be cache-busted with the deployment version'
+);
 assert.ok(!html.includes('<script type="module">'), 'application code must not remain inline');
 
 const features = [
@@ -74,6 +85,10 @@ const features = [
     ['PDF semantic table header evidence', 'function hasPdfTableHeaderEvidence'],
     ['PDF paragraph continuation checker', 'function shouldBreakPdfParagraph'],
     ['EPUB image assets', 'function extractEmbeddedImagesForEpub'],
+    ['EPUB layout selector', 'id="epubLayoutMode"'],
+    ['fixed-layout renderer', 'function renderPdfFixedLayoutPages'],
+    ['fixed-layout EPUB builder', 'function buildFixedLayoutEpubBlob'],
+    ['fixed-layout package module', "from './fixed-layout.js?v="],
     ['Floyd–Steinberg dithering', 'Floyd–Steinberg'],
 ];
 for (const [label, needle] of features) assertIncludes(label, needle);
@@ -258,6 +273,95 @@ assert.deepEqual(
     describePdfFont('AAAAAA+Amsterdam-Four', 'sans-serif').family,
     'script'
 );
+
+// Fixed-layout recommendation: ordinary prose stays reflowable; mixed,
+// positioned, graphic-heavy pages cross the reviewable Auto threshold.
+assert.equal(
+    scorePdfDesignPage({
+        textItemCount: 80,
+        fontCount: 1,
+        xClusterCount: 2,
+        readingColumns: 1
+    }).complex,
+    false
+);
+const complexPdf = analyzePdfLayoutComplexity([
+    {
+        textItemCount: 90,
+        imageCount: 2,
+        imageOperatorCount: 2,
+        fontCount: 5,
+        xClusterCount: 7,
+        readingColumns: 2,
+        vectorPathCount: 20
+    },
+    {
+        textItemCount: 60,
+        fontCount: 4,
+        xClusterCount: 5,
+        readingColumns: 2,
+        hasGrid: true
+    },
+    {
+        textItemCount: 100,
+        fontCount: 1,
+        xClusterCount: 2,
+        readingColumns: 1
+    }
+]);
+assert.equal(complexPdf.recommended, true);
+assert.ok(complexPdf.reasons.includes('multi-column reading order'));
+assert.equal(
+    resolveEpubLayoutMode('auto', {
+        formatLabel: 'PDF',
+        fixedLayoutRecommendation: complexPdf
+    }),
+    'fixed'
+);
+assert.equal(
+    resolveEpubLayoutMode('fixed', { formatLabel: 'DOCX' }),
+    'reflowable',
+    'fixed-layout path must not silently rasterize non-PDF inputs'
+);
+assert.equal(fixedLayoutDownloadName('Night Sheets'), 'Night Sheets.fxl.kepub.epub');
+
+const fixedFiles = buildFixedLayoutPublicationFiles({
+    title: 'Layout Test',
+    author: 'KoboForge',
+    lang: 'en',
+    identifier: 'urn:uuid:layout-test',
+    modified: '2026-07-24T00:00:00Z',
+    pages: [
+        {
+            width: 1264,
+            height: 1680,
+            mediaType: 'image/jpeg',
+            bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+            text: 'Accessible page one text.'
+        },
+        {
+            width: 1264,
+            height: 1680,
+            mediaType: 'image/jpeg',
+            bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+            text: 'Accessible page two text.'
+        }
+    ]
+});
+const fixedOpf = fixedFiles.get('OEBPS/content.opf');
+assert.match(fixedOpf, /<meta property="rendition:layout">pre-paginated<\/meta>/);
+assert.match(fixedOpf, /<meta property="rendition:orientation">auto<\/meta>/);
+assert.match(fixedOpf, /<meta property="rendition:spread">none<\/meta>/);
+assert.equal((fixedOpf.match(/<itemref\b/g) || []).length, 2);
+assert.equal(
+    fixedOpf.includes('rendition:viewport'),
+    false,
+    'deprecated package-level rendition:viewport must not be emitted'
+);
+const firstFixedPage = fixedFiles.get('OEBPS/pages/page-0001.xhtml');
+assert.match(firstFixedPage, /<meta name="viewport" content="width=1264, height=1680"\/>/);
+assert.match(firstFixedPage, /Accessible page one text\./);
+assert.match(fixedFiles.get('OEBPS/nav.xhtml'), /epub:type="page-list"/);
 assert.equal(describePdfFont('CAAAAA+Montserrat-Bold').bold, true);
 assert.equal(describePdfFont('CAAAAA+Montserrat-Bold', 'sans-serif').family, 'sans');
 assert.equal(describePdfFont('DAAAAA+PlayfairDisplay-Regular').family, 'serif');

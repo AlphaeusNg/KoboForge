@@ -29,8 +29,18 @@ before exporting a Kobo-friendly EPUB.
 - Conservative PDF table detection requiring ruled-grid or distinct header evidence
 - PDF font profiling that retains relative size, family type, weight, and slant
 - Wide PDF column gaps that remain separated and wrap cleanly on narrow Kobos
-- EPUB3 export with nav + NCX and packaged image manifest assets
+- Auto/Fixed/Reflowable layout choice directly below upload
+- PDF design-complexity scoring across images, columns, positioned blocks,
+  vector graphics, font profiles, tables, and intentional whitespace
+- EPUB 3 fixed-layout facsimile export with one viewport/spine item per PDF
+  page, source-page previews, hidden extracted text, and Kobo
+  `.fxl.kepub.epub` sideload naming
+- Reflowable EPUB3 export with nav + NCX and packaged image manifest assets
 - Fully local browser processing; documents are never uploaded
+
+Fixed layout is intended for graphic-heavy PDFs whose exact visual hierarchy
+matters more than resizable text. It preserves the source page appearance but
+is deliberately read-only; switch to Reflowable to edit text or use Diff.
 
 ## Structure
 
@@ -38,8 +48,10 @@ before exporting a Kobo-friendly EPUB.
 index.html            # GitHub Pages entry point
 css/main.css          # KoboForge presentation
 js/app.js             # Conversion, editing, preview, and EPUB application
+js/fixed-layout.js    # Browser-neutral fixed-layout scoring/package contract
 js/version.js         # Deployment stamp
 tools/test_logic.mjs  # Lightweight regression contracts
+tools/test_fixed_epub.mjs # Real EPUB fixture + optional EPUBCheck validation
 ```
 
 The site intentionally uses plain HTML, CSS, and JavaScript with no build step.
@@ -52,8 +64,13 @@ python3 -m http.server 8000
 # http://127.0.0.1:8000/
 
 node --check js/app.js
+node --check js/fixed-layout.js
 node --check js/version.js
 node tools/test_logic.mjs
+node tools/test_fixed_epub.mjs
+
+# Optional standards validation
+EPUBCHECK_JAR=/path/to/epubcheck.jar node tools/test_fixed_epub.mjs
 ```
 
 ## Privacy
