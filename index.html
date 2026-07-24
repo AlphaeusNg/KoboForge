@@ -18,7 +18,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap">
-    <link rel="stylesheet" href="css/main.css?v=2026.07.24.10">
+    <link rel="stylesheet" href="css/main.css?v=2026.07.24.11">
 
 </head>
 <body class="text-slate-50 antialiased">
@@ -373,12 +373,11 @@
 
             <div class="workspace-status glass-card rounded-[2rem] p-7">
                 <div>
-                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-[#C9A227]">3. Status</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight">Client-side output</h2>
-                    <p class="mt-2 text-xs leading-5 text-slate-500">Progress and diagnostics while the document is reconstructed. Export lives after preview.</p>
+                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-[#C9A227]">3. Summary</div>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight">Conversion overview</h2>
                 </div>
-                <div id="status" class="mt-5 text-sm leading-7 text-slate-400">Waiting for a document.</div>
-                <div id="editedBadge" class="mt-2 hidden text-xs font-medium text-amber-300/90">Body edited — export will use your changes.</div>
+                <div id="status" class="mt-4 text-sm leading-6 text-slate-300">Waiting for a document.</div>
+                <div id="editedBadge" class="mt-2 hidden text-xs font-medium text-amber-300/90">Edits will be exported.</div>
                 <div id="progressWrap" class="mt-4 hidden">
                     <div class="mb-1 flex justify-between text-[11px] uppercase tracking-[0.14em] text-slate-500">
                         <span id="progressLabel">Processing</span>
@@ -388,36 +387,15 @@
                         <div id="progressBar" class="h-full w-0 rounded-full bg-[#C9A227] transition-[width] duration-200"></div>
                     </div>
                 </div>
-                <div id="stats" class="mt-5 grid hidden gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <div class="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4">
-                        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Format</div>
-                        <div id="statFormat" class="mt-2 text-lg font-semibold text-slate-100">—</div>
-                    </div>
-                    <div class="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4">
-                        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Words</div>
-                        <div id="statWords" class="mt-2 text-lg font-semibold text-slate-100">—</div>
-                    </div>
-                    <div class="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4">
-                        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Paragraphs</div>
-                        <div id="statParagraphs" class="mt-2 text-lg font-semibold text-slate-100">—</div>
-                    </div>
-                    <div class="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4">
-                        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Tables</div>
-                        <div id="statTables" class="mt-2 text-lg font-semibold text-slate-100">—</div>
-                    </div>
-                    <div class="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4">
-                        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Spine items</div>
-                        <div id="statChapters" class="mt-2 text-lg font-semibold text-slate-100">—</div>
-                    </div>
-                    <div class="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4">
-                        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Structure</div>
-                        <div id="statStructure" class="mt-2 text-base font-semibold leading-snug text-slate-100">—</div>
-                    </div>
+                <div id="stats" class="mt-4 hidden flex flex-wrap gap-2" aria-label="Conversion facts">
+                    <span id="statFormat" class="rounded-full border border-white/10 bg-slate-950/35 px-3 py-1.5 text-xs font-medium text-slate-200">—</span>
+                    <span id="statWords" class="rounded-full border border-white/10 bg-slate-950/35 px-3 py-1.5 text-xs font-medium text-slate-200">—</span>
+                    <span id="statChapters" class="rounded-full border border-white/10 bg-slate-950/35 px-3 py-1.5 text-xs font-medium text-slate-200">—</span>
                 </div>
-                <div id="diagnostics" class="mt-5 hidden space-y-2"></div>
-                <div id="pageChips" class="mt-4 hidden">
-                    <div class="mb-2 text-[11px] uppercase tracking-[0.18em] text-slate-500">Jump to PDF page</div>
-                    <div id="pageChipsInner" class="flex flex-wrap gap-1.5"></div>
+                <div id="diagnostics" class="mt-3 hidden pl-3 text-xs leading-5 text-slate-400"></div>
+                <div id="pageChips" class="mt-3 hidden min-w-0">
+                    <div class="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-slate-500">PDF pages</div>
+                    <div id="pageChipsInner" class="flex gap-1.5 overflow-x-auto pb-1"></div>
                 </div>
             </div>
         </div>
@@ -464,9 +442,9 @@
         <span id="site-version" class="font-mono text-slate-500" title="Bump js/version.js on each deploy">v—</span>
     </footer>
     <script src="https://alphaeusng.github.io/js/kofi-support.js?v=2026.07.24.7" data-auto-footer defer></script>
-    <script src="js/version.js?v=2026.07.24.10"></script>
+    <script src="js/version.js?v=2026.07.24.11"></script>
 
-    <script type="module" src="js/app.js?v=2026.07.24.10"></script>
+    <script type="module" src="js/app.js?v=2026.07.24.11"></script>
     <div id="controlTooltip" role="status" aria-live="polite"></div>
 </body>
 </html>

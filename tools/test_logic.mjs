@@ -77,6 +77,30 @@ assert.ok(
     !page.includes('kf-toolbar-open'),
     'removed floating-toolbar body padding must not return'
 );
+assert.ok(
+    html.includes('3. Summary')
+        && html.includes('Conversion overview')
+        && !html.includes('Client-side output'),
+    'status section must stay a concise conversion summary'
+);
+assert.ok(
+    !html.includes('id="statParagraphs"')
+        && !html.includes('id="statTables"')
+        && !html.includes('id="statStructure"')
+        && html.includes('id="statFormat"')
+        && html.includes('id="statWords"')
+        && html.includes('id="statChapters"'),
+    'summary keeps only the essential format, word, and page/section facts'
+);
+assert.ok(
+    script.includes("diagnosticsEl.textContent = observation")
+        && !script.includes('diagnosticsEl.innerHTML = items.map'),
+    'diagnostics collapse into one high-level observation'
+);
+assert.ok(
+    /id="pageChipsInner"[^>]*overflow-x-auto/.test(html),
+    'PDF page shortcuts stay in one compact horizontal row'
+);
 
 const features = [
     ['edit mode', 'data-mode="edit"'],

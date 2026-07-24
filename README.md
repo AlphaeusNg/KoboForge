@@ -19,6 +19,7 @@ before exporting a Kobo-friendly EPUB.
   scrollable formatting bar above the Kobo, and pinned page arrows beside it
 - Selectable inline images with Kobo-view cut, copy, paste, and delete controls
   plus standard keyboard and clipboard-event support
+- Compact conversion summary with three facts and one high-level observation
 - Locked edit pagination: deletion reflows later paragraphs without viewport drift
 - Left/center/right and top/middle/bottom placement, font sizing, Word-style
   Tab behavior, editable table insertion, and HTML source mode
