@@ -17,6 +17,9 @@ before exporting a Kobo-friendly EPUB.
 - Formatting toolbar, HTML source mode, and integrated red/green edit history
 - DOCX image extraction and automatic Kobo-targeted resizing/tone mapping
 - PDF image extraction with inline scan-page fallback
+- Robust PDF whitespace analysis that preserves large worksheet/note regions
+- PDF font profiling that retains relative size, family type, weight, and slant
+- Wide PDF column gaps that remain separated and wrap cleanly on narrow Kobos
 - EPUB3 export with nav + NCX and packaged image manifest assets
 - Fully local browser processing; documents are never uploaded
 

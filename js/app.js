@@ -422,6 +422,12 @@
             deviceBookContent.innerHTML = renderedBody || '<p>(Empty document)</p>';
             deviceBookContent.contentEditable = editMode === 'edit' ? 'true' : 'false';
             deviceBookContent.classList.toggle('kf-editing', editMode === 'edit');
+            deviceBookContent.querySelectorAll('.kf-note-space').forEach((space) => {
+                // Keep intentional space from collapsing during ordinary text
+                // edits. Advanced users can resize/remove it in HTML mode.
+                space.setAttribute('contenteditable', 'false');
+                space.setAttribute('title', 'Preserved blank space (resize in HTML mode)');
+            });
             deviceBookContent.querySelectorAll('img').forEach((img) => {
                 if (!img.complete) img.addEventListener('load', () => scheduleDevicePagination(), { once: true });
             });
@@ -1230,6 +1236,26 @@
                 });
             }
 
+            root.querySelectorAll('.kf-note-space').forEach((space) => {
+                const lines = Math.max(
+                    2,
+                    Math.min(12, Math.round(Number(space.getAttribute('data-space-lines')) || 2))
+                );
+                space.className = `kf-note-space kf-space-${lines}`;
+                space.setAttribute('data-space-lines', String(lines));
+                space.innerHTML = '';
+                space.removeAttribute('title');
+                if (forExport) {
+                    space.removeAttribute('contenteditable');
+                    space.removeAttribute('role');
+                    space.removeAttribute('aria-label');
+                } else {
+                    space.setAttribute('contenteditable', 'false');
+                    space.setAttribute('role', 'separator');
+                    space.setAttribute('aria-label', 'Preserved blank writing space');
+                }
+            });
+
             root.querySelectorAll('table').forEach((table) => {
                 table.setAttribute('class', 'kobo-table');
                 table.querySelectorAll('th, td').forEach((cell) => {
@@ -1521,9 +1547,13 @@
         }
 
         function prettyPrintHtml(html) {
-            // Lightweight pretty print for edit comfort
+            // Keep inline typography tags adjacent. Adding line breaks between
+            // every tag changes inline whitespace when HTML mode round-trips.
             return (html || '')
-                .replace(/></g, '>\n<')
+                .replace(
+                    /(<\/(?:div|p|h[1-6]|table|tr|figure|blockquote|ul|ol)>)(?=<)/gi,
+                    '$1\n'
+                )
                 .replace(/\n{3,}/g, '\n\n')
                 .trim();
         }
@@ -1950,6 +1980,18 @@
                     text: `${out.imageCount} embedded image${out.imageCount === 1 ? '' : 's'} automatically resized and tone-mapped for ${out.imageTarget || selectedDeviceProfile().name}.`
                 });
             }
+            if (out.formatLabel === 'PDF' && out.noteSpaceCount > 0) {
+                items.push({
+                    level: 'ok',
+                    text: `${out.noteSpaceCount} statistically significant blank region${out.noteSpaceCount === 1 ? '' : 's'} retained as reflow-safe writing space. Ordinary line gaps and page margins were ignored.`
+                });
+            }
+            if (out.formatLabel === 'PDF' && out.detectedFontCount > 0) {
+                items.push({
+                    level: 'info',
+                    text: `${out.detectedFontCount} embedded PDF font profile${out.detectedFontCount === 1 ? '' : 's'} mapped to portable Kobo font families while retaining relative size, bold/light weight, and italic style where available.`
+                });
+            }
             if (out.formatLabel === 'PDF' && out.tableCount > 0) {
                 items.push({
                     level: 'info',
@@ -2178,8 +2220,69 @@
             return canvas;
         }
 
-        async function extractPdfPageImages(page) {
-            const operatorList = await page.getOperatorList();
+        function normalizePdfFontName(name) {
+            return String(name || '')
+                .replace(/^[A-Z]{6}\+/, '')
+                .replace(/[_-]+/g, ' ')
+                .trim();
+        }
+
+        /**
+         * Reduce PDF font names to portable EPUB traits. The original embedded
+         * font cannot safely be copied out of a PDF (and often has a restricted
+         * subset), so KoboForge retains its family type, weight, slant, and
+         * relative size using Kobo-safe CSS stacks.
+         */
+        function describePdfFont(name, fallbackFamily = '') {
+            const sourceName = normalizePdfFontName(name || fallbackFamily);
+            const sourceKey = sourceName.toLowerCase();
+            const key = `${sourceName} ${fallbackFamily}`.toLowerCase();
+            let family = /\bserif\b/.test(String(fallbackFamily).toLowerCase())
+                && !/\bsans[- ]?serif\b/.test(String(fallbackFamily).toLowerCase())
+                ? 'serif'
+                : 'sans';
+            if (/(script|hand|brush|calligraph|amsterdam|cursive)/.test(sourceKey)) {
+                family = 'script';
+            } else if (/(mono|courier|consolas|menlo|typewriter|code)/.test(sourceKey)) {
+                family = 'mono';
+            } else if (/(serif|times|georgia|garamond|baskerville|palatino|playfair|cooper|cambria|bookman|didot|bodoni|caslon|lora|merriweather|constantia)/.test(sourceKey)) {
+                family = 'serif';
+            } else if (/(sans|arial|helvetica|montserrat|garet|canva|roboto|calibri|avenir|verdana|futura|gotham|lato)/.test(sourceKey)) {
+                family = 'sans';
+            }
+            return {
+                sourceName: sourceName || fallbackFamily || 'Unknown',
+                family,
+                bold: /(bold|black|heavy|semibold|semi bold|demi)/.test(key),
+                italic: /(italic|oblique|slanted)/.test(key),
+                light: /(light|thin|extralight|extra light)/.test(key)
+            };
+        }
+
+        function collectPdfFontMetadata(page, textContent) {
+            const metadata = {};
+            const styles = textContent?.styles || {};
+            const fontNames = new Set(
+                (textContent?.items || []).map((item) => item?.fontName).filter(Boolean)
+            );
+            fontNames.forEach((fontName) => {
+                const style = styles[fontName] || {};
+                let fontObject = null;
+                try {
+                    // Font objects resolve after getOperatorList(). Keep this
+                    // guarded because malformed PDFs may omit one font object.
+                    fontObject = page.commonObjs.get(fontName);
+                } catch (_) { /* use the PDF.js fallback family below */ }
+                metadata[fontName] = describePdfFont(
+                    fontObject?.name || fontObject?.fallbackName || style.fontFamily || fontName,
+                    style.fontFamily || fontObject?.fallbackName || ''
+                );
+            });
+            return metadata;
+        }
+
+        async function extractPdfPageImages(page, resolvedOperatorList = null) {
+            const operatorList = resolvedOperatorList || await page.getOperatorList();
             const ops = pdfjsLib.OPS || {};
             const objectOps = new Set([
                 ops.paintImageXObject,
@@ -2261,7 +2364,9 @@
             const parts = [];
             let tableCount = 0;
             let headingCount = 0;
+            let noteSpaceCount = 0;
             let detectedImageCount = 0;
+            const detectedFontFamilies = new Set();
             const emptyPages = [];
             const imageOnlyPages = [];
             const failedPages = [];
@@ -2273,12 +2378,27 @@
                 try {
                     const page = await pdf.getPage(pageNumber);
                     const textContent = await page.getTextContent();
+                    let operatorList = null;
+                    try {
+                        // Resolves embedded font names as well as image operators.
+                        // The same list is reused by image extraction below.
+                        operatorList = await page.getOperatorList();
+                    } catch (operatorError) {
+                        console.warn(`[KoboForge] PDF operators page ${pageNumber}`, operatorError);
+                    }
+                    const fontMetadata = collectPdfFontMetadata(page, textContent);
+                    Object.values(fontMetadata).forEach((font) => {
+                        if (font?.sourceName) detectedFontFamilies.add(font.sourceName);
+                    });
+                    const viewport = page.getViewport({ scale: 1 });
                     const pageBlocks = extractPdfBlocks(textContent.items || [], {
-                        preserveTables: preserveTablesEnabled()
+                        preserveTables: preserveTablesEnabled(),
+                        fontMetadata,
+                        pageHeight: viewport.height
                     });
                     let pageImages = [];
                     try {
-                        pageImages = await extractPdfPageImages(page);
+                        pageImages = await extractPdfPageImages(page, operatorList);
                     } catch (imageError) {
                         console.warn(`[KoboForge] PDF image extraction page ${pageNumber}`, imageError);
                     }
@@ -2299,12 +2419,15 @@
                             if (block.type === 'table') {
                                 tableCount += 1;
                                 parts.push(block.html);
+                            } else if (block.type === 'spacer') {
+                                noteSpaceCount += 1;
+                                parts.push(block.html);
                             } else if (block.type === 'heading') {
                                 headingCount += 1;
                                 const tag = block.level === 1 ? 'h1' : 'h2';
-                                parts.push(`<${tag}>${escapeHtml(block.text)}</${tag}>`);
+                                parts.push(`<${tag} class="kf-pdf-block">${block.html || escapeHtml(block.text)}</${tag}>`);
                             } else {
-                                parts.push(`<p class="preserve-structure">${escapeHtml(block.text)}</p>`);
+                                parts.push(`<p class="preserve-structure kf-pdf-block">${block.html || escapeHtml(block.text)}</p>`);
                             }
                         }
                     }
@@ -2341,6 +2464,12 @@
             const paragraphCount = (optimized.html.match(/<p\b/gi) || []).length || 1;
             const structureParts = [];
             if (tableCount) structureParts.push(`${tableCount} table${tableCount === 1 ? '' : 's'}`);
+            if (noteSpaceCount) {
+                structureParts.push(`${noteSpaceCount} intentional blank region${noteSpaceCount === 1 ? '' : 's'}`);
+            }
+            if (detectedFontFamilies.size) {
+                structureParts.push(`${detectedFontFamilies.size} PDF font profile${detectedFontFamilies.size === 1 ? '' : 's'}`);
+            }
             structureParts.push('line/indent reconstruction');
             if (optimized.imageCount) {
                 structureParts.push(`${optimized.imageCount} Kobo-optimized image${optimized.imageCount === 1 ? '' : 's'}`);
@@ -2363,6 +2492,14 @@
             const imageStatus = optimized.imageCount
                 ? ` ${optimized.imageCount} detected image${optimized.imageCount === 1 ? '' : 's'} automatically optimized for the selected Kobo and kept inline.`
                 : '';
+            const layoutStatus = [
+                noteSpaceCount
+                    ? `${noteSpaceCount} intentional blank region${noteSpaceCount === 1 ? '' : 's'} retained for writing`
+                    : '',
+                detectedFontFamilies.size
+                    ? `${detectedFontFamilies.size} source font profile${detectedFontFamilies.size === 1 ? '' : 's'} mapped to Kobo-safe size, family, weight, and style`
+                    : ''
+            ].filter(Boolean).join('; ');
             return {
                 title: file.name.replace(/\.[^.]+$/, ''),
                 author: '',
@@ -2371,8 +2508,8 @@
                 formatLabel: 'PDF',
                 structureNote,
                 status: tableCount
-                    ? `PDF parsed locally (${total} page${total === 1 ? '' : 's'}). Detected ${tableCount} table${tableCount === 1 ? '' : 's'}; reconstructed spaces, paragraphs, indentation${headingCount ? `, and ${headingCount} heading guess(es)` : ''}.${imageStatus}`
-                    : `PDF parsed locally (${total} page${total === 1 ? '' : 's'}). Reconstructed spaces, paragraph boundaries, and indentation from page coordinates${headingCount ? `; ${headingCount} heading guess(es)` : ''}.${imageStatus}`,
+                    ? `PDF parsed locally (${total} page${total === 1 ? '' : 's'}). Detected ${tableCount} table${tableCount === 1 ? '' : 's'}; reconstructed paragraphs and indentation${headingCount ? `, with ${headingCount} heading guess(es)` : ''}${layoutStatus ? `; ${layoutStatus}` : ''}.${imageStatus}`
+                    : `PDF parsed locally (${total} page${total === 1 ? '' : 's'}). Reconstructed paragraph boundaries and indentation from page coordinates${headingCount ? `; ${headingCount} heading guess(es)` : ''}${layoutStatus ? `; ${layoutStatus}` : ''}.${imageStatus}`,
                 warnings,
                 emptyPages,
                 imageOnlyPages,
@@ -2381,6 +2518,8 @@
                 imageCount: optimized.imageCount,
                 imageTarget: `${target.profile.name} · ${target.orientation}`,
                 detectedImageCount,
+                noteSpaceCount,
+                detectedFontCount: detectedFontFamilies.size,
                 pageCount: total
             };
         }
@@ -2388,7 +2527,60 @@
         /**
          * Normalize PDF.js text items and group into visual lines (top→bottom).
          */
-        function buildPdfLines(items) {
+        function pdfSizeClass(fontSize, baselineSize) {
+            const ratio = Math.max(0.1, Number(fontSize) / Math.max(Number(baselineSize), 1));
+            if (ratio < 0.78) return 'kf-size-75';
+            if (ratio < 0.92) return 'kf-size-88';
+            if (ratio < 1.09) return 'kf-size-100';
+            if (ratio < 1.21) return 'kf-size-112';
+            if (ratio < 1.39) return 'kf-size-125';
+            if (ratio < 1.64) return 'kf-size-150';
+            return 'kf-size-175';
+        }
+
+        function appendPdfRun(runs, text, style) {
+            if (!text) return;
+            const signature = [
+                style.family,
+                style.sizeClass,
+                style.bold ? 'b' : '',
+                style.italic ? 'i' : '',
+                style.light ? 'l' : '',
+                style.gapLevel || 0
+            ].join('|');
+            const previous = runs[runs.length - 1];
+            if (previous && previous.signature === signature) {
+                previous.text += text;
+                return;
+            }
+            runs.push({ text, ...style, signature });
+        }
+
+        function renderPdfRunsHtml(runs) {
+            return (runs || []).map((run) => {
+                const classes = [
+                    'kf-pdf-run',
+                    `kf-font-${run.family || 'serif'}`,
+                    run.sizeClass || 'kf-size-100'
+                ];
+                if (run.light) classes.push('kf-weight-light');
+                if (run.gapLevel) classes.push(`kf-gap-before-${run.gapLevel}`);
+                let content = escapeHtml(run.text || '');
+                if (run.italic) content = `<em>${content}</em>`;
+                if (run.bold) content = `<strong>${content}</strong>`;
+                return `<span class="${classes.join(' ')}">${content}</span>`;
+            }).join('');
+        }
+
+        function renderPdfLineHtml(line, { preserveIndent = true } = {}) {
+            const indent = preserveIndent ? Math.max(0, Math.min(3, line.indentLevel || 0)) : 0;
+            const content = renderPdfRunsHtml(line.pdfRuns)
+                || escapeHtml(line.plainText || line.rawText || '');
+            if (!preserveIndent) return content;
+            return `<span class="kf-pdf-line kf-indent-${indent}">${content}</span>`;
+        }
+
+        function buildPdfLines(items, { fontMetadata = {} } = {}) {
             const normalized = (items || [])
                 .filter((item) => item && item.str && String(item.str).trim() !== '')
                 .map((item) => {
@@ -2402,13 +2594,16 @@
                     const width = Number(item.width) || 0;
                     const avgCharWidth = Math.max(width / chars, 2);
                     const height = Number(item.height) || Math.abs(tr[3]) || Math.abs(tr[0]) || 10;
+                    const font = fontMetadata[item.fontName]
+                        || describePdfFont(item.fontName || '', '');
                     return {
                         text,
                         x: Number(tr[4]) || 0,
                         y: Number(tr[5]) || 0,
                         width,
                         height: height || 10,
-                        avgCharWidth
+                        avgCharWidth,
+                        font
                     };
                 })
                 .filter(Boolean)
@@ -2443,21 +2638,44 @@
             return lines.map((line) => {
                 const sorted = line.items.sort((a, b) => a.x - b.x);
                 let text = '';
+                const pdfRuns = [];
                 let previousEnd = null;
                 let avgSpace = line.avgCharWidth || 4;
                 for (const part of sorted) {
+                    let prefix = '';
+                    let gapLevel = 0;
                     if (previousEnd !== null) {
                         const gap = part.x - previousEnd;
                         if (gap > avgSpace * 0.55) {
-                            text += ' '.repeat(Math.max(1, Math.min(8, Math.round(gap / avgSpace))));
+                            const gapUnits = Math.max(1, Math.min(12, Math.round(gap / avgSpace)));
+                            prefix = ' '.repeat(gapUnits);
+                            if (gapUnits >= 9) gapLevel = 3;
+                            else if (gapUnits >= 7) gapLevel = 2;
+                            else if (gapUnits >= 5) gapLevel = 1;
                         }
                     }
-                    text += part.text;
+                    const chunk = `${prefix}${part.text}`;
+                    text += chunk;
+                    appendPdfRun(pdfRuns, gapLevel ? part.text : chunk, {
+                        family: part.font?.family || 'sans',
+                        sizeClass: pdfSizeClass(part.height, medianHeight),
+                        bold: !!part.font?.bold,
+                        italic: !!part.font?.italic,
+                        light: !!part.font?.light,
+                        gapLevel
+                    });
                     previousEnd = part.x + part.width;
                     avgSpace = (avgSpace + part.avgCharWidth) / 2;
                 }
                 const indentSpaces = Math.max(0, Math.round((line.xStart - minX) / Math.max(avgSpace, 4)));
                 const lineHeight = Math.max(...sorted.map((part) => part.height || 10), 10);
+                const fontWeights = new Map();
+                sorted.forEach((part) => {
+                    const key = part.font?.family || 'sans';
+                    fontWeights.set(key, (fontWeights.get(key) || 0) + part.text.length);
+                });
+                const dominantFontFamily = [...fontWeights.entries()]
+                    .sort((a, b) => b[1] - a[1])[0]?.[0] || 'sans';
                 return {
                     y: line.y,
                     xStart: line.xStart,
@@ -2468,6 +2686,11 @@
                     maxHeight: line.maxHeight || lineHeight,
                     medianHeight,
                     avgCharWidth: avgSpace,
+                    indentLevel: indentSpaces >= 9 ? 3 : indentSpaces >= 5 ? 2 : indentSpaces >= 2 ? 1 : 0,
+                    pdfRuns,
+                    dominantFontFamily,
+                    hasBold: pdfRuns.some((run) => run.bold && (run.text || '').trim()),
+                    hasItalic: pdfRuns.some((run) => run.italic && (run.text || '').trim()),
                     cells: sorted.map((part) => ({
                         text: part.text,
                         x: part.x,
@@ -2551,16 +2774,21 @@
                 if (r0 < 1.5) return false;
             }
             const ratio = (line.maxHeight || line.lineHeight) / (line.medianHeight || 10);
+            const isBold = !!line.hasBold;
             const isChapter = /^(chapter|part|section|appendix)\b/i.test(t);
             // Outline only: "1. God goes with his people" — not "1 On the day when Moses"
             const isNumberedOutline = /^\d{1,2}[\.\)]\s+\S/.test(t) && t.length <= 70 && !/^\d+\s+[A-Z]/.test(t);
+            const isLetteredSection = /^[A-Z][\.\)]\s+\S/.test(t) && t.length <= 70;
             const isAllCaps = t.length <= 50
                 && t === t.toUpperCase()
                 && /[A-Z]/.test(t)
                 && t.split(/\s+/).length <= 10;
             if (isChapter || (isAllCaps && ratio >= 1.4)) return { level: 1 };
-            if (isNumberedOutline) return { level: 2 };
+            if ((isNumberedOutline && (ratio >= 1.15 || isBold)) || (isLetteredSection && isBold)) {
+                return { level: 2 };
+            }
             if (isAllCaps && ratio >= 1.22) return { level: 2 };
+            if (isBold && ratio >= 1.25) return { level: 2 };
             // Size-only promotion needs a strong signal (avoids section subtitles)
             if (ratio >= 1.55) return { level: 2 };
             return null;
@@ -2618,8 +2846,66 @@
             return tableHtml || null;
         }
 
-        function extractPdfBlocks(items, { preserveTables = true } = {}) {
-            const builtLines = buildPdfLines(items);
+        function detectPdfWhitespace(builtLines, { pageHeight = 0 } = {}) {
+            if (!builtLines || builtLines.length < 2) {
+                return { typicalAdvance: 0, spaces: [] };
+            }
+            const medianHeight = median(
+                builtLines.map((line) => line.maxHeight || line.lineHeight || 10)
+            ) || 10;
+            const gaps = [];
+            for (let index = 0; index < builtLines.length - 1; index += 1) {
+                const gap = builtLines[index].y - builtLines[index + 1].y;
+                if (Number.isFinite(gap) && gap > medianHeight * 0.55) {
+                    gaps.push({ index, gap });
+                }
+            }
+            if (!gaps.length) return { typicalAdvance: medianHeight * 1.5, spaces: [] };
+
+            // Estimate ordinary baseline advance without letting genuine blank
+            // worksheet areas skew it upward. This works for sparse title pages
+            // as well as dense handouts.
+            const ordinaryLimit = Math.max(
+                medianHeight * 2.6,
+                Number(pageHeight || 0) * 0.045
+            );
+            const ordinaryGaps = gaps
+                .map((entry) => entry.gap)
+                .filter((gap) => gap <= ordinaryLimit);
+            const typicalAdvance = median(ordinaryGaps)
+                || median(gaps.map((entry) => entry.gap))
+                || medianHeight * 1.5;
+            const significantGap = Math.max(
+                typicalAdvance * 1.65,
+                medianHeight * 2.75,
+                Number(pageHeight || 0) * 0.045
+            );
+            const minimumSurplus = Math.max(
+                medianHeight * 1.05,
+                Number(pageHeight || 0) * 0.018
+            );
+
+            const spaces = gaps
+                .filter((entry) => (
+                    entry.gap >= significantGap
+                    && entry.gap - typicalAdvance >= minimumSurplus
+                ))
+                .map((entry) => ({
+                    ...entry,
+                    lines: Math.max(
+                        2,
+                        Math.min(12, Math.round((entry.gap - typicalAdvance) / medianHeight))
+                    )
+                }));
+            return { typicalAdvance, medianHeight, spaces };
+        }
+
+        function pdfSpacerHtml(space) {
+            const lines = Math.max(2, Math.min(12, Math.round(Number(space?.lines) || 2)));
+            return `<div class="kf-note-space kf-space-${lines}" data-space-lines="${lines}" contenteditable="false" role="separator" aria-label="Preserved blank writing space"></div>`;
+        }
+
+        function extractPdfSegmentBlocks(builtLines, preserveTables) {
             if (!builtLines.length) return [];
 
             if (!preserveTables) {
@@ -2678,11 +2964,46 @@
             return blocks;
         }
 
+        function extractPdfBlocks(items, {
+            preserveTables = true,
+            fontMetadata = {},
+            pageHeight = 0
+        } = {}) {
+            const builtLines = buildPdfLines(items, { fontMetadata });
+            if (!builtLines.length) return [];
+
+            const whitespace = detectPdfWhitespace(builtLines, { pageHeight });
+            const spaceByLine = new Map(
+                whitespace.spaces.map((space) => [space.index, space])
+            );
+            const blocks = [];
+            let segment = [];
+            builtLines.forEach((line, index) => {
+                segment.push(line);
+                const space = spaceByLine.get(index);
+                if (!space) return;
+                extractPdfSegmentBlocks(segment, preserveTables)
+                    .forEach((block) => blocks.push(block));
+                blocks.push({
+                    type: 'spacer',
+                    lines: space.lines,
+                    html: pdfSpacerHtml(space)
+                });
+                segment = [];
+            });
+            extractPdfSegmentBlocks(segment, preserveTables)
+                .forEach((block) => blocks.push(block));
+            return blocks;
+        }
+
         function linesToParagraphBlocks(builtLines) {
             // Soft-hyphen join across line breaks
             const joined = [];
             for (let i = 0; i < builtLines.length; i += 1) {
-                const line = { ...builtLines[i] };
+                const line = {
+                    ...builtLines[i],
+                    pdfRuns: (builtLines[i].pdfRuns || []).map((run) => ({ ...run }))
+                };
                 if (
                     joined.length
                     && /[A-Za-z]-$/.test(joined[joined.length - 1].plainText)
@@ -2692,7 +3013,18 @@
                     const mergedText = prev.plainText.replace(/-$/, '') + line.plainText;
                     prev.plainText = mergedText;
                     prev.rawText = prev.rawText.replace(/-\s*$/, '') + line.plainText;
+                    for (let runIndex = prev.pdfRuns.length - 1; runIndex >= 0; runIndex -= 1) {
+                        const run = prev.pdfRuns[runIndex];
+                        if (!(run.text || '').length) continue;
+                        run.text = run.text.replace(/-\s*$/, '');
+                        break;
+                    }
+                    line.pdfRuns.forEach((run) => appendPdfRun(prev.pdfRuns, run.text, run));
                     prev.y = line.y;
+                    prev.lineHeight = Math.max(prev.lineHeight || 0, line.lineHeight || 0);
+                    prev.maxHeight = Math.max(prev.maxHeight || 0, line.maxHeight || 0);
+                    prev.hasBold = prev.hasBold || line.hasBold;
+                    prev.hasItalic = prev.hasItalic || line.hasItalic;
                     continue;
                 }
                 joined.push(line);
@@ -2704,37 +3036,58 @@
 
             const flushPara = () => {
                 if (!current.length) return;
-                const text = current.join('\n');
-                // Single-line heading?
-                if (current.length === 1 && previousLine) {
-                    // handled when we only have one line in current — check first line meta
-                }
-                blocks.push({ type: 'paragraph', text });
+                blocks.push({
+                    type: 'paragraph',
+                    text: current.map((line) => line.rawText).join('\n'),
+                    html: current.map((line) => renderPdfLineHtml(line)).join('<br>')
+                });
                 current = [];
             };
 
-            for (const line of joined) {
+            for (let index = 0; index < joined.length; index += 1) {
+                const line = joined[index];
                 const heading = lineLooksLikeHeading(line);
-                // Only promote isolated lines: paragraph break above (or start) and not mid-run
+                const gapAbove = previousLine ? previousLine.y - line.y : Number.POSITIVE_INFINITY;
                 const isolatedAbove = !previousLine
                     || !current.length
-                    || (previousLine.y - line.y) > previousLine.lineHeight * 1.35;
-                if (heading && isolatedAbove && !current.length) {
-                    blocks.push({ type: 'heading', level: heading.level, text: line.plainText });
-                    previousLine = line;
-                    continue;
-                }
-                if (heading && isolatedAbove && current.length) {
-                    // Flush prose, then heading
-                    blocks.push({ type: 'paragraph', text: current.join('\n') });
-                    current = [];
-                    blocks.push({ type: 'heading', level: heading.level, text: line.plainText });
-                    previousLine = line;
+                    || gapAbove > Math.max(
+                        previousLine.lineHeight * 1.3,
+                        (previousLine.medianHeight || 10) * 1.2
+                    );
+                if (heading && isolatedAbove) {
+                    flushPara();
+                    const headingLines = [line];
+                    let lastHeadingLine = line;
+                    while (index + 1 < joined.length) {
+                        const nextLine = joined[index + 1];
+                        const nextHeading = lineLooksLikeHeading(nextLine);
+                        const nextGap = lastHeadingLine.y - nextLine.y;
+                        const sameTitleRun = nextHeading
+                            && nextHeading.level === heading.level
+                            && nextLine.dominantFontFamily === line.dominantFontFamily
+                            && nextGap <= Math.max(
+                                lastHeadingLine.lineHeight * 1.7,
+                                (lastHeadingLine.medianHeight || 10) * 1.7
+                            );
+                        if (!sameTitleRun) break;
+                        headingLines.push(nextLine);
+                        lastHeadingLine = nextLine;
+                        index += 1;
+                    }
+                    blocks.push({
+                        type: 'heading',
+                        level: heading.level,
+                        text: headingLines.map((item) => item.plainText).join('\n'),
+                        html: headingLines
+                            .map((item) => renderPdfLineHtml(item, { preserveIndent: false }))
+                            .join('<br>')
+                    });
+                    previousLine = lastHeadingLine;
                     continue;
                 }
 
                 if (!previousLine) {
-                    current.push(line.rawText);
+                    current.push(line);
                     previousLine = line;
                     continue;
                 }
@@ -2745,19 +3098,15 @@
                     Math.abs(line.indentSpaces - previousLine.indentSpaces) >= 6;
 
                 if (paragraphBreak) {
-                    if (current.length) {
-                        blocks.push({ type: 'paragraph', text: current.join('\n') });
-                    }
-                    current = [line.rawText];
+                    flushPara();
+                    current = [line];
                 } else {
-                    current.push(line.rawText);
+                    current.push(line);
                 }
                 previousLine = line;
             }
 
-            if (current.length) {
-                blocks.push({ type: 'paragraph', text: current.join('\n') });
-            }
+            flushPara();
 
             return blocks.filter((b) => b.text || b.type === 'heading');
         }
@@ -2973,7 +3322,8 @@
                     el.replaceWith(p);
                     return;
                 }
-                el.removeAttribute('class');
+                el.classList.remove('preserve-structure');
+                if (!el.className) el.removeAttribute('class');
                 // Walk text nodes and inject br for newlines (keep nested elements)
                 const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT);
                 const textNodes = [];
@@ -3138,6 +3488,14 @@
                 'h1,h2,h3{margin:1.25em 0 .55em;line-height:1.25;font-family:Georgia,serif;page-break-after:auto;page-break-inside:auto;}',
                 'h1{font-size:1.45em;}h2{font-size:1.22em;}h3{font-size:1.08em;}',
                 'p{margin:0 0 0.85em;text-align:justify;page-break-inside:auto;page-break-before:auto;page-break-after:auto;}',
+                'h1.kf-pdf-block,h2.kf-pdf-block,h3.kf-pdf-block,p.kf-pdf-block{font-size:1em;font-family:inherit;text-align:left;}',
+                '.kf-pdf-line{display:inline;box-sizing:border-box;max-width:100%;}',
+                '.kf-indent-0{padding-left:0;}.kf-indent-1{padding-left:.75em;}.kf-indent-2{padding-left:1.5em;}.kf-indent-3{padding-left:2.25em;}',
+                '.kf-font-serif{font-family:Georgia,"Times New Roman",Times,serif;}.kf-font-sans{font-family:Arial,Helvetica,sans-serif;}.kf-font-mono{font-family:"Courier New",Courier,monospace;}.kf-font-script{font-family:"Brush Script MT","Segoe Script",cursive;}',
+                '.kf-gap-before-1{display:inline-block;max-width:calc(100% - .75em);margin-left:.75em;}.kf-gap-before-2{display:inline-block;max-width:calc(100% - 1.5em);margin-left:1.5em;}.kf-gap-before-3{display:inline-block;max-width:calc(100% - 2.5em);margin-left:2.5em;}',
+                '.kf-weight-light{font-weight:300;}.kf-size-75{font-size:.75em;}.kf-size-88{font-size:.88em;}.kf-size-100{font-size:1em;}.kf-size-112{font-size:1.12em;}.kf-size-125{font-size:1.25em;}.kf-size-150{font-size:1.5em;}.kf-size-175{font-size:1.75em;}',
+                '.kf-note-space{display:block;width:100%;margin:0;page-break-inside:auto;break-inside:auto;}',
+                '.kf-space-2{height:2em;}.kf-space-3{height:3em;}.kf-space-4{height:4em;}.kf-space-5{height:5em;}.kf-space-6{height:6em;}.kf-space-7{height:7em;}.kf-space-8{height:8em;}.kf-space-9{height:9em;}.kf-space-10{height:10em;}.kf-space-11{height:11em;}.kf-space-12{height:12em;}',
                 'strong,b{font-weight:700;}',
                 'em,i{font-style:italic;}',
                 'u{text-decoration:underline;}',

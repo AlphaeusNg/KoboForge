@@ -49,6 +49,9 @@ const features = [
     ['device page controls', 'devicePageNext'],
     ['automatic document image optimizer', 'function optimizeDocumentImages'],
     ['PDF image extraction', 'function extractPdfPageImages'],
+    ['PDF intentional whitespace detector', 'function detectPdfWhitespace'],
+    ['PDF embedded font metadata', 'function collectPdfFontMetadata'],
+    ['PDF portable typography runs', 'function renderPdfRunsHtml'],
     ['EPUB image assets', 'function extractEmbeddedImagesForEpub'],
     ['Floyd–Steinberg dithering', 'Floyd–Steinberg'],
 ];
@@ -113,6 +116,74 @@ function clusterColumnXs(xs, tolerance) {
     return clusters.map((c) => c.reduce((s, v) => s + v, 0) / c.length);
 }
 
+function median(arr) {
+    if (!arr.length) return 0;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function detectPdfWhitespace(builtLines, { pageHeight = 0 } = {}) {
+    if (!builtLines || builtLines.length < 2) return { typicalAdvance: 0, spaces: [] };
+    const medianHeight = median(
+        builtLines.map((line) => line.maxHeight || line.lineHeight || 10)
+    ) || 10;
+    const gaps = [];
+    for (let index = 0; index < builtLines.length - 1; index += 1) {
+        const gap = builtLines[index].y - builtLines[index + 1].y;
+        if (Number.isFinite(gap) && gap > medianHeight * 0.55) gaps.push({ index, gap });
+    }
+    if (!gaps.length) return { typicalAdvance: medianHeight * 1.5, spaces: [] };
+    const ordinaryLimit = Math.max(medianHeight * 2.6, Number(pageHeight || 0) * 0.045);
+    const ordinaryGaps = gaps.map((entry) => entry.gap).filter((gap) => gap <= ordinaryLimit);
+    const typicalAdvance = median(ordinaryGaps)
+        || median(gaps.map((entry) => entry.gap))
+        || medianHeight * 1.5;
+    const significantGap = Math.max(
+        typicalAdvance * 1.65,
+        medianHeight * 2.75,
+        Number(pageHeight || 0) * 0.045
+    );
+    const minimumSurplus = Math.max(medianHeight * 1.05, Number(pageHeight || 0) * 0.018);
+    const spaces = gaps
+        .filter((entry) => (
+            entry.gap >= significantGap
+            && entry.gap - typicalAdvance >= minimumSurplus
+        ))
+        .map((entry) => ({
+            ...entry,
+            lines: Math.max(
+                2,
+                Math.min(12, Math.round((entry.gap - typicalAdvance) / medianHeight))
+            )
+        }));
+    return { typicalAdvance, medianHeight, spaces };
+}
+
+function describePdfFont(name, fallbackFamily = '') {
+    const sourceName = String(name || '')
+        .replace(/^[A-Z]{6}\+/, '')
+        .replace(/[_-]+/g, ' ')
+        .trim();
+    const sourceKey = sourceName.toLowerCase();
+    const key = `${sourceName} ${fallbackFamily}`.toLowerCase();
+    let family = /\bserif\b/.test(String(fallbackFamily).toLowerCase())
+        && !/\bsans[- ]?serif\b/.test(String(fallbackFamily).toLowerCase())
+        ? 'serif'
+        : 'sans';
+    if (/(script|hand|brush|calligraph|amsterdam|cursive)/.test(sourceKey)) family = 'script';
+    else if (/(mono|courier|consolas|menlo|typewriter|code)/.test(sourceKey)) family = 'mono';
+    else if (/(serif|times|georgia|garamond|baskerville|palatino|playfair|cooper|cambria|bookman|didot|bodoni|caslon|lora|merriweather|constantia)/.test(sourceKey)) family = 'serif';
+    else if (/(sans|arial|helvetica|montserrat|garet|canva|roboto|calibri|avenir|verdana|futura|gotham|lato)/.test(sourceKey)) family = 'sans';
+    return {
+        sourceName: sourceName || fallbackFamily || 'Unknown',
+        family,
+        bold: /(bold|black|heavy|semibold|semi bold|demi)/.test(key),
+        italic: /(italic|oblique|slanted)/.test(key),
+        light: /(light|thin|extralight|extra light)/.test(key)
+    };
+}
+
 // Table detection sample
 const mdTable = `| Feature | Benefit |
 | --- | --- |
@@ -145,6 +216,31 @@ function joinHyphen(prev, next) {
 }
 assert.equal(joinHyphen('reconstruc-', 'tion'), 'reconstruction');
 assert.equal(joinHyphen('hello', 'world'), null);
+
+// Worksheet whitespace: retain the two genuine writing regions, not normal spacing.
+const worksheetPageLines = [
+    [795, 18], [773.3, 18], [679.2, 13], [654.8, 13],
+    [626.3, 13], [597.8, 13], [425.2, 13]
+].map(([y, maxHeight]) => ({ y, maxHeight, lineHeight: maxHeight }));
+const worksheetSpaces = detectPdfWhitespace(worksheetPageLines, { pageHeight: 842.2 }).spaces;
+assert.deepEqual(worksheetSpaces.map((space) => space.index), [1, 5]);
+assert.ok(worksheetSpaces[1].lines >= 10, 'large worksheet response area should remain large');
+const ordinaryLines = [100, 78, 56, 34].map((y) => ({ y, maxHeight: 13, lineHeight: 13 }));
+assert.equal(
+    detectPdfWhitespace(ordinaryLines, { pageHeight: 842.2 }).spaces.length,
+    0,
+    'ordinary line leading must not turn into blank writing space'
+);
+
+// Embedded PDF names become portable traits without pretending the font is installed on Kobo.
+assert.deepEqual(
+    describePdfFont('AAAAAA+Amsterdam-Four', 'sans-serif').family,
+    'script'
+);
+assert.equal(describePdfFont('CAAAAA+Montserrat-Bold').bold, true);
+assert.equal(describePdfFont('CAAAAA+Montserrat-Bold', 'sans-serif').family, 'sans');
+assert.equal(describePdfFont('DAAAAA+PlayfairDisplay-Regular').family, 'serif');
+assert.equal(describePdfFont('Subset+Courier-Oblique').italic, true);
 
 // Escape
 assert.equal(escapeHtml('a < b & c'), 'a &lt; b &amp; c');
@@ -197,7 +293,7 @@ assert.ok(page.includes('arrayBuffer.slice(0)'), 'PDF buffer copy before getDocu
 assert.ok(page.includes('Failed to extract page'), 'per-page PDF isolation');
 assert.ok(page.includes('MAX_SOURCE_IMAGE_B64') && page.includes('optimizeDocumentImages(doc.body.innerHTML)'),
     'DOCX images accepted then optimized for the selected Kobo');
-assert.ok(page.includes('extractPdfPageImages(page)') && page.includes('renderPdfPageAsImage(page)'),
+assert.ok(page.includes('extractPdfPageImages(page') && page.includes('renderPdfPageAsImage(page)'),
     'PDF embedded images and scanned pages are preserved inline');
 assert.ok(page.includes('retargetCurrentDocumentImages') && page.includes('data-kf-image-id'),
     'changing the selected Kobo re-targets imported images');
@@ -207,6 +303,12 @@ assert.ok(page.includes('dropzoneReady') && page.includes('File received'), 'dro
 assert.ok(page.includes('cancelFileBtn') && page.includes('setDropzoneIdle'), 'cancel upload restores idle dropzone');
 assert.ok(page.includes('prepareHtmlForEpub'), 'EPUB body prep for Kobo pagination');
 assert.ok(page.includes('page-break-inside:auto'), 'tables/paragraphs must allow page breaks on Kobo');
+assert.ok(page.includes('.kf-note-space') && page.includes('.kf-space-12'),
+    'writing spaces must survive both preview and EPUB CSS');
+assert.ok(page.includes('.kf-font-script') && page.includes('.kf-size-175'),
+    'PDF font family and relative size classes must be styled');
+assert.ok(page.includes('kf-gap-before-3') && page.includes('margin-inline-start'),
+    'wide PDF item gaps must remain visually separated in the device editor');
 assert.ok(page.includes("let editMode = 'view'"), 'empty workspace defaults to Device');
 assert.ok(page.includes("setEditMode('view')") && page.includes('Previewing on the ${targetName}'),
     'import opens the selected Kobo Device preview');

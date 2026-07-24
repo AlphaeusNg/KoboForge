@@ -226,6 +226,81 @@ body {
     text-align: left;
 }
 
+#deviceBookContent .kf-pdf-block {
+    font-size: 1em;
+    font-family: inherit;
+    text-align: left;
+}
+
+#deviceBookContent .kf-pdf-line {
+    display: inline;
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+#deviceBookContent .kf-indent-0 { padding-inline-start: 0; }
+#deviceBookContent .kf-indent-1 { padding-inline-start: 0.75em; }
+#deviceBookContent .kf-indent-2 { padding-inline-start: 1.5em; }
+#deviceBookContent .kf-indent-3 { padding-inline-start: 2.25em; }
+
+#deviceBookContent .kf-font-serif { font-family: Georgia, "Times New Roman", Times, serif; }
+#deviceBookContent .kf-font-sans { font-family: Arial, Helvetica, sans-serif; }
+#deviceBookContent .kf-font-mono { font-family: "Courier New", Courier, monospace; }
+#deviceBookContent .kf-font-script { font-family: "Brush Script MT", "Segoe Script", cursive; }
+#deviceBookContent .kf-weight-light { font-weight: 300; }
+#deviceBookContent .kf-gap-before-1 {
+    display: inline-block;
+    max-width: calc(100% - 0.75em);
+    margin-inline-start: 0.75em;
+}
+#deviceBookContent .kf-gap-before-2 {
+    display: inline-block;
+    max-width: calc(100% - 1.5em);
+    margin-inline-start: 1.5em;
+}
+#deviceBookContent .kf-gap-before-3 {
+    display: inline-block;
+    max-width: calc(100% - 2.5em);
+    margin-inline-start: 2.5em;
+}
+#deviceBookContent .kf-size-75 { font-size: 0.75em; }
+#deviceBookContent .kf-size-88 { font-size: 0.88em; }
+#deviceBookContent .kf-size-100 { font-size: 1em; }
+#deviceBookContent .kf-size-112 { font-size: 1.12em; }
+#deviceBookContent .kf-size-125 { font-size: 1.25em; }
+#deviceBookContent .kf-size-150 { font-size: 1.5em; }
+#deviceBookContent .kf-size-175 { font-size: 1.75em; }
+
+#deviceBookContent .kf-note-space {
+    display: block;
+    width: 100%;
+    margin: 0;
+    break-inside: auto;
+}
+
+#deviceBookContent .kf-space-2 { height: 2em; }
+#deviceBookContent .kf-space-3 { height: 3em; }
+#deviceBookContent .kf-space-4 { height: 4em; }
+#deviceBookContent .kf-space-5 { height: 5em; }
+#deviceBookContent .kf-space-6 { height: 6em; }
+#deviceBookContent .kf-space-7 { height: 7em; }
+#deviceBookContent .kf-space-8 { height: 8em; }
+#deviceBookContent .kf-space-9 { height: 9em; }
+#deviceBookContent .kf-space-10 { height: 10em; }
+#deviceBookContent .kf-space-11 { height: 11em; }
+#deviceBookContent .kf-space-12 { height: 12em; }
+
+#deviceBookContent.kf-editing .kf-note-space {
+    outline: 1px dashed rgba(124, 45, 18, 0.2);
+    outline-offset: -1px;
+    background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent calc(1em - 1px),
+        rgba(124, 45, 18, 0.08) 1em
+    );
+}
+
 #deviceBookContent h1,
 #deviceBookContent h2,
 #deviceBookContent h3,
