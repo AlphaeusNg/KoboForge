@@ -544,6 +544,24 @@ body {
     object-fit: contain;
 }
 
+#deviceBookContent.kf-editing img.kf-editable-image {
+    cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+#deviceBookContent.kf-editing img.kf-editable-image:hover,
+#deviceBookContent.kf-editing img.kf-editable-image:focus-visible,
+#deviceBookContent.kf-editing img.kf-image-selected {
+    outline: max(1px, 0.12em) solid #9b7613;
+    outline-offset: max(1px, 0.12em);
+}
+
+#deviceBookContent.kf-editing img.kf-image-selected {
+    box-shadow: 0 0 0 max(2px, 0.25em) rgba(201, 162, 39, 0.2);
+}
+
 #deviceBookContent figure.kf-document-image {
     margin: 1em 0;
     text-align: center;
@@ -648,6 +666,11 @@ body {
     border-color: rgba(201, 162, 39, 0.6);
     background: rgba(201, 162, 39, 0.18);
     color: #f5d36d;
+}
+
+#editToolbar .tb-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.3;
 }
 
 .tb-icon-text {

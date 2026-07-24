@@ -98,6 +98,8 @@ const features = [
     ['locked edit viewport', 'function beginEditablePageLock'],
     ['device page controls', 'devicePageNext'],
     ['automatic document image optimizer', 'function optimizeDocumentImages'],
+    ['editable image selector', 'function selectEditableImage'],
+    ['Kobo image clipboard', 'function optimizeAndInsertPastedImages'],
     ['PDF image extraction', 'function extractPdfPageImages'],
     ['PDF intentional whitespace detector', 'function detectPdfWhitespace'],
     ['PDF embedded font metadata', 'function collectPdfFontMetadata'],
@@ -464,6 +466,34 @@ assert.ok(page.includes('extractPdfPageImages(page') && page.includes('renderPdf
     'PDF embedded images and scanned pages are preserved inline');
 assert.ok(page.includes('retargetCurrentDocumentImages') && page.includes('data-kf-image-id'),
     'changing the selected Kobo re-targets imported images');
+assert.ok(
+    html.includes('id="imageCutBtn"')
+        && html.includes('id="imageCopyBtn"')
+        && html.includes('id="imagePasteBtn"')
+        && html.includes('id="imageDeleteBtn"'),
+    'selected images expose compact cut, copy, paste, and delete controls'
+);
+assert.ok(
+    page.includes("previewEl.addEventListener('copy'")
+        && page.includes("previewEl.addEventListener('cut'")
+        && page.includes("previewEl.addEventListener('paste'")
+        && page.includes("event.key === 'Backspace' || event.key === 'Delete'"),
+    'Kobo image editing supports keyboard and clipboard events'
+);
+assert.ok(
+    page.includes('if (!imageFiles.length && !html) return;'),
+    'ordinary text paste must remain native when the clipboard has no image'
+);
+assert.ok(
+    page.includes("img.classList.remove('kf-editable-image', 'kf-image-selected')")
+        && page.includes("img.removeAttribute(name)"),
+    'editor-only image selection chrome must not leak into exported EPUB XHTML'
+);
+assert.ok(
+    styles.includes('img.kf-image-selected')
+        && styles.includes('img.kf-editable-image'),
+    'editable images visibly expose their selected state'
+);
 assert.ok(page.includes('images/${asset.fileName}') && page.includes('imageManifestItems'),
     'EPUB packages converted images as manifest assets');
 assert.ok(page.includes('dropzoneReady') && page.includes('File received'), 'dropzone received state');
