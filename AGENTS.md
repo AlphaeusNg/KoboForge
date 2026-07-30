@@ -18,6 +18,7 @@ direct editing in paginated Kobo device previews, and EPUB packaging.
 index.html
 css/main.css
 js/app.js
+js/boot.js
 js/version.js
 tools/test_logic.mjs
 ```

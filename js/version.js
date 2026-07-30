@@ -6,9 +6,12 @@
   "use strict";
 
   global.SITE_VERSION = {
-    id: "2026.07.24.17",
+    id: "2026.07.30.1",
     repo: "KoboForge",
     label: "Kobo EPUB converter",
+    asset: function (path) {
+      return path + "?v=" + encodeURIComponent(this.id);
+    },
   };
 
   function paintVersion() {

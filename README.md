@@ -17,12 +17,12 @@ before exporting a Kobo-friendly EPUB.
 - Direct editing in the paginated Kobo view, with a layout-identical in-device
   Diff mode that overlays red removals and green additions
 - Comprehensive Edit History for word, heading, bold/italic/underline/strike,
-  alignment, placement, font-size, link, image movement/resize, table, writing
-  space, and source-page layout changes
+  alignment, placement, font-size, link, table, writing space, and source-page
+  layout changes
 - Compact icon-only phone controls with hover/tap labels, separate horizontally
-  scrollable text and image/table rows, and pinned page arrows beside them
-- Selectable images with Kobo-view cut, copy, paste, delete, dynamic width, and
-  own-row/inline-left/inline-right text wrapping controls
+  scrollable text/table rows, and pinned page arrows beside them
+- Images can be dropped or pasted directly into the Kobo page and are
+  automatically resized without changing their aspect ratio
 - Aspect-ratio-aware image defaults sized to the selected Kobo and the remaining
   space on the detected PDF source page
 - Compact conversion summary with three facts and one high-level observation
@@ -59,6 +59,7 @@ is deliberately read-only; switch to Reflowable to edit text or use Diff.
 index.html            # GitHub Pages entry point
 css/main.css          # KoboForge presentation
 js/app.js             # Conversion, editing, preview, and EPUB application
+js/boot.js            # Loads the app with the centralized deployment version
 js/fixed-layout.js    # Browser-neutral fixed-layout scoring/package contract
 js/version.js         # Deployment stamp
 tools/test_logic.mjs  # Lightweight regression contracts

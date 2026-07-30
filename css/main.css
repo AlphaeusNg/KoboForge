@@ -551,22 +551,10 @@ body {
     object-fit: contain;
 }
 
-#deviceBookContent.kf-editing img.kf-editable-image {
-    cursor: pointer;
-    touch-action: manipulation;
-    user-select: none;
-    -webkit-user-drag: none;
-}
-
-#deviceBookContent.kf-editing img.kf-editable-image:hover,
-#deviceBookContent.kf-editing img.kf-editable-image:focus-visible,
-#deviceBookContent.kf-editing img.kf-image-selected {
-    outline: max(1px, 0.12em) solid #9b7613;
-    outline-offset: max(1px, 0.12em);
-}
-
-#deviceBookContent.kf-editing img.kf-image-selected {
-    box-shadow: 0 0 0 max(2px, 0.25em) rgba(201, 162, 39, 0.2);
+#deviceBookContent.kf-image-drop-active {
+    outline: max(2px, 0.16em) dashed #9b7613;
+    outline-offset: max(-4px, -0.3em);
+    background: rgba(201, 162, 39, 0.08);
 }
 
 #deviceBookContent figure.kf-document-image {
@@ -730,43 +718,12 @@ body {
     opacity: 0.3;
 }
 
-.image-size-control {
-    display: flex;
-    width: 8.2rem;
-    height: 1.9rem;
-    flex: none;
-    align-items: center;
-    gap: 0.28rem;
-    padding: 0 0.4rem;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 0.55rem;
-    background: rgba(255, 255, 255, 0.05);
-    color: #cbd5e1;
-}
-
-#imageEditControls.hidden,
-#imageSizeControl.hidden {
-    display: none;
-}
-
-.image-size-control .ui-icon {
-    width: 0.85rem;
-    height: 0.85rem;
-    flex: none;
-}
-
-.image-size-control input {
-    width: 4rem;
-    min-width: 0;
-    accent-color: #C9A227;
-}
-
-.image-size-control output {
-    min-width: 2.1rem;
-    color: #cbd5e1;
-    font-size: 0.62rem;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
+.image-drop-hint {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    font-size: 0.64rem;
+    line-height: 1.35;
+    text-align: center;
 }
 
 .table-picker {
@@ -883,16 +840,6 @@ body {
         width: 1.72rem;
         height: 1.72rem;
         border-radius: 0.45rem;
-    }
-
-    .image-size-control {
-        width: 7.4rem;
-        height: 1.72rem;
-        border-radius: 0.45rem;
-    }
-
-    .image-size-control input {
-        width: 3.3rem;
     }
 
     .table-picker-grid {

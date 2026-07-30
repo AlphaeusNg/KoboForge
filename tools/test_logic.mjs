@@ -31,24 +31,22 @@ function assertIncludes(label, needle) {
 
 // —— Page feature contract ——
 assert.ok(
-    /rel="stylesheet" href="css\/main\.css\?v=[^"]+"/.test(html),
+    html.includes("window.SITE_VERSION.asset('css/main.css')"),
     'KoboForge must load its grouped stylesheet'
 );
 assert.ok(
-    /type="module" src="js\/app\.js\?v=[^"]+"/.test(html),
+    /type="module" src="js\/boot\.js"/.test(html),
     'KoboForge must load its grouped application module'
 );
 const deploymentVersion = versionScript.match(/\bid:\s*"([^"]+)"/)?.[1];
 assert.ok(deploymentVersion, 'deployment version must be declared');
-for (const asset of ['css/main.css', 'js/version.js', 'js/app.js']) {
-    assert.ok(
-        html.includes(`${asset}?v=${deploymentVersion}`),
-        `${asset} must be cache-busted with the deployment version`
-    );
-}
 assert.ok(
-    script.includes(`./fixed-layout.js?v=${deploymentVersion}`),
-    'fixed-layout module must be cache-busted with the deployment version'
+    versionScript.includes('asset: function (path)')
+        && html.includes("window.SITE_VERSION.asset('css/main.css')")
+        && readFileSync(join(__dirname, '../js/boot.js'), 'utf8')
+            .includes('window.SITE_VERSION.asset("js/app.js")')
+        && script.includes('window.SITE_VERSION?.id'),
+    'one deployment constant must cache-bust CSS, the app, and fixed-layout module'
 );
 assert.ok(!html.includes('<script type="module">'), 'application code must not remain inline');
 assert.ok(
@@ -122,8 +120,8 @@ const features = [
     ['locked edit viewport', 'function beginEditablePageLock'],
     ['device page controls', 'devicePageNext'],
     ['automatic document image optimizer', 'function optimizeDocumentImages'],
-    ['editable image selector', 'function selectEditableImage'],
-    ['Kobo image clipboard', 'function optimizeAndInsertPastedImages'],
+    ['Kobo image paste', 'function optimizeAndInsertPastedImages'],
+    ['Kobo image drop', 'function handleImageDrop'],
     ['PDF image extraction', 'function extractPdfPageImages'],
     ['PDF intentional whitespace detector', 'function detectPdfWhitespace'],
     ['PDF embedded font metadata', 'function collectPdfFontMetadata'],
@@ -140,7 +138,7 @@ const features = [
     ['EPUB layout selector', 'id="epubLayoutMode"'],
     ['fixed-layout renderer', 'function renderPdfFixedLayoutPages'],
     ['fixed-layout EPUB builder', 'function buildFixedLayoutEpubBlob'],
-    ['fixed-layout package module', "from './fixed-layout.js?v="],
+    ['fixed-layout package module', 'window.SITE_VERSION?.id'],
     ['Floyd–Steinberg dithering', 'Floyd–Steinberg'],
 ];
 for (const [label, needle] of features) assertIncludes(label, needle);
@@ -491,13 +489,10 @@ assert.ok(page.includes('extractPdfPageImages(page') && page.includes('renderPdf
 assert.ok(page.includes('retargetCurrentDocumentImages') && page.includes('data-kf-image-id'),
     'changing the selected Kobo re-targets imported images');
 assert.ok(
-    html.includes('id="imageCutBtn"')
-        && html.includes('id="imageCopyBtn"')
-        && html.includes('id="imagePasteBtn"')
-        && html.includes('id="imageDeleteBtn"')
-        && html.includes('id="imageSizeRange"')
-        && page.includes('function resizeSelectedImage'),
-    'selected images expose compact editing and persistent width controls'
+    !html.includes('id="imageEditControls"')
+        && !html.includes('id="imageSizeRange"')
+        && html.includes('drop or paste it directly onto the Kobo page'),
+    'image insertion stays a minor automatic function instead of a dedicated toolbar'
 );
 assert.ok(
     html.includes('data-toolbar-row="text"')
@@ -507,25 +502,27 @@ assert.ok(
     'text controls and image/table controls occupy separate toolbar rows'
 );
 assert.ok(
-    page.includes("previewEl.addEventListener('copy'")
-        && page.includes("previewEl.addEventListener('cut'")
-        && page.includes("previewEl.addEventListener('paste'")
-        && page.includes("event.key === 'Backspace' || event.key === 'Delete'"),
-    'Kobo image editing supports keyboard and clipboard events'
+    page.includes("previewEl.addEventListener('paste'")
+        && page.includes("previewEl.addEventListener('drop'")
+        && page.includes('imageInsertionRangeFromPoint')
+        && page.includes('dataTransferHasImage')
+        && page.includes("file.type || ''"),
+    'Kobo images can be pasted or dropped at the editing position'
 );
 assert.ok(
     page.includes('if (!imageFiles.length && !html) return;'),
     'ordinary text paste must remain native when the clipboard has no image'
 );
 assert.ok(
-    page.includes("img.classList.remove('kf-editable-image', 'kf-image-selected')")
-        && page.includes("img.removeAttribute(name)"),
-    'editor-only image selection chrome must not leak into exported EPUB XHTML'
+    page.includes("img.removeAttribute('width')")
+        && page.includes("img.removeAttribute('height')")
+        && page.includes("'data-kf-aspect-ratio'"),
+    'automatic image conversion removes dimensions that could distort source aspect ratio'
 );
 assert.ok(
-    styles.includes('img.kf-image-selected')
-        && styles.includes('img.kf-editable-image'),
-    'editable images visibly expose their selected state'
+    styles.includes('#deviceBookContent.kf-image-drop-active')
+        && !styles.includes('img.kf-image-selected'),
+    'image dropping has lightweight feedback without persistent image-edit chrome'
 );
 assert.ok(page.includes('images/${asset.fileName}') && page.includes('imageManifestItems'),
     'EPUB packages converted images as manifest assets');
@@ -664,13 +661,12 @@ assert.ok(
     'table insertion uses a dynamic keyboard/touch 1–5 row and column picker'
 );
 assert.ok(
-    html.includes('data-image-layout="block"')
-        && html.includes('data-image-layout="inline-left"')
-        && html.includes('data-image-layout="inline-right"')
-        && page.includes('function setSelectedImageLayout')
+    !html.includes('data-image-layout="block"')
+        && page.includes('function normalizedImageLayout')
+        && page.includes("data-kf-layout=\"${imageLayout}\"")
         && styles.includes('figure.kf-document-image.kf-image-inline-left')
         && styles.includes('float: right'),
-    'selected images can occupy their own row or share rows with wrapped text'
+    'the converter chooses block or wrapped image layout without exposing manual controls'
 );
 assert.ok(
     page.includes('function imageWidthForPageFit')

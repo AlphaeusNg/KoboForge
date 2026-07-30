@@ -1,9 +1,11 @@
-        import {
+        const {
             analyzePdfLayoutComplexity,
             buildFixedLayoutPublicationFiles,
             fixedLayoutDownloadName,
             resolveEpubLayoutMode
-        } from './fixed-layout.js?v=2026.07.24.17';
+        } = await import(
+            `./fixed-layout.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
+        );
         import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
@@ -35,14 +37,6 @@
         const tablePicker = document.getElementById('tablePicker');
         const tablePickerGrid = document.getElementById('tablePickerGrid');
         const tablePickerLabel = document.getElementById('tablePickerLabel');
-        const imageEditControls = document.getElementById('imageEditControls');
-        const imageCutBtn = document.getElementById('imageCutBtn');
-        const imageCopyBtn = document.getElementById('imageCopyBtn');
-        const imagePasteBtn = document.getElementById('imagePasteBtn');
-        const imageDeleteBtn = document.getElementById('imageDeleteBtn');
-        const imageSizeControl = document.getElementById('imageSizeControl');
-        const imageSizeRange = document.getElementById('imageSizeRange');
-        const imageSizeValue = document.getElementById('imageSizeValue');
         const diffPanel = document.getElementById('diffPanel');
         const diffBody = document.getElementById('diffBody');
         const diffSummary = document.getElementById('diffSummary');
@@ -184,8 +178,6 @@
         let fixedLayoutRenderToken = 0;
         let fixedLayoutCache = null;
         let fixedLayoutPromise = null;
-        let selectedEditableImage = null;
-        let imageClipboardHtml = '';
         let savedEditRange = null;
         let tableInsertionRange = null;
 
@@ -637,7 +629,6 @@
             if (deviceReaderTitle) deviceReaderTitle.textContent = title;
             deviceBookContent.lang = lang;
             deviceBookContent.innerHTML = renderedBody || '<p>(Empty document)</p>';
-            selectedEditableImage = null;
             savedEditRange = null;
             tableInsertionRange = null;
             closeTablePicker();
@@ -646,7 +637,7 @@
             deviceBookContent.classList.toggle('kf-diffing', editMode === 'diff' && !fixedPreview);
             deviceBookContent.classList.toggle('kf-fixed-preview', fixedPreview);
             editToolbar?.classList.toggle('hidden', editMode !== 'edit' || fixedPreview);
-            configureEditableImages();
+            configureDocumentImages();
             deviceBookContent.querySelectorAll('.kf-note-space').forEach((space) => {
                 // Keep intentional space from collapsing during ordinary text
                 // edits. Advanced users can resize/remove it in HTML mode.
@@ -919,25 +910,6 @@
             return container === previewEl || previewEl.contains(container);
         }
 
-        function editableImageUnit(img) {
-            if (!img || !previewEl?.contains(img)) return null;
-            const figure = img.closest('figure.kf-document-image');
-            if (figure && previewEl.contains(figure)) return figure;
-            const paragraph = img.parentElement?.closest?.('p');
-            if (
-                paragraph
-                && previewEl.contains(paragraph)
-                && paragraph.querySelectorAll('img').length === 1
-                && !(paragraph.textContent || '').trim()
-                && Array.from(paragraph.children).every((child) => (
-                    child === img || child.tagName === 'BR'
-                ))
-            ) {
-                return paragraph;
-            }
-            return img;
-        }
-
         function normalizedImageWidth(img) {
             const stored = Number(img?.getAttribute('data-kf-width'));
             const figure = img?.closest?.('figure.kf-document-image');
@@ -1021,163 +993,21 @@
             }
         }
 
-        function updateImageEditControls({ reveal = false } = {}) {
-            if (!imageEditControls) return;
-            const hasSelection = !!(
-                selectedEditableImage
-                && previewEl?.contains(selectedEditableImage)
-                && selectedEditableImage.classList.contains('kf-editable-image')
-            );
-            const hasClipboardImage = !!imageClipboardHtml;
-            imageEditControls.classList.toggle('hidden', !hasSelection && !hasClipboardImage);
-            if (imageCutBtn) imageCutBtn.disabled = !hasSelection;
-            if (imageCopyBtn) imageCopyBtn.disabled = !hasSelection;
-            if (imageDeleteBtn) imageDeleteBtn.disabled = !hasSelection;
-            if (imagePasteBtn) imagePasteBtn.disabled = !hasClipboardImage;
-            imageSizeControl?.classList.toggle('hidden', !hasSelection);
-            if (hasSelection && imageSizeRange) {
-                const width = normalizedImageWidth(selectedEditableImage);
-                imageSizeRange.max = normalizedImageLayout(selectedEditableImage) === 'block'
-                    ? '100'
-                    : '60';
-                imageSizeRange.value = String(width);
-                if (imageSizeValue) imageSizeValue.textContent = `${width}%`;
-            }
-            imageEditControls.querySelectorAll('[data-image-layout]').forEach((button) => {
-                button.disabled = !hasSelection;
-                button.classList.toggle(
-                    'is-active',
-                    hasSelection
-                    && button.dataset.imageLayout === normalizedImageLayout(selectedEditableImage)
-                );
-            });
-            if (reveal && !imageEditControls.classList.contains('hidden')) {
-                const lane = editToolbar?.querySelector('[data-toolbar-row="objects"]');
-                if (lane) lane.scrollLeft = 0;
-            }
-        }
-
-        function clearEditableImageSelection() {
-            if (selectedEditableImage) {
-                selectedEditableImage.classList.remove('kf-image-selected');
-                selectedEditableImage.setAttribute('aria-selected', 'false');
-            }
-            selectedEditableImage = null;
-            updateImageEditControls();
-        }
-
-        function selectEditableImage(img, { focus = true, reveal = true } = {}) {
-            if (!canEditImagesNow() || !img?.classList.contains('kf-editable-image')) return false;
-            if (selectedEditableImage && selectedEditableImage !== img) {
-                selectedEditableImage.classList.remove('kf-image-selected');
-                selectedEditableImage.setAttribute('aria-selected', 'false');
-            }
-            selectedEditableImage = img;
-            img.classList.add('kf-image-selected');
-            img.setAttribute('aria-selected', 'true');
-            const selection = window.getSelection();
-            if (selection) {
-                const range = document.createRange();
-                range.selectNode(img);
-                selection.removeAllRanges();
-                selection.addRange(range);
-            }
-            if (focus) previewEl.focus({ preventScroll: true });
-            updateImageEditControls({ reveal });
-            return true;
-        }
-
-        function configureEditableImages() {
+        function configureDocumentImages() {
             if (!previewEl) return;
-            const editable = canEditImagesNow();
             previewEl.querySelectorAll('img').forEach((img) => {
-                img.classList.toggle('kf-editable-image', editable);
-                img.classList.remove('kf-image-selected');
+                img.classList.remove('kf-editable-image', 'kf-image-selected');
                 const width = normalizedImageWidth(img);
                 img.setAttribute('data-kf-width', String(width));
                 applyImageLayoutPresentation(img);
-                if (editable) {
-                    img.tabIndex = 0;
-                    img.draggable = false;
-                    img.setAttribute('aria-selected', 'false');
-                    img.setAttribute(
-                        'data-tooltip',
-                        'Select image to resize, cut, copy, paste or delete'
-                    );
-                    img.title = 'Select image to resize, cut, copy, paste or delete';
-                } else {
-                    img.removeAttribute('tabindex');
-                    img.removeAttribute('draggable');
-                    img.removeAttribute('aria-selected');
-                    img.removeAttribute('data-tooltip');
-                    img.removeAttribute('title');
-                }
+                img.draggable = false;
+                ['tabindex', 'aria-selected', 'data-tooltip', 'title'].forEach((name) => {
+                    img.removeAttribute(name);
+                });
             });
-            updateImageEditControls();
         }
 
-        function resizeSelectedImage(width) {
-            if (!selectedEditableImage || !previewEl?.contains(selectedEditableImage)) return;
-            const maximum = normalizedImageLayout(selectedEditableImage) === 'block' ? 100 : 60;
-            const normalized = Math.max(
-                25,
-                Math.min(maximum, Math.round(Number(width || maximum) / 5) * 5)
-            );
-            selectedEditableImage.setAttribute('data-kf-width', String(normalized));
-            selectedEditableImage.setAttribute('data-kf-width-mode', 'user');
-            applyImageLayoutPresentation(selectedEditableImage);
-            if (imageSizeRange) imageSizeRange.value = String(normalized);
-            if (imageSizeValue) imageSizeValue.textContent = `${normalized}%`;
-            finishImageEdit(`Image width set to ${normalized}%.`);
-        }
-
-        function setSelectedImageLayout(layout) {
-            if (
-                !selectedEditableImage
-                || !previewEl?.contains(selectedEditableImage)
-                || !['block', 'inline-left', 'inline-right'].includes(layout)
-            ) return;
-            selectedEditableImage.setAttribute('data-kf-layout', layout);
-            selectedEditableImage.setAttribute('data-kf-layout-mode', 'user');
-            if (layout !== 'block' && normalizedImageWidth(selectedEditableImage) > 60) {
-                selectedEditableImage.setAttribute('data-kf-width', '60');
-                selectedEditableImage.setAttribute('data-kf-width-mode', 'user');
-            }
-            applyImageLayoutPresentation(selectedEditableImage);
-            updateImageEditControls();
-            const message = layout === 'block'
-                ? 'Image moved to its own row.'
-                : `Image inlined on the ${layout.endsWith('right') ? 'right' : 'left'}; text can share its rows.`;
-            finishImageEdit(message);
-        }
-
-        function cleanImageClipboardMarkup(img) {
-            if (!img) return '';
-            const clone = img.cloneNode(true);
-            clone.classList.remove('kf-editable-image', 'kf-image-selected');
-            if (!clone.className) clone.removeAttribute('class');
-            ['tabindex', 'draggable', 'aria-selected', 'data-tooltip', 'title'].forEach((name) => {
-                clone.removeAttribute(name);
-            });
-            return clone.outerHTML;
-        }
-
-        function putImageOnClipboard(event, img = selectedEditableImage) {
-            const markup = cleanImageClipboardMarkup(img);
-            if (!markup) return false;
-            imageClipboardHtml = markup;
-            if (event?.clipboardData) {
-                event.clipboardData.setData('text/html', markup);
-                event.clipboardData.setData('text/plain', img.getAttribute('alt') || 'Document image');
-                try {
-                    event.clipboardData.setData('application/x-koboforge-image', markup);
-                } catch (_) { /* custom clipboard types are not available in every browser */ }
-            }
-            updateImageEditControls();
-            return true;
-        }
-
-        function finishImageEdit(message) {
+        function finishImageInsertion(message) {
             if (!currentOutput || !previewEl) return;
             currentOutput.imageCount = previewEl.querySelectorAll('img[data-kf-image-id]').length;
             beginEditablePageLock();
@@ -1186,50 +1016,6 @@
             commitTimer = setTimeout(refreshDiffLive, 80);
             scheduleDevicePagination();
             if (message) statusEl.textContent = message;
-        }
-
-        function removeSelectedImage({ message = 'Image deleted from the Kobo page.' } = {}) {
-            const img = selectedEditableImage;
-            const unit = editableImageUnit(img);
-            if (!img || !unit || !previewEl?.contains(unit)) return false;
-            const selection = window.getSelection();
-            const range = document.createRange();
-            range.setStartBefore(unit);
-            range.collapse(true);
-            unit.remove();
-            selectedEditableImage = null;
-            savedEditRange = range.cloneRange();
-            if (selection) {
-                selection.removeAllRanges();
-                selection.addRange(range);
-            }
-            previewEl.focus({ preventScroll: true });
-            updateImageEditControls();
-            finishImageEdit(message);
-            return true;
-        }
-
-        function copySelectedImage() {
-            if (!selectedEditableImage || !putImageOnClipboard(null, selectedEditableImage)) return false;
-            let copiedToSystem = false;
-            try {
-                copiedToSystem = document.execCommand('copy');
-            } catch (_) { /* the internal clipboard still works */ }
-            statusEl.textContent = copiedToSystem
-                ? 'Image copied. Tap a destination, then paste it in the Kobo page.'
-                : 'Image copied inside KoboForge. Tap a destination, then use the paste icon.';
-            updateImageEditControls({ reveal: true });
-            return true;
-        }
-
-        function cutSelectedImage() {
-            if (!selectedEditableImage || !putImageOnClipboard(null, selectedEditableImage)) return false;
-            try {
-                document.execCommand('copy');
-            } catch (_) { /* the internal clipboard still works */ }
-            return removeSelectedImage({
-                message: 'Image cut. Tap its new destination, then use the paste icon.'
-            });
         }
 
         function imageInsertionRange() {
@@ -1246,6 +1032,21 @@
             range.selectNodeContents(previewEl);
             range.collapse(false);
             return range;
+        }
+
+        function imageInsertionRangeFromPoint(clientX, clientY) {
+            let range = null;
+            if (typeof document.caretRangeFromPoint === 'function') {
+                range = document.caretRangeFromPoint(clientX, clientY);
+            } else if (typeof document.caretPositionFromPoint === 'function') {
+                const position = document.caretPositionFromPoint(clientX, clientY);
+                if (position) {
+                    range = document.createRange();
+                    range.setStart(position.offsetNode, position.offset);
+                    range.collapse(true);
+                }
+            }
+            return rangeLivesInPreview(range) ? range.cloneRange() : imageInsertionRange();
         }
 
         function insertOptimizedImageHtml(html, targetRange = imageInsertionRange()) {
@@ -1288,10 +1089,18 @@
                 lastImage = img;
             });
 
-            configureEditableImages();
-            if (lastImage) selectEditableImage(lastImage, { reveal: true });
-            finishImageEdit(
-                `${sourceImages.length} image${sourceImages.length === 1 ? '' : 's'} pasted into the Kobo page.`
+            configureDocumentImages();
+            if (lastImage) {
+                const selection = window.getSelection();
+                const range = document.createRange();
+                range.setStartAfter(lastImage.closest('figure.kf-document-image') || lastImage);
+                range.collapse(true);
+                savedEditRange = range.cloneRange();
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+            }
+            finishImageInsertion(
+                `${sourceImages.length} image${sourceImages.length === 1 ? '' : 's'} added and sized for this Kobo.`
             );
             return sourceImages.length;
         }
@@ -1332,25 +1141,9 @@
                 img.alt = source.getAttribute('alt') || 'Pasted image';
                 const imageId = source.getAttribute('data-kf-image-id');
                 if (imageId) img.setAttribute('data-kf-image-id', imageId);
-                const width = normalizedImageWidth(source);
-                img.setAttribute('data-kf-width', String(width));
-                img.setAttribute(
-                    'data-kf-width-mode',
-                    source.getAttribute('data-kf-width-mode')
-                    || (
-                        source.hasAttribute('data-kf-width')
-                        || !!source.style.width
-                            ? 'user'
-                            : 'auto'
-                    )
-                );
-                img.setAttribute('data-kf-layout', normalizedImageLayout(source));
-                img.setAttribute(
-                    'data-kf-layout-mode',
-                    source.getAttribute('data-kf-layout-mode')
-                    || (source.hasAttribute('data-kf-layout') ? 'user' : 'auto')
-                );
-                img.style.width = `${width}%`;
+                img.setAttribute('data-kf-width-mode', 'auto');
+                img.setAttribute('data-kf-layout', 'block');
+                img.setAttribute('data-kf-layout-mode', 'auto');
                 accepted.appendChild(img);
             });
             return accepted.innerHTML;
@@ -1375,9 +1168,7 @@
                 .filter((item) => item.kind === 'file' && /^image\//i.test(item.type || ''))
                 .map((item) => item.getAsFile())
                 .filter(Boolean);
-            const custom = event.clipboardData.getData('application/x-koboforge-image');
-            const html = custom
-                || usablePastedImageHtml(event.clipboardData.getData('text/html'));
+            const html = usablePastedImageHtml(event.clipboardData.getData('text/html'));
             if (!imageFiles.length && !html) return;
             event.preventDefault();
             try {
@@ -1391,15 +1182,33 @@
             }
         }
 
-        async function pasteImageFromToolbar() {
-            if (!imageClipboardHtml) return;
-            const targetRange = imageInsertionRange();
+        async function handleImageDrop(event) {
+            if (!canEditImagesNow()) return;
+            const imageFiles = Array.from(event.dataTransfer?.files || [])
+                .filter((file) => /^image\//i.test(file.type || ''));
+            if (!imageFiles.length) return;
+            event.preventDefault();
+            previewEl.classList.remove('kf-image-drop-active');
+            const targetRange = imageInsertionRangeFromPoint(event.clientX, event.clientY);
             try {
-                await optimizeAndInsertPastedImages(imageClipboardHtml, targetRange);
+                const markup = imageMarkupFromDataUrls(
+                    await Promise.all(imageFiles.map(blobAsDataUrl))
+                );
+                await optimizeAndInsertPastedImages(markup, targetRange);
             } catch (error) {
-                console.error('[KoboForge] Image paste', error);
-                statusEl.textContent = error.message || 'Could not paste that image.';
+                console.error('[KoboForge] Image drop', error);
+                statusEl.textContent = error.message || 'Could not add that image.';
             }
+        }
+
+        function dataTransferHasImage(dataTransfer) {
+            const files = Array.from(dataTransfer?.files || []);
+            if (files.some((file) => /^image\//i.test(file.type || ''))) return true;
+            const items = Array.from(dataTransfer?.items || []);
+            if (items.some((item) => item.kind === 'file' && /^image\//i.test(item.type || ''))) {
+                return true;
+            }
+            return !items.length && Array.from(dataTransfer?.types || []).includes('Files');
         }
 
         function afterFormat() {
@@ -1831,7 +1640,6 @@
                 else if (btn.dataset.align) applyHorizontalAlignment(btn.dataset.align);
                 else if (btn.dataset.vpos) applyVerticalPlacement(btn.dataset.vpos);
                 else if (btn.dataset.fontStep !== undefined) changeSelectedFontSize(btn.dataset.fontStep);
-                else if (btn.dataset.imageLayout) setSelectedImageLayout(btn.dataset.imageLayout);
                 else if (btn === insertTableBtn) toggleTablePicker();
             });
         });
@@ -1854,54 +1662,27 @@
         }, true);
         window.addEventListener('resize', positionTablePicker);
 
-        imageCutBtn?.addEventListener('click', cutSelectedImage);
-        imageCopyBtn?.addEventListener('click', copySelectedImage);
-        imagePasteBtn?.addEventListener('click', pasteImageFromToolbar);
-        imageDeleteBtn?.addEventListener('click', () => removeSelectedImage());
-        imageSizeRange?.addEventListener('input', () => {
-            resizeSelectedImage(imageSizeRange.value);
-        });
-
-        previewEl.addEventListener('pointerdown', (event) => {
-            if (editMode !== 'edit') return;
-            const img = event.target?.closest?.('img.kf-editable-image');
-            if (!img) clearEditableImageSelection();
-        });
-        previewEl.addEventListener('click', (event) => {
-            const img = event.target?.closest?.('img.kf-editable-image');
-            if (!img || !previewEl.contains(img)) return;
-            event.preventDefault();
-            selectEditableImage(img);
-        });
-        previewEl.addEventListener('focusin', (event) => {
-            const img = event.target?.closest?.('img.kf-editable-image');
-            if (img && previewEl.contains(img)) selectEditableImage(img, { focus: false });
-        });
-        previewEl.addEventListener('copy', (event) => {
-            if (!selectedEditableImage || !previewEl.contains(selectedEditableImage)) return;
-            event.preventDefault();
-            putImageOnClipboard(event, selectedEditableImage);
-        });
-        previewEl.addEventListener('cut', (event) => {
-            if (!selectedEditableImage || !previewEl.contains(selectedEditableImage)) return;
-            event.preventDefault();
-            if (putImageOnClipboard(event, selectedEditableImage)) {
-                removeSelectedImage({
-                    message: 'Image cut. Tap its new destination, then paste it in the Kobo page.'
-                });
-            }
-        });
         previewEl.addEventListener('paste', (event) => {
             handleImagePaste(event);
         });
-        previewEl.addEventListener('keydown', (event) => {
-            if (
-                selectedEditableImage
-                && (event.key === 'Backspace' || event.key === 'Delete')
-            ) {
+        ['dragenter', 'dragover'].forEach((eventName) => {
+            previewEl.addEventListener(eventName, (event) => {
+                if (
+                    !canEditImagesNow()
+                    || !dataTransferHasImage(event.dataTransfer)
+                ) return;
                 event.preventDefault();
-                removeSelectedImage();
+                if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+                previewEl.classList.add('kf-image-drop-active');
+            });
+        });
+        previewEl.addEventListener('dragleave', (event) => {
+            if (!previewEl.contains(event.relatedTarget)) {
+                previewEl.classList.remove('kf-image-drop-active');
             }
+        });
+        previewEl.addEventListener('drop', (event) => {
+            handleImageDrop(event);
         });
 
         document.addEventListener('selectionchange', () => {
@@ -1911,10 +1692,6 @@
             if (!selection?.rangeCount) return;
             const range = selection.getRangeAt(0);
             if (!rangeLivesInPreview(range)) return;
-            if (selectedEditableImage && previewEl.contains(selectedEditableImage)) {
-                if (range.intersectsNode(selectedEditableImage)) return;
-                clearEditableImageSelection();
-            }
             savedEditRange = range.cloneRange();
         });
 
@@ -3654,10 +3431,7 @@
             clearFixedLayoutCache();
             currentFile = null;
             currentOutput = null;
-            selectedEditableImage = null;
-            imageClipboardHtml = '';
             savedEditRange = null;
-            updateImageEditControls();
             clearEditedFlag();
             editMode = 'edit';
             previewWrap?.classList.remove('mode-edit', 'mode-diff', 'mode-html');
@@ -3855,10 +3629,7 @@
             clearFixedLayoutCache();
             currentFile = file;
             currentOutput = null;
-            selectedEditableImage = null;
-            imageClipboardHtml = '';
             savedEditRange = null;
-            updateImageEditControls();
             clearEditedFlag();
             previewEl.contentEditable = 'false';
             previewEl.classList.remove('kf-editing', 'kf-diffing', 'kf-fixed-preview');
@@ -6785,6 +6556,10 @@ ${spineItems}
                     img.setAttribute('src', variant.dataUrl);
                     img.setAttribute('data-kf-image-id', imageId);
                     img.setAttribute('data-kf-pixel-size', `${variant.width}x${variant.height}`);
+                    img.setAttribute('data-kf-aspect-ratio', `${variant.width}/${variant.height}`);
+                    img.removeAttribute('width');
+                    img.removeAttribute('height');
+                    img.style.removeProperty('height');
                     img.classList.add('kf-inline-image');
                     if (!img.getAttribute('alt')) img.setAttribute('alt', 'Document image');
                     if (!img.getAttribute('data-kf-layout')) {
