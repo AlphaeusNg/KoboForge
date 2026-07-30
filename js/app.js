@@ -6,9 +6,27 @@
         } = await import(
             `./fixed-layout.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
-        import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
+        const PDFJS_MODULE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
+        const PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+        let pdfjsLib = null;
+        let pdfjsLoadPromise = null;
 
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+        async function loadPdfJs() {
+            if (pdfjsLib) return pdfjsLib;
+            if (!pdfjsLoadPromise) {
+                pdfjsLoadPromise = import(PDFJS_MODULE_URL)
+                    .then((module) => {
+                        module.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+                        pdfjsLib = module;
+                        return module;
+                    })
+                    .catch((error) => {
+                        pdfjsLoadPromise = null;
+                        throw error;
+                    });
+            }
+            return pdfjsLoadPromise;
+        }
 
         const PREFS_KEY = 'koboforge.prefs.v3';
         const LEGACY_PREFS_KEY = 'koboforge.prefs.v2';
@@ -4194,6 +4212,7 @@
         }
 
         async function parsePdf(file) {
+            await loadPdfJs();
             const arrayBuffer = await file.arrayBuffer();
             setProgress(12, 'Opening PDF');
             // Copy into a fresh Uint8Array. PDF.js may transfer the buffer to the
@@ -6041,6 +6060,7 @@
             if (!file || !/\.pdf$/i.test(file.name || '')) {
                 throw new Error('Fixed-layout export requires a PDF source.');
             }
+            await loadPdfJs();
             const data = new Uint8Array((await file.arrayBuffer()).slice(0));
             const pdf = await pdfjsLib.getDocument({
                 data,

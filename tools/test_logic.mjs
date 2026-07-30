@@ -19,10 +19,12 @@ const htmlPath = join(__dirname, '../index.html');
 const jsPath = join(__dirname, '../js/app.js');
 const cssPath = join(__dirname, '../css/main.css');
 const versionPath = join(__dirname, '../js/version.js');
+const bootPath = join(__dirname, '../js/boot.js');
 const html = readFileSync(htmlPath, 'utf8');
 const script = readFileSync(jsPath, 'utf8');
 const styles = readFileSync(cssPath, 'utf8');
 const versionScript = readFileSync(versionPath, 'utf8');
+const bootScript = readFileSync(bootPath, 'utf8');
 const page = [html, script, styles].join('\n');
 
 function assertIncludes(label, needle) {
@@ -43,10 +45,32 @@ assert.ok(deploymentVersion, 'deployment version must be declared');
 assert.ok(
     versionScript.includes('asset: function (path)')
         && html.includes("window.SITE_VERSION.asset('css/main.css')")
-        && readFileSync(join(__dirname, '../js/boot.js'), 'utf8')
-            .includes('window.SITE_VERSION.asset("js/app.js")')
+        && bootScript.includes('new URL("app.js", import.meta.url).href')
         && script.includes('window.SITE_VERSION?.id'),
     'one deployment constant must cache-bust CSS, the app, and fixed-layout module'
+);
+assert.ok(
+    !bootScript.includes('asset("js/app.js")')
+        && new URL('app.js', 'https://alphaeusng.github.io/KoboForge/js/boot.js').href
+            === 'https://alphaeusng.github.io/KoboForge/js/app.js',
+    'boot must resolve app.js beside boot.js instead of requesting js/js/app.js'
+);
+assert.ok(
+    bootScript.includes('Application startup failed')
+        && bootScript.includes('KoboForge could not start'),
+    'startup failures must be visible instead of leaving inert import controls'
+);
+assert.ok(
+    script.includes("pickFileBtn?.addEventListener('click'")
+        && script.includes("fileInput.addEventListener('change'")
+        && script.includes("dropzone.addEventListener('drop'"),
+    'file picker and drag/drop must both initialize document processing'
+);
+assert.ok(
+    script.includes('async function loadPdfJs()')
+        && script.includes('await loadPdfJs();')
+        && !script.includes("import * as pdfjsLib from 'https://"),
+    'PDF.js must load only for PDF work so other imports remain available if its CDN fails'
 );
 assert.ok(!html.includes('<script type="module">'), 'application code must not remain inline');
 assert.ok(
