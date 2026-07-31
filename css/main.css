@@ -9,6 +9,29 @@ body {
         linear-gradient(180deg, #080d17 0%, #0c1322 55%, #080d17 100%);
 }
 
+.site-header {
+    transition: transform 0.22s ease, opacity 0.22s ease;
+    will-change: transform;
+}
+
+.site-header.is-scroll-hidden {
+    transform: translateY(calc(-100% - 1px));
+    opacity: 0;
+    pointer-events: none;
+}
+
+.site-header:focus-within {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .site-header {
+        transition: none;
+    }
+}
+
 .icon-sprite {
     position: absolute;
     width: 0;
