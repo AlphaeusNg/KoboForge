@@ -6,6 +6,14 @@
         } = await import(
             `./fixed-layout.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
+        const {
+            DOCX_FIDELITY_STYLE_MAP,
+            normalizeCssTypography,
+            normalizeHtmlPageBreaks,
+            prepareDocxForFidelity
+        } = await import(
+            `./document-fidelity.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
+        );
         const PDFJS_MODULE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
         const PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
         let pdfjsLib = null;
@@ -662,6 +670,14 @@
                 space.setAttribute('contenteditable', 'false');
                 space.setAttribute('title', 'Preserved blank space (resize in HTML mode)');
             });
+            deviceBookContent.querySelectorAll('.kf-page-break, .kf-blank-page').forEach((pageBreak) => {
+                pageBreak.setAttribute('contenteditable', 'false');
+                pageBreak.setAttribute('role', 'separator');
+                pageBreak.setAttribute(
+                    'aria-label',
+                    pageBreak.classList.contains('kf-blank-page') ? 'Blank page' : 'Page break'
+                );
+            });
             deviceBookContent.querySelectorAll('img').forEach((img) => {
                 if (!img.complete) img.addEventListener('load', () => scheduleDevicePagination(), { once: true });
             });
@@ -866,6 +882,9 @@
                     statusEl.textContent = conciseReadyStatus();
                 }
                 renderDevicePreview({ resetPage: true });
+                // The device frame animates width/aspect-ratio for 200 ms.
+                // Re-measure once more after that transition fully settles.
+                setTimeout(scheduleDevicePagination, 240);
             });
         });
         deviceChrome?.addEventListener('change', () => {
@@ -911,6 +930,35 @@
         window.addEventListener('resize', () => {
             if (editMode === 'edit' || editMode === 'diff') scheduleDevicePagination();
         });
+        deviceFrame?.addEventListener('transitionend', (event) => {
+            if (event.propertyName === 'width' || event.propertyName === 'aspect-ratio') {
+                scheduleDevicePagination();
+            }
+        });
+        // Device changes animate the frame for 200 ms. Measure every settled
+        // viewport size instead of keeping a stale column width from mid-transition.
+        if (typeof ResizeObserver === 'function' && deviceBookViewport) {
+            let observedViewportWidth = 0;
+            let observedViewportHeight = 0;
+            const viewportResizeObserver = new ResizeObserver((entries) => {
+                const box = entries[0]?.contentRect;
+                const width = Math.round(box?.width || 0);
+                const height = Math.round(box?.height || 0);
+                if (
+                    !width
+                    || !height
+                    || (width === observedViewportWidth && height === observedViewportHeight)
+                ) {
+                    return;
+                }
+                observedViewportWidth = width;
+                observedViewportHeight = height;
+                if (editMode === 'edit' || editMode === 'diff') {
+                    scheduleDevicePagination();
+                }
+            });
+            viewportResizeObserver.observe(deviceBookViewport);
+        }
         updateDeviceControlLabels();
         applyDeviceGeometry();
 
@@ -1239,32 +1287,87 @@
             }, 80);
         }
 
+        function resetInheritedSelectionTypography() {
+            const selection = window.getSelection();
+            if (!selection?.rangeCount || !previewEl) return;
+            const range = selection.getRangeAt(0);
+            if (!rangeLivesInPreview(range) || range.collapsed) return;
+            const walker = document.createTreeWalker(
+                previewEl,
+                NodeFilter.SHOW_TEXT
+            );
+            const slices = [];
+            let node = walker.nextNode();
+            while (node) {
+                let intersects = false;
+                try {
+                    intersects = range.intersectsNode(node);
+                } catch (_) { /* ignore */ }
+                if (intersects) {
+                    const start = node === range.startContainer ? range.startOffset : 0;
+                    const end = node === range.endContainer
+                        ? range.endOffset
+                        : (node.nodeValue || '').length;
+                    if (end > start) slices.push({ node, start, end, selected: null });
+                }
+                node = walker.nextNode();
+            }
+
+            // Work backwards so splitting a boundary text node cannot invalidate
+            // offsets saved for any later slice.
+            slices.slice().reverse().forEach((slice) => {
+                let selected = slice.node;
+                const length = (selected.nodeValue || '').length;
+                if (slice.end < length) selected.splitText(slice.end);
+                if (slice.start > 0) selected = selected.splitText(slice.start);
+                slice.selected = selected;
+                const style = getComputedStyle(selected.parentElement);
+                const weight = String(style.fontWeight || '').toLowerCase();
+                const numericWeight = Number.parseInt(weight, 10);
+                const bold = (
+                    weight === 'bold'
+                    || weight === 'bolder'
+                    || (Number.isFinite(numericWeight) && numericWeight >= 600)
+                );
+                const italic = /^(italic|oblique)(?:\s|$)/i.test(
+                    String(style.fontStyle || '')
+                );
+                if (!bold && !italic) return;
+                const reset = document.createElement('span');
+                if (bold) reset.classList.add('kf-not-bold');
+                if (italic) reset.classList.add('kf-not-italic');
+                selected.parentNode?.insertBefore(reset, selected);
+                reset.appendChild(selected);
+            });
+
+            const first = slices[0]?.selected;
+            const last = slices[slices.length - 1]?.selected;
+            if (first && last) {
+                const restored = document.createRange();
+                restored.setStart(first, 0);
+                restored.setEnd(last, (last.nodeValue || '').length);
+                selection.removeAllRanges();
+                selection.addRange(restored);
+            }
+        }
+
         /** Inline style: bold / italic / underline / strike / lists (Kobo-safe HTML). */
         function runFormatCommand(cmd) {
             if (!canFormatNow() || !cmd) return;
             previewEl.focus();
             try {
-                document.execCommand(cmd, false, null);
+                if (cmd === 'removeFormat') {
+                    document.execCommand('removeFormat', false, null);
+                    // removeFormat strips inline elements but cannot neutralize
+                    // typography inherited from a block. Reset each selected text
+                    // slice independently; aggregate command state conflates mixed
+                    // bold/normal selections with entirely normal selections.
+                    resetInheritedSelectionTypography();
+                } else {
+                    document.execCommand(cmd, false, null);
+                }
             } catch (_) { /* ignore */ }
-            // Prefer semantic tags browsers often emit as b/i
-            if (cmd === 'bold' || cmd === 'italic') {
-                normalizeInlineTags(previewEl);
-            }
             afterFormat();
-        }
-
-        function normalizeInlineTags(root) {
-            if (!root) return;
-            root.querySelectorAll('b').forEach((el) => {
-                const s = document.createElement('strong');
-                s.innerHTML = el.innerHTML;
-                el.replaceWith(s);
-            });
-            root.querySelectorAll('i').forEach((el) => {
-                const e = document.createElement('em');
-                e.innerHTML = el.innerHTML;
-                el.replaceWith(e);
-            });
         }
 
         /** Promote selection / current block to p|h1|h2|h3|blockquote. */
@@ -2134,19 +2237,9 @@
                 el.replaceWith(anchor);
             });
 
-            if (forExport) {
-                // EPUB should not include page chrome
-                root.querySelectorAll('.kf-page-break').forEach((el) => el.remove());
-            } else {
-                // Normalize page-break nodes
-                root.querySelectorAll('.kf-page-break').forEach((el) => {
-                    const page = el.getAttribute('data-page') || '';
-                    el.removeAttribute('id');
-                    el.className = 'kf-page-break';
-                    if (page) el.setAttribute('data-page', page);
-                    el.innerHTML = '';
-                });
-            }
+            // Normalize manual/CSS/DOCX hard breaks. Redundant PDF anchors are
+            // dropped because their source-page sections already force a break.
+            normalizeHtmlPageBreaks(root, doc, { forExport });
 
             root.querySelectorAll('.kf-pdf-page').forEach((page) => {
                 const sourcePage = Math.max(
@@ -2163,7 +2256,10 @@
                 const offsetName = Array.from(page.classList)
                     .find((name) => /^kf-page-offset-[0-8]$/.test(name))
                     || 'kf-page-offset-0';
-                page.className = `kf-pdf-page kf-page-v-${zone} ${offsetName}`;
+                const kindName = page.classList.contains('kf-pdf-image-page')
+                    ? ' kf-pdf-image-page'
+                    : (page.classList.contains('kf-pdf-blank-page') ? ' kf-pdf-blank-page' : '');
+                page.className = `kf-pdf-page kf-page-v-${zone} ${offsetName}${kindName}`;
                 page.setAttribute('data-source-page', String(sourcePage));
                 page.setAttribute('data-pdf-top', String(topPercent));
             });
@@ -2263,52 +2359,24 @@
                     || /^kf-align-(left|center|right)$/.test(name)
                     || /^kf-user-vpos-(top|middle|bottom)$/.test(name)
                     || /^kf-user-size-(75|88|100|112|125|150|175)$/.test(name)
+                    || name === 'kf-break-before'
+                    || name === 'kf-break-after'
+                    || /^kf-(?:bold|not-bold|italic|not-italic|underline|strike|no-decoration)$/.test(name)
                 ));
                 table.setAttribute('class', ['kobo-table', ...safeClasses].join(' '));
                 table.querySelectorAll('th, td').forEach((cell) => {
-                    const alignment = Array.from(cell.classList)
-                        .find((name) => /^kf-align-(left|center|right)$/.test(name));
-                    if (alignment) cell.className = alignment;
+                    const cellClasses = Array.from(cell.classList).filter((name) => (
+                        /^kf-align-(left|center|right)$/.test(name)
+                        || name === 'kf-break-before'
+                        || name === 'kf-break-after'
+                        || /^kf-(?:bold|not-bold|italic|not-italic|underline|strike|no-decoration)$/.test(name)
+                    ));
+                    if (cellClasses.length) cell.className = cellClasses.join(' ');
                     else cell.removeAttribute('class');
                 });
             });
 
-            // Normalize common formatting for Kobo/XHTML
-            root.querySelectorAll('b').forEach((el) => {
-                const s = doc.createElement('strong');
-                s.innerHTML = el.innerHTML;
-                el.replaceWith(s);
-            });
-            root.querySelectorAll('i').forEach((el) => {
-                const e = doc.createElement('em');
-                e.innerHTML = el.innerHTML;
-                el.replaceWith(e);
-            });
-            // Drop editor chrome / empty style spans browsers inject
-            root.querySelectorAll('span[style]').forEach((span) => {
-                const style = (span.getAttribute('style') || '').toLowerCase();
-                // Promote simple style spans into semantic tags when possible
-                if (/font-weight:\s*(bold|[6-9]00)/.test(style) && !span.querySelector('strong,b')) {
-                    const s = doc.createElement('strong');
-                    s.innerHTML = span.innerHTML;
-                    span.replaceWith(s);
-                    return;
-                }
-                if (/font-style:\s*italic/.test(style) && !span.querySelector('em,i')) {
-                    const e = doc.createElement('em');
-                    e.innerHTML = span.innerHTML;
-                    span.replaceWith(e);
-                    return;
-                }
-                if (/text-decoration:\s*underline/.test(style) && !span.querySelector('u')) {
-                    const u = doc.createElement('u');
-                    u.innerHTML = span.innerHTML;
-                    span.replaceWith(u);
-                    return;
-                }
-                // Strip leftover style attribute but keep children
-                span.removeAttribute('style');
-            });
+            normalizeCssTypography(root, doc);
 
             return root.innerHTML.trim();
         }
@@ -2469,7 +2537,14 @@
         }
 
         const LAYOUT_DIFF_TEXT_SELECTOR = 'h1,h2,h3,h4,h5,h6,p,li,blockquote';
-        const LAYOUT_DIFF_OBJECT_SELECTOR = 'figure.kf-document-image,table,img,.kf-note-space';
+        const LAYOUT_DIFF_OBJECT_SELECTOR = [
+            'figure.kf-document-image',
+            'table',
+            'img',
+            '.kf-note-space',
+            '.kf-page-break',
+            '.kf-blank-page'
+        ].join(',');
         const TRANSIENT_DIFF_CLASSES = new Set([
             'kf-editable-image', 'kf-image-selected', 'kf-tc-block',
             'kf-tc-object-add', 'kf-tc-object-del', 'kf-tc-format-change',
@@ -2541,7 +2616,7 @@
                 const text = compactText(node.nodeValue);
                 if (text) {
                     let parent = node.parentElement;
-                    let active = false;
+                    let active = null;
                     while (parent) {
                         const decoration = [
                             parent.style?.textDecoration,
@@ -2549,30 +2624,56 @@
                         ].filter(Boolean).join(' ').toLowerCase();
                         const weight = String(parent.style?.fontWeight || '').toLowerCase();
                         const fontStyle = String(parent.style?.fontStyle || '').toLowerCase();
-                        if (
-                            (trait === 'bold' && (
+                        if (trait === 'bold') {
+                            if (
+                                parent.classList.contains('kf-not-bold')
+                                || weight === 'normal'
+                                || weight === 'lighter'
+                                || (weight && Number(weight) <= 400)
+                            ) active = false;
+                            else if (
                                 parent.matches('strong,b')
+                                || parent.classList.contains('kf-bold')
                                 || weight === 'bold'
+                                || weight === 'bolder'
                                 || Number(weight) >= 600
-                            ))
-                            || (trait === 'italic' && (
-                                parent.matches('em,i') || fontStyle === 'italic'
-                            ))
-                            || (trait === 'underline' && (
-                                parent.matches('u') || decoration.includes('underline')
-                            ))
-                            || (trait === 'strikethrough' && (
+                            ) active = true;
+                        } else if (trait === 'italic') {
+                            if (
+                                parent.classList.contains('kf-not-italic')
+                                || fontStyle === 'normal'
+                            ) active = false;
+                            else if (
+                                parent.matches('em,i')
+                                || parent.classList.contains('kf-italic')
+                                || /^(italic|oblique)(?:\s|$)/.test(fontStyle)
+                            ) active = true;
+                        } else if (trait === 'underline') {
+                            if (
+                                parent.classList.contains('kf-no-decoration')
+                                || decoration.includes('none')
+                            ) active = false;
+                            else if (
+                                parent.matches('u')
+                                || parent.classList.contains('kf-underline')
+                                || decoration.includes('underline')
+                            ) active = true;
+                        } else if (trait === 'strikethrough') {
+                            if (
+                                parent.classList.contains('kf-no-decoration')
+                                || decoration.includes('none')
+                            ) active = false;
+                            else if (
                                 parent.matches('s,strike,del')
+                                || parent.classList.contains('kf-strike')
                                 || decoration.includes('line-through')
-                            ))
-                        ) {
-                            active = true;
-                            break;
+                            ) active = true;
                         }
+                        if (active !== null) break;
                         if (parent === element) break;
                         parent = parent.parentElement;
                     }
-                    if (active) texts.push(text);
+                    if (active === true) texts.push(text);
                 }
                 node = walker.nextNode();
             }
@@ -2642,6 +2743,14 @@
                         .join(' | ')
                     : '',
                 lineBreaks: type === 'text' ? explicitLineBreakCount(target) : 0,
+                pageBreakBefore: !!(
+                    target?.matches?.('.kf-break-before')
+                    || target?.querySelector?.('.kf-break-before')
+                ),
+                pageBreakAfter: !!(
+                    target?.matches?.('.kf-break-after')
+                    || target?.querySelector?.('.kf-break-after')
+                ),
                 signature: semanticElementSignature(target, { ignoreText: true })
             };
         }
@@ -2654,6 +2763,7 @@
             if (entry.type === 'image') return 'Image';
             if (entry.type === 'table') return 'Table';
             if (entry.type === 'space') return 'Writing space';
+            if (entry.type === 'break') return 'Page break';
             const tag = entry.format?.tag || entry.element?.tagName?.toLowerCase?.() || 'text';
             if (/^h[1-6]$/.test(tag)) return `Heading ${tag.slice(1)}`;
             if (tag === 'blockquote') return 'Block quote';
@@ -2730,6 +2840,16 @@
                     `Line breaks: ${before.lineBreaks || 0} → ${after.lineBreaks || 0}`
                 ));
             }
+            [
+                ['pageBreakBefore', 'before'],
+                ['pageBreakAfter', 'after']
+            ].forEach(([property, direction]) => {
+                if (!!before[property] === !!after[property]) return;
+                details.push(changeDetail(
+                    `Page break ${after[property] ? 'added' : 'removed'} ${direction} this content`,
+                    after[property] ? 'add' : 'remove'
+                ));
+            });
             if (
                 originalEntry?.type === 'table'
                 && originalEntry.key !== currentEntry?.key
@@ -2757,7 +2877,9 @@
             return Array.from(root.querySelectorAll(
                 `${LAYOUT_DIFF_TEXT_SELECTOR},${LAYOUT_DIFF_OBJECT_SELECTOR}`
             )).filter((element) => {
-                if (element.matches('.kf-note-space')) return true;
+                if (element.matches('.kf-note-space,.kf-page-break,.kf-blank-page')) {
+                    return true;
+                }
                 if (element.matches('figure.kf-document-image,table')) {
                     return !element.parentElement?.closest?.('figure.kf-document-image,table');
                 }
@@ -2803,6 +2925,17 @@
                         type: 'space',
                         key: `[[space:${lines}]]`,
                         label: 'Writing space',
+                        element
+                    };
+                    entry.format = entryFormatState(element, entry.type);
+                    return entry;
+                }
+                if (element.matches('.kf-page-break,.kf-blank-page')) {
+                    const blank = element.classList.contains('kf-blank-page');
+                    const entry = {
+                        type: 'break',
+                        key: blank ? '[[blank-page]]' : '[[page-break]]',
+                        label: blank ? 'Blank page' : 'Page break',
                         element
                     };
                     entry.format = entryFormatState(element, entry.type);
@@ -3284,7 +3417,7 @@
 
             [originalRoot, currentRoot].forEach((root) => {
                 root.querySelectorAll(
-                    '.kf-page-break,.kf-page-label,.kf-chapter-marker'
+                    '.kf-page-label,.kf-chapter-marker'
                 ).forEach((element) => element.remove());
             });
             const originalLayoutEntries = layoutDiffEntries(originalRoot);
@@ -3831,8 +3964,8 @@
                 level = 'warn';
                 observation = 'Complex PDF reflowed — spot-check the preview.';
             } else if (out.formatLabel === 'PDF' && out.emptyPages?.length) {
-                level = 'warn';
-                observation = 'Scanned content detected — editable text may be limited.';
+                const count = out.emptyPages.length;
+                observation = `${count} blank source page${count === 1 ? '' : 's'} preserved.`;
             } else if (warnings.length) {
                 level = 'warn';
                 observation = 'Converted with a source issue to spot-check.';
@@ -3855,12 +3988,29 @@
             const mammoth = await waitForGlobal('mammoth');
             const warnings = [];
             let skippedImages = 0;
+            let docxInput = arrayBuffer;
+            let fidelityStats = null;
+            try {
+                const JSZipCtor = await waitForGlobal('JSZip');
+                const normalized = await prepareDocxForFidelity(arrayBuffer, { JSZipCtor });
+                docxInput = normalized.arrayBuffer;
+                fidelityStats = normalized.stats;
+            } catch (error) {
+                console.warn('[KoboForge] DOCX fidelity preprocessing', error);
+                warnings.push(
+                    'Some inherited Word formatting or paragraph-level page breaks could not be normalized.'
+                );
+            }
             // Accept normal camera-sized source images, then resize them to the
             // selected Kobo screen instead of dropping useful artwork up front.
             const MAX_SOURCE_IMAGE_B64 = Math.floor(12 * 1024 * 1024 * 1.37);
-            const convertOpts = { arrayBuffer };
+            const convertInput = { arrayBuffer: docxInput };
+            const convertOptions = {
+                styleMap: DOCX_FIDELITY_STYLE_MAP,
+                ignoreEmptyParagraphs: false
+            };
             if (mammoth.images?.imgElement) {
-                convertOpts.convertImage = mammoth.images.imgElement((image) =>
+                convertOptions.convertImage = mammoth.images.imgElement((image) =>
                     image.read('base64').then((b64) => {
                         if (!b64 || b64.length > MAX_SOURCE_IMAGE_B64) {
                             skippedImages += 1;
@@ -3876,7 +4026,7 @@
                     })
                 );
             }
-            const result = await mammoth.convertToHtml(convertOpts);
+            const result = await mammoth.convertToHtml(convertInput, convertOptions);
             const doc = new DOMParser().parseFromString(
                 stripInvalidXmlChars(result.value || ''),
                 'text/html'
@@ -3903,6 +4053,11 @@
             if (skippedImages > 0) {
                 warnings.push(
                     `Skipped ${skippedImages} unreadable or unusually large image(s). Keep each source image below 12 MB.`
+                );
+            }
+            if (fidelityStats?.paritySectionBreaks > 0) {
+                warnings.push(
+                    `${fidelityStats.paritySectionBreaks} odd/even Word section start(s) were preserved as hard page breaks; exact left/right parity can change when text reflows.`
                 );
             }
             if (optimized.failed > 0) {
@@ -4250,6 +4405,7 @@
 
             for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
                 const pageParts = [];
+                let sourcePageKind = '';
                 let pageLayout = {
                     startZone: 'top',
                     offsetLevel: 0,
@@ -4291,15 +4447,21 @@
                     }
 
                     if (!pageBlocks.length) {
-                        if (!pageImages.length) {
+                        const definitelyBlank = !!(
+                            operatorList
+                            && Array.isArray(operatorList.fnArray)
+                            && operatorList.fnArray.length === 0
+                        );
+                        if (!pageImages.length && !definitelyBlank) {
                             const renderedPage = await renderPdfPageAsImage(page);
                             if (renderedPage) pageImages = [renderedPage];
                         }
                         if (pageImages.length) {
                             imageOnlyPages.push(pageNumber);
+                            sourcePageKind = ' kf-pdf-image-page';
                         } else {
                             emptyPages.push(pageNumber);
-                            pageParts.push('<p class="preserve-structure"><em>(No extractable text or image could be recovered from this page.)</em></p>');
+                            sourcePageKind = ' kf-pdf-blank-page';
                         }
                     } else {
                         for (const block of pageBlocks) {
@@ -4400,7 +4562,7 @@
                 );
                 parts.push(
                     `<div class="kf-page-break" data-page="${pageNumber}"></div>`
-                    + `<section class="kf-pdf-page kf-page-v-${startZone} kf-page-offset-${offsetLevel}" data-source-page="${pageNumber}" data-pdf-top="${topPercent}">`
+                    + `<section class="kf-pdf-page kf-page-v-${startZone} kf-page-offset-${offsetLevel}${sourcePageKind}" data-source-page="${pageNumber}" data-pdf-top="${topPercent}">`
                     + `${pageParts.join('')}</section>`
                 );
                 setProgress(12 + (pageNumber / total) * 70, `PDF page ${pageNumber}/${total}`);
@@ -5678,13 +5840,20 @@
         }
 
         function plainTextToStructuredHtml(text) {
-            return text
-                .replace(/\r\n/g, '\n')
-                .split(/\n{2,}/)
-                .map((paragraph) => paragraph.trimEnd())
-                .filter(Boolean)
-                .map((paragraph) => `<p class="preserve-structure">${escapeHtml(paragraph)}</p>`)
-                .join('');
+            return String(text || '')
+                .replace(/\r\n?/g, '\n')
+                .split('\f')
+                .map((pageText) => (
+                    pageText
+                        .split(/\n{2,}/)
+                        .map((paragraph) => paragraph.trimEnd())
+                        .filter(Boolean)
+                        .map((paragraph) => (
+                            `<p class="preserve-structure">${escapeHtml(paragraph)}</p>`
+                        ))
+                        .join('')
+                ))
+                .join('<hr class="kf-page-break">');
         }
 
         function isMarkdownTableBlock(block) {
@@ -5746,9 +5915,19 @@
 
         function markdownLikeToHtml(text) {
             const preserve = preserveTablesEnabled();
-            const blocks = text.replace(/\r\n/g, '\n').split(/\n{2,}/).filter(Boolean);
+            const blocks = String(text || '')
+                .replace(/\r\n?/g, '\n')
+                .replace(/\f/g, '\n\n\\pagebreak\n\n')
+                .split(/\n{2,}/)
+                .filter(Boolean);
             return blocks.map((block) => {
                 const trimmed = block.trimEnd();
+                if (
+                    /^(?:\\(?:pagebreak|newpage)|<!--\s*pagebreak\s*-->)$/i
+                        .test(trimmed.trim())
+                ) {
+                    return '<hr class="kf-page-break">';
+                }
                 if (preserve && isMarkdownTableBlock(trimmed)) {
                     return markdownTableToHtml(trimmed);
                 }
@@ -5774,13 +5953,61 @@
                 return [{ id: 'ch1', title: bookTitle, html: bodyHtml }];
             }
 
+            // An attributed Word/editor wrapper can carry inherited typography
+            // across several H1 chapters. Split it into attribute-preserving
+            // sibling wrappers so each direct H1 remains a real spine boundary.
+            root.querySelectorAll('div').forEach((div) => {
+                if (
+                    div.attributes.length === 0
+                    || div.classList?.contains('kf-page-break')
+                    || div.classList?.contains('kf-blank-page')
+                    || div.classList?.contains('kf-page-label')
+                    || div.classList?.contains('kf-chapter-marker')
+                ) return;
+                const directHeadingCount = Array.from(div.children)
+                    .filter((child) => child.tagName === 'H1')
+                    .length;
+                if (!directHeadingCount) return;
+                const chunks = [];
+                let chunk = [];
+                Array.from(div.childNodes).forEach((child) => {
+                    const substantiveChunk = chunk.some((node) => (
+                        node.nodeType === 1
+                        || (node.nodeType === 3 && !!(node.nodeValue || '').trim())
+                    ));
+                    if (
+                        child.nodeType === 1
+                        && child.tagName === 'H1'
+                        && substantiveChunk
+                    ) {
+                        chunks.push(chunk);
+                        chunk = [];
+                    }
+                    chunk.push(child);
+                });
+                if (chunk.length) chunks.push(chunk);
+                if (chunks.length <= 1) return;
+                const fragment = doc.createDocumentFragment();
+                chunks.forEach((nodes) => {
+                    const wrapper = div.cloneNode(false);
+                    nodes.forEach((node) => wrapper.appendChild(node));
+                    fragment.appendChild(wrapper);
+                });
+                div.replaceWith(fragment);
+            });
+
             // Flatten contenteditable wrappers: unwrap bare <div> that only hold a heading/block
             root.querySelectorAll('div').forEach((div) => {
-                if (div.classList?.contains('kf-page-break') || div.classList?.contains('kf-page-label')
-                    || div.classList?.contains('kf-chapter-marker')) return;
+                if (
+                    div.classList?.contains('kf-page-break')
+                    || div.classList?.contains('kf-blank-page')
+                    || div.classList?.contains('kf-page-label')
+                    || div.classList?.contains('kf-chapter-marker')
+                ) return;
                 const onlyHeading = div.children.length === 1
                     && /^(H1|H2)$/.test(div.children[0].tagName)
-                    && !(div.textContent || '').replace(div.children[0].textContent || '', '').trim();
+                    && !(div.textContent || '').replace(div.children[0].textContent || '', '').trim()
+                    && div.attributes.length === 0;
                 if (onlyHeading) {
                     div.replaceWith(div.children[0]);
                 }
@@ -5810,22 +6037,61 @@
                             node.classList?.contains('kf-page-label')
                             || node.classList?.contains('kf-chapter-marker')
                             || node.classList?.contains('kf-page-break')
+                            || node.classList?.contains('kf-blank-page')
                         )) {
-                            if (node.classList.contains('kf-page-break')) {
+                            if (
+                                node.classList.contains('kf-page-break')
+                                || node.classList.contains('kf-blank-page')
+                            ) {
                                 buf.push(node.outerHTML);
                             }
                             continue;
                         }
-                        // Spine splits on H1 only — H2 section titles stay continuous
-                        if (tag === 'h1') {
-                            if (started || buf.length) flush();
-                            title = (node.textContent || '').trim() || `Chapter ${chapters.length + 1}`;
+                        const firstWrapperContent = tag === 'div'
+                            ? Array.from(node.childNodes).find((child) => (
+                                child.nodeType !== 8
+                                && !(
+                                    child.nodeType === 3
+                                    && !(child.nodeValue || '').trim()
+                                )
+                            ))
+                            : null;
+                        const wrappedH1 = firstWrapperContent?.nodeType === 1
+                            && firstWrapperContent.tagName === 'H1'
+                            ? firstWrapperContent
+                            : null;
+                        // Spine splits on H1 only — H2 section titles stay continuous.
+                        // Word/editor wrappers around a sole H1 stay intact.
+                        if (tag === 'h1' || wrappedH1) {
+                            const chapterHeading = wrappedH1 || node;
+                            let trailingBreaks = 0;
+                            while (buf.length && /class=["'][^"']*\bkf-(?:page-break|blank-page)\b/.test(buf[buf.length - 1])) {
+                                trailingBreaks += 1;
+                                buf.pop();
+                            }
+                            const hasPriorSpineContent = started || buf.length > 0;
+                            if (hasPriorSpineContent) flush();
+                            title = (chapterHeading.textContent || '').trim()
+                                || `Chapter ${chapters.length + 1}`;
                             started = true;
+                            // A spine boundary consumes one authored break. Any
+                            // additional boundary is an intentional blank page.
+                            const blankPages = Math.max(
+                                0,
+                                trailingBreaks - (hasPriorSpineContent ? 1 : 0)
+                            );
+                            for (let index = 0; index < blankPages; index += 1) {
+                                buf.push('<div class="kf-blank-page"></div>');
+                            }
                             buf.push(node.outerHTML);
                             continue;
                         }
                         // Contenteditable often wraps blocks in div — recurse if no direct semantic
-                        if (tag === 'div' && !node.classList?.contains('kobo-table')) {
+                        if (
+                            tag === 'div'
+                            && !node.classList?.contains('kobo-table')
+                            && node.attributes.length === 0
+                        ) {
                             const hasBlockChild = node.querySelector('h1, h2, h3, p, table, ul, ol');
                             if (hasBlockChild && node.children.length) {
                                 walk(node);
@@ -5873,19 +6139,34 @@
             const root = doc.getElementById('root');
             if (!root) return html || '';
 
-            root.querySelectorAll('.kf-page-break, .kf-page-label, .kf-chapter-marker').forEach((el) => el.remove());
+            root.querySelectorAll('.kf-page-label, .kf-chapter-marker').forEach((el) => el.remove());
 
             // convert preserve-structure paragraphs → normal flow + <br/>
             root.querySelectorAll('p.preserve-structure, pre').forEach((el) => {
                 const tag = el.tagName.toLowerCase();
                 if (tag === 'pre') {
                     const p = doc.createElement('p');
-                    const text = el.textContent || '';
-                    text.split(/\n/).forEach((line, i, arr) => {
-                        p.appendChild(doc.createTextNode(line));
-                        if (i < arr.length - 1) p.appendChild(doc.createElement('br'));
+                    Array.from(el.attributes).forEach((attribute) => {
+                        p.setAttribute(attribute.name, attribute.value);
                     });
+                    while (el.firstChild) p.appendChild(el.firstChild);
                     el.replaceWith(p);
+                    const walker = doc.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+                    const textNodes = [];
+                    while (walker.nextNode()) textNodes.push(walker.currentNode);
+                    textNodes.forEach((textNode) => {
+                        const value = textNode.nodeValue || '';
+                        if (!value.includes('\n')) return;
+                        const parts = value.split('\n');
+                        const fragment = doc.createDocumentFragment();
+                        parts.forEach((part, index) => {
+                            fragment.appendChild(doc.createTextNode(part));
+                            if (index < parts.length - 1) {
+                                fragment.appendChild(doc.createElement('br'));
+                            }
+                        });
+                        textNode.parentNode.replaceChild(fragment, textNode);
+                    });
                     return;
                 }
                 el.classList.remove('preserve-structure');
@@ -5915,7 +6196,10 @@
 
             // Drop empty paragraphs that only waste spine
             root.querySelectorAll('p').forEach((p) => {
-                if (!(p.textContent || '').trim() && !p.querySelector('img, br, table')) {
+                if (
+                    !(p.textContent || '').trim()
+                    && !p.querySelector('img, br, table, .kf-page-break, .kf-blank-page')
+                ) {
                     p.remove();
                 }
             });
@@ -5959,16 +6243,24 @@
         function ensureChapterTitle(html, title) {
             const trimmed = (html || '').trim();
             if (/^<h[12][\s>]/i.test(trimmed)) return trimmed;
-            // Also skip if first element (after optional whitespace/comments) is heading
             const doc = new DOMParser().parseFromString(`<div id="root">${trimmed}</div>`, 'text/html');
             const root = doc.getElementById('root');
             // PDF source pages already contain their original title/layout. Adding
             // a synthetic heading here would create a page absent from Edit.
             if (root?.firstElementChild?.classList?.contains('kf-pdf-page')) return trimmed;
-            const first = root?.querySelector?.('h1, h2, h3, p, table, ul, ol, blockquote, div');
-            if (first) {
+            // Leading blank-page markers may intentionally precede the chapter
+            // heading. Do not inject a duplicate title onto that blank page.
+            const first = Array.from(root?.childNodes || []).find((node) => {
+                if (node.nodeType === 8) return false;
+                if (node.nodeType === 3) return !!(node.nodeValue || '').trim();
+                return !node.classList?.contains('kf-page-break')
+                    && !node.classList?.contains('kf-blank-page');
+            });
+            if (first?.nodeType === 1) {
                 const tag = first.tagName.toLowerCase();
                 if (tag === 'h1' || tag === 'h2') return trimmed;
+                const wrappedHeading = first.querySelector?.(':scope > h1, :scope > h2');
+                if (wrappedHeading) return trimmed;
             }
             return `<h1>${escapeXml(title)}</h1>${trimmed}`;
         }
@@ -6242,6 +6534,9 @@
                 '.kf-pdf-page{display:block;box-sizing:border-box;width:100%;page-break-inside:auto;break-inside:auto;}',
                 '.kf-pdf-page::after{display:table;clear:both;content:"";}',
                 '.kf-pdf-page+.kf-pdf-page{margin-top:0;page-break-before:always;break-before:page;}',
+                '.kf-pdf-blank-page{height:0;page-break-after:always;break-after:page;}',
+                '.kf-pdf-image-page figure.kf-document-image{margin:0;page-break-inside:avoid;break-inside:avoid;}',
+                '.kf-pdf-image-page figure.kf-document-image img{display:block;width:auto !important;max-width:100%;max-height:90vh;margin:0 auto;}',
                 '.kf-page-offset-0{padding-top:0;}.kf-page-offset-1{padding-top:1.8em;}.kf-page-offset-2{padding-top:3.6em;}.kf-page-offset-3{padding-top:5.4em;}.kf-page-offset-4{padding-top:7.2em;}.kf-page-offset-5{padding-top:9em;}.kf-page-offset-6{padding-top:10.8em;}.kf-page-offset-7{padding-top:12.6em;}.kf-page-offset-8{padding-top:14.4em;}',
                 '.kf-align-left{text-align:left !important;}.kf-align-center{text-align:center !important;}.kf-align-right{text-align:right !important;}',
                 '.kf-user-vpos-top{margin-top:0 !important;}.kf-user-vpos-middle{margin-top:6em !important;}.kf-user-vpos-bottom{margin-top:12em !important;}',
@@ -6258,12 +6553,19 @@
                 'em,i{font-style:italic;}',
                 'u{text-decoration:underline;}',
                 's,strike,del{text-decoration:line-through;}',
+                '.kf-bold{font-weight:700 !important;}.kf-not-bold{font-weight:400 !important;}',
+                '.kf-italic{font-style:italic !important;}.kf-not-italic{font-style:normal !important;}',
+                '.kf-underline{text-decoration:underline !important;}.kf-strike{text-decoration:line-through !important;}.kf-underline.kf-strike{text-decoration:underline line-through !important;}.kf-no-decoration{text-decoration:none !important;}',
+                '.kf-page-break{display:block;height:0;margin:0;padding:0;border:0;page-break-before:always;break-before:page;}',
+                '.kf-break-before{page-break-before:always;break-before:page;}.kf-break-after{page-break-after:always;break-after:page;}',
+                'span.kf-break-before,span.kf-break-after{display:block;}',
+                '.kf-blank-page{display:block;height:0;margin:0;padding:0;border:0;page-break-after:always;break-after:page;}',
                 'blockquote{border-left:.25em solid #888;padding-left:1em;margin:0 0 1em;color:#333;}',
                 'ul,ol{margin:0 0 1em 1.2em;padding-left:0.4em;}li{margin:0.25em 0;}',
                 'table,table.kobo-table{width:100%;border-collapse:collapse;margin:1em 0;font-size:0.88em;page-break-inside:auto !important;}',
                 'thead,tbody,tr,th,td{page-break-inside:auto !important;}',
                 'th,td{border:1px solid #555;padding:5px 7px;text-align:left;vertical-align:top;}',
-                'th{font-weight:700;background:#eee;}',
+                'th{font-weight:inherit;background:#eee;}',
                 'code{font-family:monospace;font-size:0.92em;}',
                 'figure.kf-document-image{margin:1em 0;text-align:center;page-break-inside:auto;}',
                 'figure.kf-document-image.kf-image-inline-left,figure.kf-document-image.kf-image-inline-right{max-width:60%;margin-top:.25em;margin-bottom:.55em;}',
@@ -6279,10 +6581,12 @@
             const preparedBody = canonicalizeBody(bodyHtml, { forExport: true });
             const embeddedImages = extractEmbeddedImagesForEpub(preparedBody);
             const cleanBody = embeddedImages.html;
-            const imageFolder = oebps.folder('images');
-            embeddedImages.assets.forEach((asset) => {
-                imageFolder.file(asset.fileName, asset.bytes);
-            });
+            if (embeddedImages.assets.length) {
+                const imageFolder = oebps.folder('images');
+                embeddedImages.assets.forEach((asset) => {
+                    imageFolder.file(asset.fileName, asset.bytes);
+                });
+            }
             // Default path: ONE continuous spine item so Kobo page-turn works end-to-end.
             // Optional H1-only split when the user opts in.
             let chapters = splitChapters

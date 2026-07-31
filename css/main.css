@@ -381,10 +381,80 @@ body {
     content: "";
 }
 
+#deviceBookContent .kf-pdf-image-page {
+    height: var(--reader-page-height, 100%);
+    min-height: var(--reader-page-height, 100%);
+    overflow: hidden;
+}
+
+#deviceBookContent .kf-pdf-image-page figure.kf-document-image {
+    display: flex;
+    width: 100% !important;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+}
+
+#deviceBookContent .kf-pdf-image-page figure.kf-document-image img {
+    width: auto !important;
+    max-width: 100%;
+    max-height: 100%;
+    margin: 0 auto;
+}
+
 #deviceBookContent .kf-pdf-page + .kf-pdf-page {
     margin-top: 0;
     page-break-before: always;
     break-before: column;
+}
+
+#deviceBookContent .kf-page-break {
+    display: block;
+    width: 100%;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    break-before: column;
+    -webkit-column-break-before: always;
+}
+
+#deviceBookContent .kf-break-before {
+    break-before: column;
+    -webkit-column-break-before: always;
+}
+
+#deviceBookContent .kf-break-after {
+    break-after: column;
+    -webkit-column-break-after: always;
+}
+
+#deviceBookContent span.kf-break-before,
+#deviceBookContent span.kf-break-after {
+    display: block;
+}
+
+#deviceBookContent .kf-blank-page {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    break-after: column;
+    -webkit-column-break-after: always;
+}
+
+#deviceBookContent.kf-editing .kf-page-break {
+    position: relative;
+    outline: 1px dashed rgba(124, 45, 18, 0.24);
+    outline-offset: -1px;
+}
+
+#deviceBookContent.kf-editing .kf-blank-page {
+    outline: 1px dashed rgba(124, 45, 18, 0.18);
+    outline-offset: -1px;
 }
 
 #deviceBookContent .kf-page-offset-0 { padding-top: 0; }
@@ -538,6 +608,7 @@ body {
 #deviceBookContent td {
     padding: 0.3em 0.4em;
     border: 1px solid #555;
+    font-weight: inherit;
     text-align: left;
     vertical-align: top;
 }
@@ -620,6 +691,16 @@ body {
 #deviceBookContent em, #deviceBookContent i { font-style: italic; }
 #deviceBookContent u { text-decoration: underline; }
 #deviceBookContent s, #deviceBookContent strike { text-decoration: line-through; }
+#deviceBookContent .kf-bold { font-weight: 700 !important; }
+#deviceBookContent .kf-not-bold { font-weight: 400 !important; }
+#deviceBookContent .kf-italic { font-style: italic !important; }
+#deviceBookContent .kf-not-italic { font-style: normal !important; }
+#deviceBookContent .kf-underline { text-decoration: underline !important; }
+#deviceBookContent .kf-strike { text-decoration: line-through !important; }
+#deviceBookContent .kf-underline.kf-strike {
+    text-decoration: underline line-through !important;
+}
+#deviceBookContent .kf-no-decoration { text-decoration: none !important; }
 #deviceBookContent sub { font-size: 0.75em; vertical-align: sub; }
 #deviceBookContent sup { font-size: 0.75em; vertical-align: super; }
 

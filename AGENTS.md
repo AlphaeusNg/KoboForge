@@ -18,9 +18,11 @@ direct editing in paginated Kobo device previews, and EPUB packaging.
 index.html
 css/main.css
 js/app.js
+js/document-fidelity.js
 js/boot.js
 js/version.js
 tools/test_logic.mjs
+tools/test_document_fidelity.mjs
 ```
 
 ## Conventions
@@ -37,8 +39,10 @@ tools/test_logic.mjs
 
 ```bash
 node --check js/app.js
+node --check js/document-fidelity.js
 node --check js/version.js
-node tools/test_logic.mjs
+npm install
+npm test
 python3 -m http.server 8000
 ```
 
