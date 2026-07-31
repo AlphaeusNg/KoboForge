@@ -21,15 +21,15 @@ before exporting a Kobo-friendly EPUB.
   layout changes
 - Compact icon-only phone controls with hover/tap labels, separate horizontally
   scrollable text/table rows, and pinned page arrows beside them
-- Images can be dropped or pasted directly into the Kobo page and are
-  automatically resized without changing their aspect ratio
+- Images can be dropped or pasted directly into the Kobo page, selected,
+  resized, wrapped, cut/copied, and dragged to a new document position
 - Aspect-ratio-aware image defaults sized to the selected Kobo and the remaining
   space on the detected PDF source page
 - Compact conversion summary with three facts and one high-level observation
 - Locked edit pagination: deletion reflows later paragraphs without viewport drift
-- Left/center/right and top/middle/bottom placement, font sizing, Word-style
-  Tab behavior, Google-Docs-style 1×1 through 5×5 table insertion, and HTML
-  source mode
+- Left/center/right text alignment, table-cell top/middle/bottom alignment that
+  preserves row height, font sizing, Word-style Tab behavior, Google-Docs-style
+  1×1 through 5×5 table insertion, and HTML source mode
 - DOCX image extraction and automatic Kobo-targeted resizing/tone mapping
 - Authored DOCX page breaks, paragraph/section breaks, and inherited Word
   bold/italic styles preserved through preview and EPUB export

@@ -513,10 +513,9 @@ assert.ok(page.includes('extractPdfPageImages(page') && page.includes('renderPdf
 assert.ok(page.includes('retargetCurrentDocumentImages') && page.includes('data-kf-image-id'),
     'changing the selected Kobo re-targets imported images');
 assert.ok(
-    !html.includes('id="imageEditControls"')
-        && !html.includes('id="imageSizeRange"')
-        && html.includes('drop or paste it directly onto the Kobo page'),
-    'image insertion stays a minor automatic function instead of a dedicated toolbar'
+    html.includes('Drop or paste images onto the Kobo page')
+        && !html.includes('id="insertImageBtn"'),
+    'image insertion remains direct-to-page while selected-image editing is available'
 );
 assert.ok(
     html.includes('data-toolbar-row="text"')
@@ -545,8 +544,8 @@ assert.ok(
 );
 assert.ok(
     styles.includes('#deviceBookContent.kf-image-drop-active')
-        && !styles.includes('img.kf-image-selected'),
-    'image dropping has lightweight feedback without persistent image-edit chrome'
+        && styles.includes('img.kf-image-selected'),
+    'image dropping and selected-image feedback are both visible on the Kobo page'
 );
 assert.ok(page.includes('images/${asset.fileName}') && page.includes('imageManifestItems'),
     'EPUB packages converted images as manifest assets');
@@ -621,6 +620,11 @@ assert.ok(
 assert.ok(page.includes('function jumpToChange'), 'clickable jump to change');
 assert.ok(page.includes('function refreshDiffLive'), 'live track-changes refresh while typing');
 assert.ok(
+    !html.includes('id="diffRefreshBtn"')
+        && !page.includes("getElementById('diffRefreshBtn')"),
+    'Diff refresh is live-only and exposes no redundant manual refresh control'
+);
+assert.ok(
     page.includes("const isDeviceSurface = isEdit || isDiff")
         && page.includes("deviceBookContent.contentEditable = editMode === 'edit'"),
     'Edit and Diff reuse the paginated Kobo device surface'
@@ -646,6 +650,22 @@ assert.ok(page.includes('data-vpos="top"')
     && page.includes('data-vpos="middle"')
     && page.includes('data-vpos="bottom"'),
     'vertical placement controls');
+const objectToolbarAt = html.indexOf('data-toolbar-row="objects"');
+const insertTableAt = html.indexOf('id="insertTableBtn"');
+const topCellAlignAt = html.indexOf('data-vpos="top"');
+assert.ok(
+    objectToolbarAt >= 0
+        && insertTableAt > objectToolbarAt
+        && topCellAlignAt > insertTableAt,
+    'table cell top/middle/bottom controls share the table-edit row'
+);
+assert.ok(
+    page.includes('function selectedTableCells')
+        && page.includes('cell.style.removeProperty(\'vertical-align\')')
+        && styles.includes('td.kf-user-vpos-middle { vertical-align: middle !important; }')
+        && !styles.includes('.kf-user-vpos-middle { margin-top:'),
+    'table cell placement changes vertical alignment without growing row height'
+);
 assert.ok(page.includes('data-font-step="1"') && page.includes('changeSelectedFontSize'),
     'block font-size controls');
 assert.ok(html.includes('class="icon-sprite"')
@@ -685,12 +705,16 @@ assert.ok(
     'table insertion uses a dynamic keyboard/touch 1–5 row and column picker'
 );
 assert.ok(
-    !html.includes('data-image-layout="block"')
-        && page.includes('function normalizedImageLayout')
-        && page.includes("data-kf-layout=\"${imageLayout}\"")
-        && styles.includes('figure.kf-document-image.kf-image-inline-left')
-        && styles.includes('float: right'),
-    'the converter chooses block or wrapped image layout without exposing manual controls'
+    html.includes('id="imageEditControls"')
+        && html.includes('data-image-layout="block"')
+        && html.includes('id="imageSizeRange"')
+        && page.includes('function selectEditableImage')
+        && page.includes('function moveEditableImageToPoint')
+        && page.includes("previewEl.addEventListener('dragstart'")
+        && page.includes("event.dataTransfer.effectAllowed = 'move'")
+        && styles.includes('img.kf-image-selected')
+        && styles.includes('cursor: grab'),
+    'images can be selected, resized, positioned, and freely dragged within the Kobo page'
 );
 assert.ok(
     page.includes('function imageWidthForPageFit')

@@ -51,7 +51,14 @@
         <symbol id="icon-font-plus" viewBox="0 0 24 24"><path d="m3 19 5-14 5 14"/><path d="M5 14h6"/><path d="M18 13v6"/><path d="M15 16h6"/></symbol>
         <symbol id="icon-font-reset" viewBox="0 0 24 24"><path d="m3 19 4.5-14L12 19"/><path d="M5 14h5"/><path d="M15 8a5 5 0 1 1-1 7"/><path d="M14 5v4h4"/></symbol>
         <symbol id="icon-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M9 4v16"/><path d="M15 4v16"/></symbol>
-        <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2 5"/><path d="M20 4v7h-7"/></symbol>
+        <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 20"/></symbol>
+        <symbol id="icon-image-block" viewBox="0 0 24 24"><path d="M3 4h18M3 20h18"/><rect x="6" y="7" width="12" height="10" rx="1.5"/><circle cx="10" cy="11" r="1.25"/><path d="m18 15-3.5-3.5L9 17"/></symbol>
+        <symbol id="icon-image-inline-left" viewBox="0 0 24 24"><rect x="3" y="4" width="8" height="8" rx="1.25"/><circle cx="6" cy="7" r="1"/><path d="m11 10-2.5-2.5L4 12M14 5h7M14 9h7M3 16h18M3 20h18"/></symbol>
+        <symbol id="icon-image-inline-right" viewBox="0 0 24 24"><rect x="13" y="4" width="8" height="8" rx="1.25"/><circle cx="16" cy="7" r="1"/><path d="m21 10-2.5-2.5L14 12M3 5h7M3 9h7M3 16h18M3 20h18"/></symbol>
+        <symbol id="icon-cut" viewBox="0 0 24 24"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="m8.7 8.3 10.8 6.2"/><path d="m8.7 15.7 10.8-6.2"/></symbol>
+        <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+        <symbol id="icon-paste" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></symbol>
+        <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
         <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
         <symbol id="icon-back" viewBox="0 0 24 24"><path d="m9 18-6-6 6-6"/><path d="M3 12h12a6 6 0 0 1 6 6v1"/></symbol>
     </svg>
@@ -298,22 +305,36 @@
                                     <button type="button" data-align="center" class="tb-btn" title="Align center" data-tooltip="Align center" aria-label="Align center"><svg class="ui-icon" aria-hidden="true"><use href="#icon-align-center"></use></svg></button>
                                     <button type="button" data-align="right" class="tb-btn" title="Align right" data-tooltip="Align right" aria-label="Align right"><svg class="ui-icon" aria-hidden="true"><use href="#icon-align-right"></use></svg></button>
                                 </div>
-                                <div class="tb-row" role="group" aria-label="Vertical placement and font size">
-                                    <button type="button" data-vpos="top" class="tb-btn" title="Place near top" data-tooltip="Place near top" aria-label="Place near top"><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-top"></use></svg></button>
-                                    <button type="button" data-vpos="middle" class="tb-btn" title="Place near middle" data-tooltip="Place near middle" aria-label="Place near middle"><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-middle"></use></svg></button>
-                                    <button type="button" data-vpos="bottom" class="tb-btn" title="Place near bottom" data-tooltip="Place near bottom" aria-label="Place near bottom"><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-bottom"></use></svg></button>
+                                <div class="tb-row" role="group" aria-label="Font size">
                                     <button type="button" data-font-step="-1" class="tb-btn" title="Decrease font size" data-tooltip="Decrease font size" aria-label="Decrease font size"><svg class="ui-icon" aria-hidden="true"><use href="#icon-font-minus"></use></svg></button>
                                     <button type="button" data-font-step="1" class="tb-btn" title="Increase font size" data-tooltip="Increase font size" aria-label="Increase font size"><svg class="ui-icon" aria-hidden="true"><use href="#icon-font-plus"></use></svg></button>
                                     <button type="button" data-font-step="0" class="tb-btn" title="Reset font size" data-tooltip="Reset font size" aria-label="Reset font size"><svg class="ui-icon" aria-hidden="true"><use href="#icon-font-reset"></use></svg></button>
                                 </div>
                                 </div>
-                                <div class="tb-lane" tabindex="0" data-toolbar-row="objects" aria-label="Table editing controls">
-                                <div class="tb-row" role="group" aria-label="Insert content">
+                                <div class="tb-lane" tabindex="0" data-toolbar-row="objects" aria-label="Image and table editing controls; scroll horizontally">
+                                <div id="imageEditControls" class="tb-row hidden" role="group" aria-label="Selected image">
+                                    <button type="button" id="imageCutBtn" class="tb-btn" title="Cut image" data-tooltip="Cut image" aria-label="Cut selected image" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-cut"></use></svg></button>
+                                    <button type="button" id="imageCopyBtn" class="tb-btn" title="Copy image" data-tooltip="Copy image" aria-label="Copy selected image" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-copy"></use></svg></button>
+                                    <button type="button" id="imagePasteBtn" class="tb-btn" title="Paste image" data-tooltip="Paste image" aria-label="Paste copied image" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-paste"></use></svg></button>
+                                    <button type="button" id="imageDeleteBtn" class="tb-btn" title="Delete image" data-tooltip="Delete image" aria-label="Delete selected image" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg></button>
+                                    <button type="button" class="tb-btn image-layout-btn" data-image-layout="block" title="Image on its own row" data-tooltip="Image on its own row" aria-label="Place image on its own row"><svg class="ui-icon" aria-hidden="true"><use href="#icon-image-block"></use></svg></button>
+                                    <button type="button" class="tb-btn image-layout-btn" data-image-layout="inline-left" title="Inline image left" data-tooltip="Inline image left" aria-label="Inline image left so text shares its rows"><svg class="ui-icon" aria-hidden="true"><use href="#icon-image-inline-left"></use></svg></button>
+                                    <button type="button" class="tb-btn image-layout-btn" data-image-layout="inline-right" title="Inline image right" data-tooltip="Inline image right" aria-label="Inline image right so text shares its rows"><svg class="ui-icon" aria-hidden="true"><use href="#icon-image-inline-right"></use></svg></button>
+                                    <label id="imageSizeControl" class="image-size-control hidden" title="Resize image" data-tooltip="Resize image">
+                                        <svg class="ui-icon" aria-hidden="true"><use href="#icon-image"></use></svg>
+                                        <input id="imageSizeRange" type="range" min="25" max="100" step="5" value="100" aria-label="Selected image width">
+                                        <output id="imageSizeValue" for="imageSizeRange">100%</output>
+                                    </label>
+                                </div>
+                                <div class="tb-row" role="group" aria-label="Table cell placement and insertion">
                                     <button type="button" id="insertTableBtn" class="tb-btn" title="Insert table" data-tooltip="Insert table" aria-label="Choose table rows and columns" aria-haspopup="dialog" aria-expanded="false" aria-controls="tablePicker"><svg class="ui-icon" aria-hidden="true"><use href="#icon-table"></use></svg></button>
+                                    <button type="button" data-vpos="top" class="tb-btn" title="Align cell content to top" data-tooltip="Cell content: top" aria-label="Align selected table cell content to top" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-top"></use></svg></button>
+                                    <button type="button" data-vpos="middle" class="tb-btn" title="Align cell content to middle" data-tooltip="Cell content: middle" aria-label="Align selected table cell content to middle" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-middle"></use></svg></button>
+                                    <button type="button" data-vpos="bottom" class="tb-btn" title="Align cell content to bottom" data-tooltip="Cell content: bottom" aria-label="Align selected table cell content to bottom" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-place-bottom"></use></svg></button>
                                 </div>
                                 </div>
                             </div>
-                            <p class="image-drop-hint">To add an image, drop or paste it directly onto the Kobo page. It is sized automatically.</p>
+                            <p class="image-drop-hint">Drop or paste images onto the Kobo page. Select one to resize, position, or drag it to a new location.</p>
                         </div>
                         <div class="preview-page-nav" role="group" aria-label="Page navigation">
                             <button type="button" id="devicePagePrev" class="preview-page-arrow" title="Previous page" data-tooltip="Previous page" aria-label="Previous page" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button>
@@ -346,12 +367,11 @@
                 </div>
 
                 <div id="diffPanel" class="mt-4 hidden rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
                         <div>
                             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#C9A227]">Edit history</div>
                             <p id="diffSummary" class="mt-1 text-xs text-slate-400">Every text, formatting, object, and placement change appears here. Click a row to jump.</p>
                         </div>
-                        <button type="button" id="diffRefreshBtn" class="icon-control border border-white/15 bg-white/5 text-slate-300" title="Update diff" data-tooltip="Update diff" aria-label="Update diff"><svg class="ui-icon" aria-hidden="true"><use href="#icon-refresh"></use></svg></button>
                     </div>
                     <div id="diffBody" class="mt-3 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/50 p-2" aria-live="polite"></div>
                 </div>

@@ -475,10 +475,6 @@ body {
 #deviceBookContent .kf-align-center { text-align: center !important; }
 #deviceBookContent .kf-align-right { text-align: right !important; }
 
-#deviceBookContent .kf-user-vpos-top { margin-top: 0 !important; }
-#deviceBookContent .kf-user-vpos-middle { margin-top: 6em !important; }
-#deviceBookContent .kf-user-vpos-bottom { margin-top: 12em !important; }
-
 #deviceBookContent .kf-user-size-75 { font-size: 0.75em !important; }
 #deviceBookContent .kf-user-size-88 { font-size: 0.88em !important; }
 #deviceBookContent .kf-user-size-100 { font-size: 1em !important; }
@@ -613,6 +609,13 @@ body {
     vertical-align: top;
 }
 
+#deviceBookContent th.kf-user-vpos-top,
+#deviceBookContent td.kf-user-vpos-top { vertical-align: top !important; }
+#deviceBookContent th.kf-user-vpos-middle,
+#deviceBookContent td.kf-user-vpos-middle { vertical-align: middle !important; }
+#deviceBookContent th.kf-user-vpos-bottom,
+#deviceBookContent td.kf-user-vpos-bottom { vertical-align: bottom !important; }
+
 #deviceBookContent img {
     display: block;
     max-width: 100%;
@@ -620,6 +623,33 @@ body {
     height: auto;
     margin: 0.75em auto;
     object-fit: contain;
+}
+
+#deviceBookContent.kf-editing img.kf-editable-image {
+    cursor: grab;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-drag: element;
+}
+
+#deviceBookContent.kf-editing img.kf-editable-image:active,
+#deviceBookContent.kf-editing img.kf-image-dragging {
+    cursor: grabbing;
+}
+
+#deviceBookContent.kf-editing img.kf-editable-image:hover,
+#deviceBookContent.kf-editing img.kf-editable-image:focus-visible,
+#deviceBookContent.kf-editing img.kf-image-selected {
+    outline: max(1px, 0.12em) solid #9b7613;
+    outline-offset: max(1px, 0.12em);
+}
+
+#deviceBookContent.kf-editing img.kf-image-selected {
+    box-shadow: 0 0 0 max(2px, 0.25em) rgba(201, 162, 39, 0.2);
+}
+
+#deviceBookContent.kf-editing img.kf-image-dragging {
+    opacity: 0.58;
 }
 
 #deviceBookContent.kf-image-drop-active {
@@ -799,6 +829,45 @@ body {
     opacity: 0.3;
 }
 
+.image-size-control {
+    display: flex;
+    width: 8.2rem;
+    height: 1.9rem;
+    flex: none;
+    align-items: center;
+    gap: 0.28rem;
+    padding: 0 0.4rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0.55rem;
+    background: rgba(255, 255, 255, 0.05);
+    color: #cbd5e1;
+}
+
+#imageEditControls.hidden,
+#imageSizeControl.hidden {
+    display: none;
+}
+
+.image-size-control .ui-icon {
+    width: 0.85rem;
+    height: 0.85rem;
+    flex: none;
+}
+
+.image-size-control input {
+    width: 4rem;
+    min-width: 0;
+    accent-color: #C9A227;
+}
+
+.image-size-control output {
+    min-width: 2.1rem;
+    color: #cbd5e1;
+    font-size: 0.62rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
 .image-drop-hint {
     margin: 0.35rem 0 0;
     color: #64748b;
@@ -921,6 +990,16 @@ body {
         width: 1.72rem;
         height: 1.72rem;
         border-radius: 0.45rem;
+    }
+
+    .image-size-control {
+        width: 7.4rem;
+        height: 1.72rem;
+        border-radius: 0.45rem;
+    }
+
+    .image-size-control input {
+        width: 3.3rem;
     }
 
     .table-picker-grid {
