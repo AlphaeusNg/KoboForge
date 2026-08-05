@@ -1183,3 +1183,136 @@ export function normalizeCssTypography(root, doc) {
         if (!element.getAttribute('style')?.trim()) element.removeAttribute('style');
     });
 }
+
+/** Verse numbers in sermon outlines: 1–3 digits, optional letter (e.g. 12a). */
+const VERSE_NUMBER_RE = /^\d{1,3}[a-zA-Z]?$/;
+const LEADING_PLAIN_VERSE_RE = /^(\d{1,3}[a-zA-Z]?)([.\u00a0\s]+)(?=[“"A-Za-z(])/;
+
+function verseNumberFromText(value) {
+    const trimmed = String(value || '').replace(/\u00a0/g, ' ').trim();
+    return VERSE_NUMBER_RE.test(trimmed) ? trimmed : '';
+}
+
+function createVerseMarker(doc, number, { bold = false } = {}) {
+    const sup = doc.createElement('sup');
+    sup.className = 'kf-verse-num';
+    sup.setAttribute('data-kf-verse', number);
+    if (bold) {
+        const strong = doc.createElement('strong');
+        strong.textContent = number;
+        sup.appendChild(strong);
+    } else {
+        sup.textContent = number;
+    }
+    return sup;
+}
+
+function unwrapIfOnlyWhitespace(node) {
+    if (!node || node.nodeType !== 1) return;
+    if ((node.textContent || '').trim()) return;
+    if (node.querySelector?.('img, br, table, .kf-page-break, .kf-blank-page, .kf-verse-num')) {
+        return;
+    }
+    node.remove();
+}
+
+/**
+ * Normalize Bible verse markers for sermon-outline EPUBs:
+ * - Word/mammoth superscript (and subscript) digits → <sup class="kf-verse-num">
+ * - Collapse <strong><sup>33 </sup></strong> into a single marker + trailing space
+ * - Promote plain leading "13 The Lord…" numbers only when they look like verse starts
+ * Does not invent markers for outline labels like "1. God goes…" or "13:25-33".
+ */
+export function normalizeBibleVerseMarkers(root, doc) {
+    if (!root || !doc) return { markers: 0, promoted: 0 };
+
+    let markers = 0;
+    let promoted = 0;
+
+    // 1) Explicit super/subscript digits from Word (mammoth → <sup>/<sub>).
+    Array.from(root.querySelectorAll('sup, sub')).forEach((el) => {
+        if (el.classList?.contains('kf-verse-num')) {
+            markers += 1;
+            return;
+        }
+        const number = verseNumberFromText(el.textContent);
+        if (!number) return;
+
+        const bold = !!(
+            el.closest('strong, b')
+            || el.querySelector('strong, b')
+        );
+        const marker = createVerseMarker(doc, number, { bold });
+        const parent = el.parentElement;
+        el.replaceWith(marker);
+        // Collapse <strong><sup class="kf-verse-num">…</sup></strong> when the
+        // strong wrapper only held the verse marker.
+        if (
+            parent
+            && parent.matches?.('strong, b')
+            && Array.from(parent.childNodes).every((child) => (
+                child === marker
+                || (child.nodeType === 3 && !(child.nodeValue || '').trim())
+            ))
+        ) {
+            parent.replaceWith(marker);
+        }
+        // Keep a separating space after the marker so prose never glues to "33And".
+        const next = marker.nextSibling;
+        if (next && next.nodeType === 3) {
+            if (next.nodeValue && !/^\s/.test(next.nodeValue)) {
+                next.nodeValue = ` ${next.nodeValue}`;
+            }
+        } else if (next && next.nodeType === 1) {
+            marker.after(doc.createTextNode(' '));
+        }
+        markers += 1;
+    });
+
+    // 2) Plain leading verse numbers: "33 And your children…" (not "1. Outline" / "13:1-3").
+    const blocks = root.querySelectorAll('p, li, td, th, blockquote');
+    blocks.forEach((block) => {
+        // Walk first meaningful text node in the block
+        const showText = doc.defaultView?.NodeFilter?.SHOW_TEXT
+            ?? globalThis.NodeFilter?.SHOW_TEXT
+            ?? 4;
+        const walker = doc.createTreeWalker(block, showText);
+        let textNode = walker.nextNode();
+        while (textNode) {
+            const parent = textNode.parentElement;
+            if (parent?.closest?.('sup, sub, .kf-verse-num, h1, h2, h3, h4, h5, h6')) {
+                textNode = walker.nextNode();
+                continue;
+            }
+            const value = textNode.nodeValue || '';
+            if (!value.trim()) {
+                textNode = walker.nextNode();
+                continue;
+            }
+            // Skip outline-style "1. Title" / "2) Title"
+            if (/^\d{1,3}[.)]\s+\S/.test(value.trim())) return;
+            // Skip bare scripture refs "13:1-3" or "Numbers 13:1"
+            if (/^\d{1,3}:\d/.test(value.trim())) return;
+
+            const match = LEADING_PLAIN_VERSE_RE.exec(value);
+            if (!match) return;
+
+            const number = match[1];
+            const rest = value.slice(match[0].length);
+            const bold = !!(parent?.closest?.('strong, b'));
+            const marker = createVerseMarker(doc, number, { bold });
+            const frag = doc.createDocumentFragment();
+            frag.appendChild(marker);
+            frag.appendChild(doc.createTextNode(` ${rest}`));
+            textNode.parentNode.replaceChild(frag, textNode);
+            promoted += 1;
+            markers += 1;
+            return;
+        }
+    });
+
+    // 3) Clean empty strong wrappers left behind.
+    root.querySelectorAll('strong, b').forEach(unwrapIfOnlyWhitespace);
+
+    return { markers, promoted };
+}

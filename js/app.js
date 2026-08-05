@@ -8,6 +8,7 @@
         );
         const {
             DOCX_FIDELITY_STYLE_MAP,
+            normalizeBibleVerseMarkers,
             normalizeCssTypography,
             normalizeHtmlPageBreaks,
             prepareDocxForFidelity
@@ -1711,10 +1712,15 @@
         }
 
         function applyHorizontalAlignment(alignment) {
-            if (!canFormatNow() || !['left', 'center', 'right'].includes(alignment)) return;
+            if (!canFormatNow() || !['left', 'center', 'right', 'justify'].includes(alignment)) return;
             const blocks = selectedEditableBlocks();
             blocks.forEach((block) => {
-                block.classList.remove('kf-align-left', 'kf-align-center', 'kf-align-right');
+                block.classList.remove(
+                    'kf-align-left',
+                    'kf-align-center',
+                    'kf-align-right',
+                    'kf-align-justify'
+                );
                 block.classList.add(`kf-align-${alignment}`);
                 block.style.removeProperty('text-align');
                 block.setAttribute('data-kf-align', alignment);
@@ -2664,16 +2670,27 @@
                 }
             });
 
-            root.querySelectorAll('[data-kf-align], .kf-align-left, .kf-align-center, .kf-align-right').forEach((block) => {
+            root.querySelectorAll(
+                '[data-kf-align], .kf-align-left, .kf-align-center, .kf-align-right, .kf-align-justify'
+            ).forEach((block) => {
                 const alignment = block.getAttribute('data-kf-align')
                     || (block.classList.contains('kf-align-center') ? 'center'
-                        : block.classList.contains('kf-align-right') ? 'right' : 'left');
-                block.classList.remove('kf-align-left', 'kf-align-center', 'kf-align-right');
+                        : block.classList.contains('kf-align-right') ? 'right'
+                            : block.classList.contains('kf-align-justify') ? 'justify' : 'left');
+                block.classList.remove(
+                    'kf-align-left',
+                    'kf-align-center',
+                    'kf-align-right',
+                    'kf-align-justify'
+                );
                 block.classList.add(`kf-align-${alignment}`);
                 block.style.removeProperty('text-align');
                 if (forExport) block.removeAttribute('data-kf-align');
                 else block.setAttribute('data-kf-align', alignment);
             });
+
+            // Sermon outlines: keep verse numbers as stable <sup class="kf-verse-num">.
+            normalizeBibleVerseMarkers(root, doc);
 
             root.querySelectorAll('[data-kf-vpos], [class*="kf-user-vpos-"]').forEach((block) => {
                 const position = block.getAttribute('data-kf-vpos')
@@ -2737,7 +2754,7 @@
                 const safeClasses = Array.from(table.classList).filter((name) => (
                     name === 'kf-user-table'
                     || name === 'kf-pdf-block'
-                    || /^kf-align-(left|center|right)$/.test(name)
+                    || /^kf-align-(left|center|right|justify)$/.test(name)
                     || /^kf-user-vpos-(top|middle|bottom)$/.test(name)
                     || /^kf-user-size-(75|88|100|112|125|150|175)$/.test(name)
                     || name === 'kf-break-before'
@@ -2747,7 +2764,7 @@
                 table.setAttribute('class', ['kobo-table', ...safeClasses].join(' '));
                 table.querySelectorAll('th, td').forEach((cell) => {
                     const cellClasses = Array.from(cell.classList).filter((name) => (
-                        /^kf-align-(left|center|right)$/.test(name)
+                        /^kf-align-(left|center|right|justify)$/.test(name)
                         || /^kf-user-vpos-(top|middle|bottom)$/.test(name)
                         || name === 'kf-break-before'
                         || name === 'kf-break-after'
@@ -4421,6 +4438,9 @@
                 stripInvalidXmlChars(result.value || ''),
                 'text/html'
             );
+            // Normalize Word superscript/subscript verse numbers before image work
+            // so later export/canonicalize keeps full verse prose after markers.
+            normalizeBibleVerseMarkers(doc.body, doc);
             // Drop empty/broken img tags from oversized images so EPUB XHTML stays valid
             doc.body.querySelectorAll('img').forEach((img) => {
                 const src = img.getAttribute('src') || '';
@@ -6928,7 +6948,11 @@
                 '.kf-pdf-image-page figure.kf-document-image{margin:0;page-break-inside:avoid;break-inside:avoid;}',
                 '.kf-pdf-image-page figure.kf-document-image img{display:block;width:auto !important;max-width:100%;max-height:90vh;margin:0 auto;}',
                 '.kf-page-offset-0{padding-top:0;}.kf-page-offset-1{padding-top:1.8em;}.kf-page-offset-2{padding-top:3.6em;}.kf-page-offset-3{padding-top:5.4em;}.kf-page-offset-4{padding-top:7.2em;}.kf-page-offset-5{padding-top:9em;}.kf-page-offset-6{padding-top:10.8em;}.kf-page-offset-7{padding-top:12.6em;}.kf-page-offset-8{padding-top:14.4em;}',
-                '.kf-align-left{text-align:left !important;}.kf-align-center{text-align:center !important;}.kf-align-right{text-align:right !important;}',
+                '.kf-align-left{text-align:left !important;}.kf-align-center{text-align:center !important;}.kf-align-right{text-align:right !important;}.kf-align-justify{text-align:justify !important;}',
+                'sup,sub{font-size:.75em;line-height:1;}',
+                'sup,.kf-verse-num{vertical-align:super;}',
+                'sub{vertical-align:sub;}',
+                'sup.kf-verse-num{font-weight:700;font-size:.72em;margin-right:.12em;white-space:nowrap;}',
                 '.kf-user-size-75{font-size:.75em !important;}.kf-user-size-88{font-size:.88em !important;}.kf-user-size-100{font-size:1em !important;}.kf-user-size-112{font-size:1.12em !important;}.kf-user-size-125{font-size:1.25em !important;}.kf-user-size-150{font-size:1.5em !important;}.kf-user-size-175{font-size:1.75em !important;}',
                 '.kf-tab{display:inline-block;width:2.5em;min-height:1em;vertical-align:baseline;}',
                 '.kf-pdf-line{display:inline;box-sizing:border-box;max-width:100%;}',

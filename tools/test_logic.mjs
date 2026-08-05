@@ -644,8 +644,12 @@ assert.ok(page.includes("previewEl.addEventListener('beforeinput'")
     'content deletion must keep the active Kobo page transform and hidden viewport locked');
 assert.ok(page.includes('data-align="left"')
     && page.includes('data-align="center"')
-    && page.includes('data-align="right"'),
-    'horizontal placement controls');
+    && page.includes('data-align="right"')
+    && page.includes('data-align="justify"'),
+    'horizontal placement controls include justify');
+assert.ok(page.includes('icon-align-justify')
+    && page.includes("['left', 'center', 'right', 'justify']"),
+    'justify alignment is wired in toolbar and applyHorizontalAlignment');
 assert.ok(page.includes('data-vpos="top"')
     && page.includes('data-vpos="middle"')
     && page.includes('data-vpos="bottom"'),

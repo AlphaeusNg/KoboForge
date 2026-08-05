@@ -18,11 +18,12 @@ direct editing in paginated Kobo device previews, and EPUB packaging.
 index.html
 css/main.css
 js/app.js
-js/document-fidelity.js
+js/document-fidelity.js   # DOCX fidelity + Bible verse marker normalize
 js/boot.js
 js/version.js
 tools/test_logic.mjs
 tools/test_document_fidelity.mjs
+tools/fixtures/           # slim DOCX fixtures (sermon outlines)
 ```
 
 ## Conventions
@@ -32,6 +33,9 @@ tools/test_document_fidelity.mjs
 - Default to Kobo Libra Colour.
 - Preserve the same paginated Kobo surface between Edit and Diff.
 - Package embedded images as EPUB manifest assets, never unresolved data URLs.
+- Horizontal alignment supports left/center/right/**justify**.
+- Sermon-outline verse numbers: Word super/subscript (and plain leading digits)
+  normalize to `<sup class="kf-verse-num">` and must never drop following prose.
 - Bump `js/version.js` for every deployment using `YYYY.MM.DD.N`.
 - GitHub Pages serves the repository root from `main`.
 

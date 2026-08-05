@@ -8,10 +8,14 @@ import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import {
     DOCX_FIDELITY_STYLE_MAP,
+    normalizeBibleVerseMarkers,
     normalizeCssTypography,
     normalizeHtmlPageBreaks,
     prepareDocxForFidelity
 } from '../js/document-fidelity.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const WORD_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const dom = new JSDOM('');
@@ -432,6 +436,118 @@ assert.match(
     trueDefaultsFixture.html,
     /<(strong|em)><(em|strong)>TRUE-DEFAULTS<\/\2><\/\1>/,
     'normative true document defaults must remain true absent direct formatting'
+);
+
+// --- Bible verse markers (sermon outlines) ---------------------------------
+const verseHtml = normalizedHtml(
+    '<p><strong><sup>33 </sup></strong>And your children shall be shepherds in the wilderness.</p>'
+        + '<p><sub>34</sub>According to the number of the days.</p>'
+        + '<p>13 The Lord spoke to Moses, saying,</p>'
+        + '<p>1. Outline heading stays body text</p>'
+);
+const verseRoot = parsedRoot(verseHtml);
+// Re-run verse pass after typography normalize (mirrors app canonicalizeBody).
+normalizeBibleVerseMarkers(verseRoot, document);
+const verseText = verseRoot.textContent;
+assert.match(
+    verseRoot.innerHTML,
+    /<sup class="kf-verse-num"[^>]*data-kf-verse="33"/,
+    'superscript verse 33 becomes kf-verse-num'
+);
+assert.match(
+    verseRoot.innerHTML,
+    /<sup class="kf-verse-num"[^>]*data-kf-verse="34"/,
+    'subscript verse digits are promoted to superscript kf-verse-num'
+);
+assert.match(
+    verseRoot.innerHTML,
+    /<sup class="kf-verse-num"[^>]*data-kf-verse="13"/,
+    'plain leading verse number is detected'
+);
+assert.ok(
+    verseText.includes('And your children shall be shepherds in the wilderness.'),
+    'verse 33 prose must not be truncated after the marker'
+);
+assert.ok(
+    verseText.includes('According to the number of the days.'),
+    'verse 34 prose must remain after the marker'
+);
+const outlinePara = Array.from(verseRoot.querySelectorAll('p')).find((p) => (
+    p.textContent.includes('Outline heading')
+));
+assert.ok(outlinePara, 'outline paragraph present');
+assert.equal(
+    outlinePara.querySelectorAll('sup.kf-verse-num').length,
+    0,
+    'outline numbered item is not a verse marker'
+);
+
+// Numbers 13-15 sermon outline fixture — full DOCX path (fidelity + mammoth + verses).
+const fixturePath = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    'fixtures',
+    'numbers-13-15-outline-slim.docx'
+);
+assert.ok(fs.existsSync(fixturePath), `missing fixture ${fixturePath}`);
+const fixtureBuffer = fs.readFileSync(fixturePath);
+const preparedNumbers = await prepareDocxForFidelity(
+    fixtureBuffer.buffer.slice(
+        fixtureBuffer.byteOffset,
+        fixtureBuffer.byteOffset + fixtureBuffer.byteLength
+    ),
+    {
+        JSZipCtor: JSZip,
+        DOMParserCtor: DOMParser,
+        XMLSerializerCtor: XMLSerializer
+    }
+);
+const numbersHtml = (
+    await mammoth.convertToHtml(
+        { buffer: Buffer.from(preparedNumbers.arrayBuffer) },
+        { styleMap: DOCX_FIDELITY_STYLE_MAP, ignoreEmptyParagraphs: false }
+    )
+).value;
+const numbersRoot = document.createElement('div');
+numbersRoot.innerHTML = numbersHtml;
+normalizeCssTypography(numbersRoot, document);
+const verseStats = normalizeBibleVerseMarkers(numbersRoot, document);
+const numbersText = numbersRoot.textContent.replace(/\s+/g, ' ');
+assert.ok(
+    numbersText.includes(
+        'And your children shall be shepherds in the wilderness forty years'
+    ),
+    'Numbers 14:33 prose must survive DOCX conversion (no blank after "33 And your")'
+);
+assert.ok(
+    numbersText.includes('So Near Yet So Far'),
+    'content after verse 33 (sermon title) must remain'
+);
+assert.ok(
+    numbersText.includes('Discussion questions'),
+    'end of outline must remain after verse section'
+);
+assert.ok(
+    verseStats.markers >= 20,
+    `expected many verse markers, got ${verseStats.markers}`
+);
+const verse33Markers = Array.from(
+    numbersRoot.querySelectorAll('sup.kf-verse-num[data-kf-verse="33"]')
+);
+assert.ok(verse33Markers.length >= 1, 'verse 33 marker must be detected as kf-verse-num');
+// Numbers has 13:33 (Nephilim) and 14:33 (children shepherds) — require the latter.
+const children33 = verse33Markers.find((marker) => {
+    let probe = marker.nextSibling;
+    let following = '';
+    while (probe && following.length < 120) {
+        if (probe.nodeType === 3) following += probe.nodeValue || '';
+        else if (probe.nodeType === 1) following += probe.textContent || '';
+        probe = probe.nextSibling;
+    }
+    return /And your children/.test(following.replace(/\s+/g, ' '));
+});
+assert.ok(
+    children33,
+    'Numbers 14:33 marker must be immediately followed by "And your children…" (no blank cut-off)'
 );
 
 console.log('All KoboForge document fidelity tests passed.');

@@ -497,6 +497,14 @@ body {
 #deviceBookContent .kf-align-left { text-align: left !important; }
 #deviceBookContent .kf-align-center { text-align: center !important; }
 #deviceBookContent .kf-align-right { text-align: right !important; }
+#deviceBookContent .kf-align-justify { text-align: justify !important; }
+
+#deviceBookContent sup.kf-verse-num {
+    font-weight: 700;
+    font-size: 0.72em;
+    margin-right: 0.12em;
+    white-space: nowrap;
+}
 
 #deviceBookContent .kf-user-size-75 { font-size: 0.75em !important; }
 #deviceBookContent .kf-user-size-88 { font-size: 0.88em !important; }

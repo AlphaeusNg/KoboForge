@@ -27,9 +27,12 @@ before exporting a Kobo-friendly EPUB.
   space on the detected PDF source page
 - Compact conversion summary with three facts and one high-level observation
 - Locked edit pagination: deletion reflows later paragraphs without viewport drift
-- Left/center/right text alignment, table-cell top/middle/bottom alignment that
-  preserves row height, font sizing, Word-style Tab behavior, Google-Docs-style
-  1×1 through 5×5 table insertion, and HTML source mode
+- Left/center/right/justify text alignment, table-cell top/middle/bottom
+  alignment that preserves row height, font sizing, Word-style Tab behavior,
+  Google-Docs-style 1×1 through 5×5 table insertion, and HTML source mode
+- Bible verse number detection for sermon outlines: Word super/subscript digits
+  (and plain leading verse numbers) normalize to `<sup class="kf-verse-num">`
+  and survive DOCX→EPUB without cutting off verse prose
 - DOCX image extraction and automatic Kobo-targeted resizing/tone mapping
 - Authored DOCX page breaks, paragraph/section breaks, and inherited Word
   bold/italic styles preserved through preview and EPUB export
@@ -68,6 +71,7 @@ js/version.js         # Deployment stamp
 tools/test_logic.mjs  # Lightweight regression contracts
 tools/test_document_fidelity.mjs # Functional DOCX/HTML fidelity matrix
 tools/test_fixed_epub.mjs # Real EPUB fixture + optional EPUBCheck validation
+tools/fixtures/       # Slim DOCX fixtures (e.g. Numbers 13–15 outline)
 ```
 
 The site intentionally uses plain HTML, CSS, and JavaScript with no build step.
