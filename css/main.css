@@ -377,6 +377,7 @@ body {
     margin: 0 0 0.82em;
     line-height: inherit;
     text-align: justify;
+    text-justify: inter-word;
 }
 
 #deviceBookContent p.preserve-structure {
@@ -388,6 +389,32 @@ body {
     font-size: 1em;
     font-family: inherit;
     text-align: left;
+}
+
+/* Explicit justify must win over preserve-structure / PDF left defaults and
+   actually stretch word spacing across the full measure. */
+#deviceBookContent .kf-align-justify,
+#deviceBookContent p.kf-align-justify,
+#deviceBookContent li.kf-align-justify,
+#deviceBookContent blockquote.kf-align-justify,
+#deviceBookContent p.preserve-structure.kf-align-justify,
+#deviceBookContent .kf-pdf-block.kf-align-justify {
+    display: block !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    text-align: justify !important;
+    text-justify: inter-word !important;
+    text-align-last: left;
+    -webkit-hyphens: auto;
+    hyphens: auto;
+    word-spacing: normal;
+    overflow-wrap: break-word;
+}
+
+#deviceBookContent .kf-align-justify .kf-pdf-line {
+    display: inline !important;
+    max-width: none !important;
 }
 
 #deviceBookContent .kf-pdf-page {
@@ -497,7 +524,6 @@ body {
 #deviceBookContent .kf-align-left { text-align: left !important; }
 #deviceBookContent .kf-align-center { text-align: center !important; }
 #deviceBookContent .kf-align-right { text-align: right !important; }
-#deviceBookContent .kf-align-justify { text-align: justify !important; }
 
 #deviceBookContent sup.kf-verse-num {
     font-weight: 700;

@@ -1728,37 +1728,147 @@
             afterFormat();
         }
 
-        /** Promote selection / current block to p|h1|h2|h3|blockquote. */
+        function transferBlockChrome(from, to) {
+            if (!from || !to) return;
+            [
+                'kf-align-left',
+                'kf-align-center',
+                'kf-align-right',
+                'kf-align-justify',
+                'kf-pdf-block',
+                'preserve-structure',
+                'kf-user-size-75',
+                'kf-user-size-88',
+                'kf-user-size-100',
+                'kf-user-size-112',
+                'kf-user-size-125',
+                'kf-user-size-150',
+                'kf-user-size-175'
+            ].forEach((name) => {
+                if (from.classList?.contains(name)) to.classList.add(name);
+            });
+            const align = from.getAttribute?.('data-kf-align');
+            if (align) {
+                to.setAttribute('data-kf-align', align);
+                to.style.setProperty('text-align', align, 'important');
+            } else if (from.style?.textAlign) {
+                to.style.textAlign = from.style.textAlign;
+            }
+            const fontSize = from.getAttribute?.('data-kf-font-size');
+            if (fontSize) to.setAttribute('data-kf-font-size', fontSize);
+        }
+
+        function placeCaretIn(element) {
+            if (!element) return;
+            const selection = window.getSelection();
+            if (!selection) return;
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
+        function resolveFormatBlocks() {
+            let blocks = selectedEditableBlocks().filter((block) => {
+                const name = block.tagName?.toLowerCase();
+                return name !== 'table' && name !== 'th' && name !== 'td'
+                    && !block.classList?.contains('kf-page-break')
+                    && !block.classList?.contains('kf-note-space');
+            });
+            if (!blocks.length) {
+                const selection = window.getSelection();
+                let node = selection?.anchorNode;
+                if (node?.nodeType === 3) node = node.parentElement;
+                const block = node?.closest?.('p, h1, h2, h3, h4, li, blockquote, div');
+                if (block && previewEl.contains(block) && block !== previewEl) {
+                    blocks = [block];
+                }
+            }
+            return blocks;
+        }
+
+        /** Promote selection / current block to p|h1|h2|h3|blockquote (blockquote toggles off). */
         function formatBlockTag(tag) {
             if (!canFormatNow()) return;
             const allowed = { p: true, h1: true, h2: true, h3: true, blockquote: true };
             if (!allowed[tag]) return;
             previewEl.focus();
-            try {
-                document.execCommand('formatBlock', false, tag === 'blockquote' ? 'blockquote' : tag);
-            } catch (_) { /* ignore */ }
-            // If execCommand left a div, force wrap
-            const sel = window.getSelection();
-            if (sel && sel.rangeCount) {
-                let node = sel.anchorNode;
-                if (node && node.nodeType === 3) node = node.parentElement;
-                const block = node?.closest?.('p, h1, h2, h3, h4, div, li, blockquote');
-                if (block && block !== previewEl && previewEl.contains(block)) {
-                    if (block.tagName.toLowerCase() !== tag && block.tagName.toLowerCase() !== 'li') {
-                        const next = document.createElement(tag);
-                        next.innerHTML = block.innerHTML;
-                        if (tag === 'p' && block.classList?.contains('preserve-structure')) {
-                            next.className = 'preserve-structure';
-                        }
-                        block.replaceWith(next);
-                        const range = document.createRange();
-                        range.selectNodeContents(next);
-                        range.collapse(true);
-                        sel.removeAllRanges();
-                        sel.addRange(range);
-                    }
+
+            const blocks = resolveFormatBlocks();
+            if (!blocks.length) {
+                try {
+                    document.execCommand('formatBlock', false, tag === 'blockquote' ? 'blockquote' : tag);
+                } catch (_) { /* ignore */ }
+                afterFormat();
+                return;
+            }
+
+            // Block quote is a toggle: second click restores a normal paragraph.
+            if (tag === 'blockquote') {
+                const quoteRoots = blocks.map((block) => (
+                    block.tagName?.toLowerCase() === 'blockquote'
+                        ? block
+                        : block.closest?.('blockquote')
+                ));
+                const allInQuote = quoteRoots.length
+                    && quoteRoots.every(Boolean)
+                    && quoteRoots.every((quote) => previewEl.contains(quote));
+                if (allInQuote) {
+                    let last = null;
+                    quoteRoots.forEach((quote) => {
+                        const paragraph = document.createElement('p');
+                        paragraph.innerHTML = quote.innerHTML;
+                        transferBlockChrome(quote, paragraph);
+                        quote.replaceWith(paragraph);
+                        last = paragraph;
+                    });
+                    placeCaretIn(last);
+                    afterFormat();
+                    return;
                 }
             }
+
+            let last = null;
+            blocks.forEach((block) => {
+                let target = block;
+                // If caret is inside a quote but not on the quote element itself,
+                // retarget the whole quote when converting to another block type.
+                if (
+                    tag !== 'blockquote'
+                    && target.tagName?.toLowerCase() !== 'blockquote'
+                ) {
+                    const parentQuote = target.closest?.('blockquote');
+                    if (parentQuote && previewEl.contains(parentQuote)) {
+                        target = parentQuote;
+                    }
+                }
+                const currentTag = target.tagName?.toLowerCase();
+                if (currentTag === tag) {
+                    last = target;
+                    return;
+                }
+                if (currentTag === 'li' && tag !== 'p') {
+                    // Convert list item into a free block (quote/heading) outside the list.
+                    const next = document.createElement(tag);
+                    next.innerHTML = target.innerHTML;
+                    transferBlockChrome(target, next);
+                    const list = target.parentElement;
+                    target.replaceWith(next);
+                    if (list && !list.querySelector('li')) list.remove();
+                    last = next;
+                    return;
+                }
+                const next = document.createElement(tag);
+                next.innerHTML = target.innerHTML;
+                transferBlockChrome(target, next);
+                if (tag === 'p' && target.classList?.contains('preserve-structure')) {
+                    next.classList.add('preserve-structure');
+                }
+                target.replaceWith(next);
+                last = next;
+            });
+            placeCaretIn(last);
             afterFormat();
         }
 
@@ -1806,17 +1916,58 @@
 
         function applyHorizontalAlignment(alignment) {
             if (!canFormatNow() || !['left', 'center', 'right', 'justify'].includes(alignment)) return;
-            const blocks = selectedEditableBlocks();
+            let blocks = selectedEditableBlocks();
+            if (!blocks.length) {
+                blocks = resolveFormatBlocks();
+            }
+            if (!blocks.length) return;
             blocks.forEach((block) => {
-                block.classList.remove(
+                // Prefer the blockquote/list-item container so nested inlines
+                // do not keep a forced left alignment from PDF/DOCX classes.
+                let target = block;
+                const quote = block.closest?.('blockquote');
+                if (quote && previewEl.contains(quote) && block !== quote) {
+                    target = quote;
+                }
+                target.classList.remove(
                     'kf-align-left',
                     'kf-align-center',
                     'kf-align-right',
                     'kf-align-justify'
                 );
-                block.classList.add(`kf-align-${alignment}`);
-                block.style.removeProperty('text-align');
-                block.setAttribute('data-kf-align', alignment);
+                target.classList.add(`kf-align-${alignment}`);
+                target.setAttribute('data-kf-align', alignment);
+                // Inline + important beats preserve-structure / kf-pdf-block left rules
+                // and multi-column preview quirks that drop pure class-based justify.
+                target.style.setProperty('text-align', alignment, 'important');
+                if (alignment === 'justify') {
+                    target.style.setProperty('text-justify', 'inter-word', 'important');
+                    if (!/^(TH|TD)$/.test(target.tagName)) {
+                        target.style.setProperty('width', '100%', 'important');
+                        target.style.setProperty('max-width', '100%', 'important');
+                        target.style.setProperty('display', 'block', 'important');
+                        target.style.setProperty('box-sizing', 'border-box', 'important');
+                    }
+                    // Inner PDF line wrappers must stay inline so the parent can justify.
+                    target.querySelectorAll?.('.kf-pdf-line').forEach((node) => {
+                        node.style.removeProperty('display');
+                        node.style.removeProperty('max-width');
+                    });
+                    target.querySelectorAll?.('[style*="text-align"]').forEach((node) => {
+                        if (node === target) return;
+                        if (node.style?.textAlign && node.style.textAlign !== 'justify') {
+                            node.style.removeProperty('text-align');
+                        }
+                    });
+                } else {
+                    target.style.removeProperty('text-justify');
+                    target.style.removeProperty('width');
+                    target.style.removeProperty('max-width');
+                    if (!/^(TH|TD)$/.test(target.tagName)) {
+                        target.style.removeProperty('display');
+                    }
+                    target.style.removeProperty('box-sizing');
+                }
             });
             afterFormat();
         }
@@ -2140,6 +2291,38 @@
                     on = document.queryCommandState(cmdMap[cmd] || cmd);
                 } catch (_) { /* ignore */ }
                 btn.classList.toggle('is-active', !!on);
+            });
+            const formatBlocks = resolveFormatBlocks();
+            editToolbar.querySelectorAll('.block-fmt-btn[data-block]').forEach((btn) => {
+                const want = btn.dataset.block;
+                const on = formatBlocks.length > 0 && formatBlocks.every((block) => {
+                    if (want === 'blockquote') {
+                        return block.tagName?.toLowerCase() === 'blockquote'
+                            || !!block.closest?.('blockquote');
+                    }
+                    return block.tagName?.toLowerCase() === want;
+                });
+                btn.classList.toggle('is-active', on);
+            });
+            editToolbar.querySelectorAll('.tb-btn[data-align]').forEach((btn) => {
+                const want = btn.dataset.align;
+                const on = formatBlocks.length > 0 && formatBlocks.every((block) => {
+                    const target = block.closest?.('blockquote') && block.tagName?.toLowerCase() !== 'blockquote'
+                        ? block.closest('blockquote')
+                        : block;
+                    return target.getAttribute('data-kf-align') === want
+                        || target.classList.contains(`kf-align-${want}`)
+                        || (want === 'justify'
+                            && (target.style.textAlign === 'justify'
+                                || (!target.getAttribute('data-kf-align')
+                                    && target.tagName?.toLowerCase() === 'p'
+                                    && !target.classList.contains('preserve-structure')
+                                    && !target.classList.contains('kf-pdf-block')
+                                    && !target.classList.contains('kf-align-left')
+                                    && !target.classList.contains('kf-align-center')
+                                    && !target.classList.contains('kf-align-right'))));
+                });
+                btn.classList.toggle('is-active', on);
             });
             const cells = selectedTableCells();
             editToolbar.querySelectorAll('.tb-btn[data-vpos]').forEach((btn) => {
@@ -7179,7 +7362,8 @@
                 '.kf-pdf-image-page figure.kf-document-image{margin:0;page-break-inside:avoid;break-inside:avoid;}',
                 '.kf-pdf-image-page figure.kf-document-image img{display:block;width:auto !important;max-width:100%;max-height:90vh;margin:0 auto;}',
                 '.kf-page-offset-0{padding-top:0;}.kf-page-offset-1{padding-top:1.8em;}.kf-page-offset-2{padding-top:3.6em;}.kf-page-offset-3{padding-top:5.4em;}.kf-page-offset-4{padding-top:7.2em;}.kf-page-offset-5{padding-top:9em;}.kf-page-offset-6{padding-top:10.8em;}.kf-page-offset-7{padding-top:12.6em;}.kf-page-offset-8{padding-top:14.4em;}',
-                '.kf-align-left{text-align:left !important;}.kf-align-center{text-align:center !important;}.kf-align-right{text-align:right !important;}.kf-align-justify{text-align:justify !important;}',
+                '.kf-align-left{text-align:left !important;}.kf-align-center{text-align:center !important;}.kf-align-right{text-align:right !important;}',
+                '.kf-align-justify{display:block !important;width:100% !important;max-width:100% !important;box-sizing:border-box !important;text-align:justify !important;text-justify:inter-word !important;text-align-last:left;hyphens:auto;-webkit-hyphens:auto;}',
                 'sup,sub{font-size:.75em;line-height:1;}',
                 'sup,.kf-verse-num{vertical-align:super;}',
                 'sub{vertical-align:sub;}',

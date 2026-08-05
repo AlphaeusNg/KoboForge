@@ -650,6 +650,19 @@ assert.ok(page.includes('data-align="left"')
 assert.ok(page.includes('icon-align-justify')
     && page.includes("['left', 'center', 'right', 'justify']"),
     'justify alignment is wired in toolbar and applyHorizontalAlignment');
+assert.ok(
+    page.includes("setProperty('text-align', alignment, 'important')")
+        && page.includes("text-justify")
+        && styles.includes('text-justify: inter-word')
+        && styles.includes('.kf-align-justify'),
+    'justify uses inter-word spacing and wins over left defaults'
+);
+assert.ok(
+    page.includes("tag === 'blockquote'")
+        && page.includes('// Block quote is a toggle')
+        && page.includes("document.createElement('p')"),
+    'blockquote button toggles back to paragraph'
+);
 assert.ok(page.includes('data-vpos="top"')
     && page.includes('data-vpos="middle"')
     && page.includes('data-vpos="bottom"'),
