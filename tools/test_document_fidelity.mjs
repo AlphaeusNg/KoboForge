@@ -8,8 +8,10 @@ import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import {
     DOCX_FIDELITY_STYLE_MAP,
+    detectPlainListMarker,
     normalizeBibleVerseMarkers,
     normalizeCssTypography,
+    normalizeDocumentLists,
     normalizeHtmlPageBreaks,
     prepareDocxForFidelity
 } from '../js/document-fidelity.js';
@@ -273,12 +275,12 @@ const prepared = await prepareDocxForFidelity(sourceDocx, {
     DOMParserCtor: DOMParser,
     XMLSerializerCtor: XMLSerializer
 });
-assert.deepEqual(prepared.stats, {
-    materializedRuns: 4,
-    pageBreakBefore: 2,
-    sectionBreaks: 3,
-    paritySectionBreaks: 2
-});
+assert.equal(prepared.stats.materializedRuns, 4);
+assert.equal(prepared.stats.pageBreakBefore, 2);
+assert.equal(prepared.stats.sectionBreaks, 3);
+assert.equal(prepared.stats.paritySectionBreaks, 2);
+assert.equal(prepared.stats.emptyListSeparatorsRemoved ?? 0, 0);
+assert.ok(Array.isArray(prepared.listPlan));
 const converted = await mammoth.convertToHtml(
     { buffer: Buffer.from(prepared.arrayBuffer) },
     {
@@ -548,6 +550,90 @@ const children33 = verse33Markers.find((marker) => {
 assert.ok(
     children33,
     'Numbers 14:33 marker must be immediately followed by "And your children…" (no blank cut-off)'
+);
+
+// --- List detection / rebuild (sermon outline) -----------------------------
+assert.equal(detectPlainListMarker('1. God goes with his people')?.format, 'decimal');
+assert.equal(detectPlainListMarker('a. Nested point')?.format, 'lowerLetter');
+assert.equal(detectPlainListMarker('• Bullet item')?.format, 'bullet');
+assert.equal(detectPlainListMarker('13:1-24 Moses sends scouts'), null, 'bible refs are not list markers');
+assert.equal(detectPlainListMarker('33 And your children shall be shepherds'), null, 'verse prose is not a list');
+
+const listDemo = document.createElement('div');
+listDemo.innerHTML = [
+    '<ol><li>Alpha</li></ol>',
+    '<p></p>',
+    '<ol><li>Beta</li></ol>',
+    '<p>1. Explicit plain</p>',
+    '<p>a. Nested plain</p>',
+    '<p>• Bullet plain</p>'
+].join('');
+const listResult = normalizeDocumentLists(listDemo, document, { listPlan: [] });
+assert.ok(listResult.items >= 4, 'plain + merged list items counted');
+assert.ok(
+    listDemo.querySelectorAll('ol li').length >= 2,
+    'adjacent single-item ordered lists merge or rebuild as lists'
+);
+assert.ok(
+    [...listDemo.querySelectorAll('li')].some((li) => /Explicit plain/.test(li.textContent)),
+    'plain "1." marker becomes a list item'
+);
+assert.ok(
+    [...listDemo.querySelectorAll('li')].some((li) => /Nested plain/.test(li.textContent)),
+    'plain "a." marker becomes a list item'
+);
+assert.ok(
+    [...listDemo.querySelectorAll('ul li')].some((li) => /Bullet plain/.test(li.textContent)),
+    'plain bullet marker becomes a ul item'
+);
+
+// Numbers outline: continuous lower-letter story list, discussion decimal list
+const numbersListRoot = document.createElement('div');
+numbersListRoot.innerHTML = numbersHtml;
+normalizeCssTypography(numbersListRoot, document);
+normalizeBibleVerseMarkers(numbersListRoot, document);
+normalizeDocumentLists(numbersListRoot, document, {
+    listPlan: preparedNumbers.listPlan || []
+});
+const letterList = [...numbersListRoot.querySelectorAll('ol')].find((ol) => (
+    /13:1-24/.test(ol.textContent) && /15 God gives hope/.test(ol.textContent)
+));
+assert.ok(letterList, 'outline a–g story list present as one ordered list');
+assert.ok(
+    letterList.querySelectorAll(':scope > li').length >= 6,
+    'story points stay in one list (not one list per item)'
+);
+assert.equal(
+    letterList.getAttribute('data-kf-list-format') || letterList.style.listStyleType,
+    letterList.getAttribute('data-kf-list-format') === 'lowerLetter'
+        ? 'lowerLetter'
+        : letterList.style.listStyleType,
+);
+assert.ok(
+    letterList.getAttribute('data-kf-list-format') === 'lowerLetter'
+        || letterList.style.listStyleType === 'lower-alpha',
+    'story list uses lower-alpha / lowerLetter formatting'
+);
+const discussionList = [...numbersListRoot.querySelectorAll('ol')].find((ol) => (
+    /continuing to follow God becomes costly/.test(ol.textContent)
+    && /Who are you exhorting/.test(ol.textContent)
+));
+assert.ok(discussionList, 'discussion questions form an ordered list');
+assert.equal(
+    discussionList.querySelectorAll(':scope > li').length,
+    2,
+    'both discussion questions share one list'
+);
+const appBullets = [...numbersListRoot.querySelectorAll('ul li')].map((li) => (
+    li.textContent.replace(/\s+/g, ' ').trim()
+));
+assert.ok(
+    appBullets.some((text) => /Those who are not following God/.test(text)),
+    'application bullets detected'
+);
+assert.ok(
+    appBullets.some((text) => /Those who are following God/.test(text)),
+    'second application bullet detected'
 );
 
 console.log('All KoboForge document fidelity tests passed.');

@@ -33,6 +33,9 @@ before exporting a Kobo-friendly EPUB.
 - Bible verse number detection for sermon outlines: Word super/subscript digits
   (and plain leading verse numbers) normalize to `<sup class="kf-verse-num">`
   and survive DOCX→EPUB without cutting off verse prose
+- DOCX Word numbering (`1.` / `a.` / bullets) and plain/PDF list markers rebuild
+  as real nested `<ol>`/`<ul>` with indentation; editor list buttons use a
+  custom toggle that works in the paginated preview
 - DOCX image extraction and automatic Kobo-targeted resizing/tone mapping
 - Authored DOCX page breaks, paragraph/section breaks, and inherited Word
   bold/italic styles preserved through preview and EPUB export

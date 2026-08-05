@@ -594,9 +594,10 @@ export async function prepareDocxForFidelity(arrayBuffer, {
     if (!documentFile) {
         throw new Error('This DOCX has no word/document.xml body.');
     }
-    const [documentXml, stylesXml] = await Promise.all([
+    const [documentXml, stylesXml, numberingXml] = await Promise.all([
         documentFile.async('string'),
-        zip.file('word/styles.xml')?.async('string') || Promise.resolve('')
+        zip.file('word/styles.xml')?.async('string') || Promise.resolve(''),
+        zip.file('word/numbering.xml')?.async('string') || Promise.resolve('')
     ]);
     const documentDoc = parseWordXml(documentXml, DOMParserCtor);
     const stylesDoc = stylesXml
@@ -605,14 +606,21 @@ export async function prepareDocxForFidelity(arrayBuffer, {
             `<w:styles xmlns:w="${WORD_NAMESPACE}"></w:styles>`,
             DOMParserCtor
         );
+    const numberingModel = parseDocxNumberingModel(numberingXml, DOMParserCtor);
     const styleModel = docxStyleModel(stylesDoc);
     const stats = {
         materializedRuns: 0,
         pageBreakBefore: 0,
         sectionBreaks: 0,
-        paritySectionBreaks: 0
+        paritySectionBreaks: 0,
+        emptyListSeparatorsRemoved: 0,
+        listPlanItems: 0
     };
     let notBoldStyleId = '';
+
+    // Empty paragraphs between list items force mammoth to emit one <ol>/<ul>
+    // per item. Collapse those separators so list structure can be rebuilt.
+    stats.emptyListSeparatorsRemoved = stripEmptyParagraphsBetweenListItems(documentDoc);
 
     wordElements(documentDoc, 'p').forEach((paragraph) => {
         const paragraphProperties = directWordChild(paragraph, 'pPr');
@@ -733,13 +741,17 @@ export async function prepareDocxForFidelity(arrayBuffer, {
             new XMLSerializerCtor().serializeToString(stylesDoc)
         );
     }
+    const listPlan = buildDocxListPlan(documentDoc, numberingModel);
+    stats.listPlanItems = listPlan.length;
+
     return {
         arrayBuffer: await zip.generateAsync({
             type: 'arraybuffer',
             compression: 'DEFLATE',
             compressionOptions: { level: 6 }
         }),
-        stats
+        stats,
+        listPlan
     };
 }
 
@@ -1315,4 +1327,588 @@ export function normalizeBibleVerseMarkers(root, doc) {
     root.querySelectorAll('strong, b').forEach(unwrapIfOnlyWhitespace);
 
     return { markers, promoted };
+}
+
+// ---------------------------------------------------------------------------
+// Lists (DOCX numbering + plain/PDF markers + HTML rebuild)
+// ---------------------------------------------------------------------------
+
+function paragraphPlainText(paragraph) {
+    return wordElements(paragraph, 't')
+        .map((node) => node.textContent || '')
+        .join('')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function paragraphHasVisualContent(paragraph) {
+    if (paragraphPlainText(paragraph)) return true;
+    return !!(
+        wordElements(paragraph, 'drawing').length
+        || wordElements(paragraph, 'pict').length
+        || wordElements(paragraph, 'object').length
+    );
+}
+
+function paragraphListInfo(paragraph) {
+    const properties = directWordChild(paragraph, 'pPr');
+    const numPr = directWordChild(properties, 'numPr');
+    if (!numPr) return null;
+    const ilvl = Number.parseInt(
+        wordAttribute(directWordChild(numPr, 'ilvl'), 'val') || '0',
+        10
+    );
+    const numId = wordAttribute(directWordChild(numPr, 'numId'), 'val') || '';
+    if (!numId) return null;
+    return {
+        numId,
+        ilvl: Number.isFinite(ilvl) ? Math.max(0, Math.min(8, ilvl)) : 0
+    };
+}
+
+function paragraphLeftIndentTwips(paragraph) {
+    const properties = directWordChild(paragraph, 'pPr');
+    const ind = directWordChild(properties, 'ind');
+    if (!ind) return 0;
+    const left = Number.parseInt(wordAttribute(ind, 'left') || '0', 10);
+    const start = Number.parseInt(wordAttribute(ind, 'start') || '0', 10);
+    const value = Number.isFinite(left) && left ? left : start;
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function parseDocxNumberingModel(numberingXml, DOMParserCtor) {
+    if (!numberingXml) {
+        return { levelsByNumId: new Map() };
+    }
+    const numberingDoc = parseWordXml(numberingXml, DOMParserCtor);
+    const abstracts = new Map();
+    wordElements(numberingDoc, 'abstractNum').forEach((abstract) => {
+        const id = wordAttribute(abstract, 'abstractNumId');
+        if (id == null) return;
+        const levels = new Map();
+        wordElements(abstract, 'lvl').forEach((level) => {
+            const ilvl = Number.parseInt(wordAttribute(level, 'ilvl') || '0', 10);
+            const fmt = wordAttribute(directWordChild(level, 'numFmt'), 'val') || 'decimal';
+            const text = wordAttribute(directWordChild(level, 'lvlText'), 'val') || '%1.';
+            levels.set(ilvl, { format: fmt, text });
+        });
+        abstracts.set(String(id), levels);
+    });
+    const levelsByNumId = new Map();
+    wordElements(numberingDoc, 'num').forEach((num) => {
+        const numId = wordAttribute(num, 'numId');
+        const abstractId = wordAttribute(
+            directWordChild(num, 'abstractNumId'),
+            'val'
+        );
+        if (numId == null || abstractId == null) return;
+        levelsByNumId.set(String(numId), abstracts.get(String(abstractId)) || new Map());
+    });
+    return { levelsByNumId };
+}
+
+function listFormatFromWord(format) {
+    const value = String(format || '').toLowerCase();
+    if (value === 'bullet' || value === 'none') return 'bullet';
+    if (value === 'lowerletter') return 'lowerLetter';
+    if (value === 'upperletter') return 'upperLetter';
+    if (value === 'lowerroman') return 'lowerRoman';
+    if (value === 'upperroman') return 'upperRoman';
+    if (value === 'decimal' || value === 'decimalzero') return 'decimal';
+    return value || 'decimal';
+}
+
+function stripEmptyParagraphsBetweenListItems(documentDoc) {
+    // Snapshot first — getElementsByTagNameNS is live and skips neighbors on delete.
+    const paragraphs = Array.from(wordElements(documentDoc, 'p'));
+    const toRemove = [];
+    for (let index = 1; index < paragraphs.length - 1; index += 1) {
+        const previous = paragraphs[index - 1];
+        const current = paragraphs[index];
+        const next = paragraphs[index + 1];
+        if (!previous || !current || !next) continue;
+        if (paragraphHasVisualContent(current)) continue;
+        // Drop empty separators when either neighbour is a list item so mammoth
+        // does not emit a new list for every Word list paragraph.
+        if (!paragraphListInfo(previous) && !paragraphListInfo(next)) continue;
+        if (!paragraphListInfo(previous) || !paragraphListInfo(next)) {
+            // Still remove when both sides are list-ish after skipping other empties
+            // handled by multi-pass below.
+        }
+        if (paragraphListInfo(previous) && paragraphListInfo(next)) {
+            toRemove.push(current);
+        }
+    }
+    // Multi-pass: collapse runs of empties between two list paragraphs.
+    let removed = 0;
+    toRemove.forEach((paragraph) => {
+        if (paragraph.parentNode) {
+            paragraph.parentNode.removeChild(paragraph);
+            removed += 1;
+        }
+    });
+    let changed = true;
+    let guard = 0;
+    while (changed && guard < 20) {
+        changed = false;
+        guard += 1;
+        const live = Array.from(wordElements(documentDoc, 'p'));
+        for (let index = 1; index < live.length - 1; index += 1) {
+            const previous = live[index - 1];
+            const current = live[index];
+            const next = live[index + 1];
+            if (paragraphHasVisualContent(current)) continue;
+            // Walk past empty nexts to find next substantive paragraph
+            let look = index + 1;
+            while (look < live.length && !paragraphHasVisualContent(live[look])) look += 1;
+            const nextSubstantive = live[look];
+            let lookBack = index - 1;
+            while (lookBack >= 0 && !paragraphHasVisualContent(live[lookBack])) lookBack -= 1;
+            const prevSubstantive = live[lookBack];
+            if (
+                prevSubstantive
+                && nextSubstantive
+                && paragraphListInfo(prevSubstantive)
+                && paragraphListInfo(nextSubstantive)
+            ) {
+                current.parentNode?.removeChild(current);
+                removed += 1;
+                changed = true;
+                break;
+            }
+        }
+    }
+    return removed;
+}
+
+function buildDocxListPlan(documentDoc, numberingModel) {
+    const plan = [];
+    wordElements(documentDoc, 'p').forEach((paragraph) => {
+        const text = paragraphPlainText(paragraph);
+        if (!text) return;
+        const list = paragraphListInfo(paragraph);
+        const leftTwips = paragraphLeftIndentTwips(paragraph);
+        if (!list && leftTwips < 360) return;
+        let format = 'indent';
+        let ilvl = leftTwips >= 1080 ? 2 : leftTwips >= 540 ? 1 : 0;
+        let numId = '';
+        if (list) {
+            numId = list.numId;
+            ilvl = list.ilvl;
+            const levels = numberingModel?.levelsByNumId?.get(String(numId));
+            const levelInfo = levels?.get(ilvl) || levels?.get(0);
+            format = listFormatFromWord(levelInfo?.format || 'decimal');
+        }
+        plan.push({
+            text,
+            textKey: text.toLowerCase(),
+            numId,
+            ilvl,
+            format,
+            leftTwips
+        });
+    });
+    return plan;
+}
+
+/**
+ * Detect plain-text list markers (DOCX paste, PDF lines, markdown-like).
+ * Returns { format, level, body } or null.
+ */
+export function detectPlainListMarker(text, { indentLevel = 0 } = {}) {
+    const raw = String(text || '').replace(/\u00a0/g, ' ');
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    // Do not treat bible refs "13:1-24 Title" as list items
+    if (/^\d{1,3}:\d/.test(trimmed)) return null;
+    // Do not treat verse-like "33 And your children" as outline lists
+    if (/^\d{1,3}\s+[“"A-Za-z]/.test(trimmed) && !/^\d{1,3}[.)]\s/.test(trimmed)) {
+        return null;
+    }
+
+    let match = /^([•●▪◦‣∙·])\s+(.*)$/u.exec(trimmed);
+    if (match) {
+        return {
+            format: 'bullet',
+            level: Math.max(0, indentLevel),
+            body: match[2],
+            marker: match[1]
+        };
+    }
+    match = /^([-*+])\s+(.*)$/.exec(trimmed);
+    if (match) {
+        return {
+            format: 'bullet',
+            level: Math.max(0, indentLevel),
+            body: match[2],
+            marker: match[1]
+        };
+    }
+    match = /^(\d{1,3})([.)])\s+(.*)$/.exec(trimmed);
+    if (match) {
+        return {
+            format: 'decimal',
+            level: Math.max(0, indentLevel),
+            body: match[3],
+            marker: match[1] + match[2]
+        };
+    }
+    match = /^([a-z])([.)])\s+(.*)$/.exec(trimmed);
+    if (match) {
+        return {
+            format: 'lowerLetter',
+            level: Math.max(1, indentLevel || 1),
+            body: match[3],
+            marker: match[1] + match[2]
+        };
+    }
+    match = /^([A-Z])([.)])\s+(.*)$/.exec(trimmed);
+    if (match) {
+        return {
+            format: 'upperLetter',
+            level: Math.max(1, indentLevel || 1),
+            body: match[3],
+            marker: match[1] + match[2]
+        };
+    }
+    match = /^([ivxlcdm]+)([.)])\s+(.*)$/i.exec(trimmed);
+    if (match && match[1].length <= 6) {
+        const lower = match[1] === match[1].toLowerCase();
+        return {
+            format: lower ? 'lowerRoman' : 'upperRoman',
+            level: Math.max(2, indentLevel || 2),
+            body: match[3],
+            marker: match[1] + match[2]
+        };
+    }
+    return null;
+}
+
+function listTagForFormat(format) {
+    return format === 'bullet' ? 'ul' : 'ol';
+}
+
+function listStyleForFormat(format) {
+    switch (format) {
+        case 'bullet': return 'disc';
+        case 'lowerLetter': return 'lower-alpha';
+        case 'upperLetter': return 'upper-alpha';
+        case 'lowerRoman': return 'lower-roman';
+        case 'upperRoman': return 'upper-roman';
+        case 'decimal':
+        default: return 'decimal';
+    }
+}
+
+function normalizeMatchKey(text) {
+    return String(text || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+function flattenBlocksForLists(root, doc) {
+    const blocks = [];
+
+    const pushListItems = (listEl, baseLevel = 0) => {
+        const listTag = listEl.tagName.toLowerCase();
+        const defaultFormat = listTag === 'ul' ? 'bullet' : 'decimal';
+        Array.from(listEl.children || []).forEach((li) => {
+            if (li.tagName?.toLowerCase() !== 'li') return;
+            const nestedLists = Array.from(li.children || []).filter((child) => (
+                /^(UL|OL)$/.test(child.tagName)
+            ));
+            const clone = li.cloneNode(true);
+            clone.querySelectorAll('ul, ol').forEach((nested) => nested.remove());
+            const level = Number(li.getAttribute('data-kf-list-level'));
+            blocks.push({
+                isList: true,
+                level: Number.isFinite(level) ? level : baseLevel,
+                format: li.getAttribute('data-kf-list-format') || defaultFormat,
+                html: clone.innerHTML,
+                text: (clone.textContent || '').replace(/\s+/g, ' ').trim()
+            });
+            nestedLists.forEach((nested) => {
+                pushListItems(nested, (Number.isFinite(level) ? level : baseLevel) + 1);
+            });
+        });
+    };
+
+    Array.from(root.childNodes || []).forEach((node) => {
+        if (node.nodeType !== 1) return;
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'ul' || tag === 'ol') {
+            pushListItems(node, 0);
+            return;
+        }
+        if (tag === 'div' && !node.classList?.contains('kf-pdf-page')) {
+            Array.from(node.children || []).forEach((child) => {
+                const childTag = child.tagName.toLowerCase();
+                if (childTag === 'ul' || childTag === 'ol') {
+                    pushListItems(child, 0);
+                    return;
+                }
+                const text = (child.textContent || '').replace(/\s+/g, ' ').trim();
+                if (
+                    !text
+                    && childTag === 'p'
+                    && !child.querySelector?.('img, table, .kf-page-break, .kf-verse-num')
+                ) {
+                    return;
+                }
+                blocks.push({
+                    isList: false,
+                    element: child,
+                    tag: childTag,
+                    html: child.innerHTML,
+                    text
+                });
+            });
+            return;
+        }
+        const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+        if (
+            !text
+            && tag === 'p'
+            && !node.querySelector?.('img, table, .kf-page-break, .kf-verse-num')
+        ) {
+            return;
+        }
+        blocks.push({
+            isList: false,
+            element: node,
+            tag,
+            html: node.innerHTML,
+            text
+        });
+    });
+    return blocks;
+}
+
+/**
+ * Rebuild list structure for sermon outlines and general docs.
+ * Uses DOCX numbering plan when available; otherwise plain markers + indent.
+ */
+export function normalizeDocumentLists(root, doc, { listPlan = [] } = {}) {
+    if (!root || !doc) return { items: 0, lists: 0 };
+
+    // Drop empty paragraphs that only separate list fragments or list items.
+    Array.from(root.querySelectorAll('p')).forEach((paragraph) => {
+        if (
+            (paragraph.textContent || '').trim()
+            || paragraph.querySelector('img, br, table, .kf-page-break, .kf-blank-page, .kf-verse-num')
+        ) {
+            return;
+        }
+        const previous = paragraph.previousElementSibling;
+        const next = paragraph.nextElementSibling;
+        if (
+            previous
+            && next
+            && (
+                /^(UL|OL)$/.test(previous.tagName)
+                || /^(UL|OL)$/.test(next.tagName)
+                || previous.querySelector?.('li')
+                || next.querySelector?.('li')
+            )
+        ) {
+            paragraph.remove();
+            return;
+        }
+        // Also drop empty paragraphs sandwiched between any two blocks during rebuild.
+        if (previous && next) paragraph.remove();
+    });
+
+    // Merge adjacent same-type sibling lists (mammoth emits one item per list).
+    let guard = 0;
+    while (guard < 50) {
+        guard += 1;
+        let merged = false;
+        const children = Array.from(root.children);
+        for (let index = 0; index < children.length - 1; index += 1) {
+            const current = children[index];
+            const next = children[index + 1];
+            if (!current || !next) continue;
+            if (!/^(UL|OL)$/.test(current.tagName) || current.tagName !== next.tagName) continue;
+            while (next.firstChild) current.appendChild(next.firstChild);
+            next.remove();
+            merged = true;
+            break;
+        }
+        if (!merged) break;
+    }
+
+    // Flatten erroneous <ul><li><ol><li>…</li></ol></li></ul> when li only wraps a list.
+    root.querySelectorAll('li').forEach((li) => {
+        const onlyList = Array.from(li.childNodes).filter((node) => (
+            node.nodeType === 1
+            || (node.nodeType === 3 && (node.nodeValue || '').trim())
+        ));
+        if (
+            onlyList.length === 1
+            && onlyList[0].nodeType === 1
+            && /^(UL|OL)$/.test(onlyList[0].tagName)
+        ) {
+            const inner = onlyList[0];
+            const parentList = li.parentElement;
+            if (!parentList) return;
+            while (inner.firstChild) parentList.insertBefore(inner.firstChild, li);
+            li.remove();
+        }
+    });
+
+    const linear = flattenBlocksForLists(root, doc);
+    if (!linear.length) return { items: 0, lists: 0 };
+
+    const plan = Array.isArray(listPlan) ? listPlan.slice() : [];
+    let planCursor = 0;
+
+    const takePlan = (text) => {
+        const key = normalizeMatchKey(text);
+        if (!key) return null;
+        for (let index = planCursor; index < plan.length; index += 1) {
+            if (plan[index].textKey === key) {
+                planCursor = index + 1;
+                return plan[index];
+            }
+        }
+        for (let index = Math.max(0, planCursor - 2); index < plan.length; index += 1) {
+            const entry = plan[index];
+            if (
+                key === entry.textKey
+                || (key.length > 12 && entry.textKey.startsWith(key.slice(0, 40)))
+                || (entry.textKey.length > 12 && key.startsWith(entry.textKey.slice(0, 40)))
+            ) {
+                planCursor = index + 1;
+                return entry;
+            }
+        }
+        return null;
+    };
+
+    const annotated = linear.map((block) => {
+        const meta = takePlan(block.text);
+
+        if (meta && meta.format !== 'indent') {
+            return {
+                isList: true,
+                level: meta.ilvl,
+                format: meta.format,
+                html: block.html || '',
+                text: block.text
+            };
+        }
+
+        if (block.isList) {
+            return {
+                isList: true,
+                level: block.level || 0,
+                format: block.format || 'decimal',
+                html: block.html || '',
+                text: block.text
+            };
+        }
+
+        const indentLevel = meta?.format === 'indent'
+            ? (meta.leftTwips >= 1080 ? 2 : meta.leftTwips >= 540 ? 1 : 0)
+            : 0;
+        const plain = detectPlainListMarker(block.text, { indentLevel });
+        if (plain && (block.tag === 'p' || !block.tag)) {
+            let html = block.html || '';
+            const plainText = (block.text || '').trim();
+            if (plainText.startsWith(plain.marker)) {
+                // Prefer body text when marker was visible in the source string.
+                const body = plain.body;
+                if (!(block.element?.querySelector?.('strong, em, sup, sub, a, img'))) {
+                    html = body;
+                } else {
+                    // Keep rich HTML but strip a leading marker text node if present.
+                    html = block.html || body;
+                }
+            }
+            return {
+                isList: true,
+                level: plain.level,
+                format: plain.format,
+                html,
+                text: plain.body
+            };
+        }
+
+        return {
+            isList: false,
+            indentLevel,
+            element: block.element,
+            tag: block.tag || 'p',
+            html: block.html || '',
+            text: block.text
+        };
+    });
+
+    const fragment = doc.createDocumentFragment();
+    const stack = [];
+    let listCount = 0;
+    let itemCount = 0;
+
+    const closeTo = (level) => {
+        while (stack.length && stack[stack.length - 1].level > level) stack.pop();
+    };
+
+    const ensureList = (level, format) => {
+        closeTo(level);
+        const top = stack[stack.length - 1];
+        if (top && top.level === level && top.format === format) return top.list;
+        if (top && top.level === level && top.format !== format) stack.pop();
+
+        const list = doc.createElement(listTagForFormat(format));
+        list.classList.add('kf-list');
+        list.setAttribute('data-kf-list-format', format);
+        list.style.listStyleType = listStyleForFormat(format);
+        if (level > 0) list.classList.add(`kf-list-nest-${level}`);
+
+        const parent = stack[stack.length - 1];
+        if (parent && parent.level < level) {
+            const lastLi = parent.list.lastElementChild;
+            if (lastLi) lastLi.appendChild(list);
+            else fragment.appendChild(list);
+        } else {
+            fragment.appendChild(list);
+        }
+        stack.push({ level, format, list });
+        listCount += 1;
+        return list;
+    };
+
+    annotated.forEach((block) => {
+        if (!block.isList) {
+            while (stack.length) stack.pop();
+            let node;
+            if (block.element) {
+                node = block.element.cloneNode(true);
+            } else {
+                node = doc.createElement(block.tag || 'p');
+                node.innerHTML = block.html || '';
+            }
+            if (block.indentLevel) {
+                node.classList.add(`kf-indent-${Math.min(3, block.indentLevel)}`);
+            }
+            fragment.appendChild(node);
+            return;
+        }
+        const level = Math.max(0, Math.min(8, Number(block.level) || 0));
+        const format = block.format || 'decimal';
+        const list = ensureList(level, format);
+        const li = doc.createElement('li');
+        li.setAttribute('data-kf-list-level', String(level));
+        li.setAttribute('data-kf-list-format', format);
+        li.innerHTML = block.html || block.text || '';
+        list.appendChild(li);
+        itemCount += 1;
+    });
+
+    while (root.firstChild) root.removeChild(root.firstChild);
+    root.appendChild(fragment);
+    return { items: itemCount, lists: listCount };
 }

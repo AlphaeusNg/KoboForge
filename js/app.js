@@ -8,8 +8,10 @@
         );
         const {
             DOCX_FIDELITY_STYLE_MAP,
+            detectPlainListMarker,
             normalizeBibleVerseMarkers,
             normalizeCssTypography,
+            normalizeDocumentLists,
             normalizeHtmlPageBreaks,
             prepareDocxForFidelity
         } = await import(
@@ -1616,10 +1618,101 @@
             }
         }
 
+        /**
+         * Custom list toggle — multi-column contenteditable often ignores
+         * execCommand(insertOrderedList/insertUnorderedList).
+         */
+        function toggleList(ordered) {
+            if (!canFormatNow()) return;
+            previewEl.focus();
+            const tag = ordered ? 'ol' : 'ul';
+            const format = ordered ? 'decimal' : 'bullet';
+            let blocks = selectedEditableBlocks().filter((block) => {
+                const name = block.tagName?.toLowerCase();
+                return name !== 'table' && name !== 'th' && name !== 'td'
+                    && !block.classList?.contains('kf-page-break')
+                    && !block.classList?.contains('kf-note-space');
+            });
+            if (!blocks.length) {
+                const selection = window.getSelection();
+                let node = selection?.anchorNode;
+                if (node?.nodeType === 3) node = node.parentElement;
+                const block = node?.closest?.('p, h1, h2, h3, h4, li, blockquote, div');
+                if (block && previewEl.contains(block) && block !== previewEl) {
+                    blocks = [block];
+                }
+            }
+            if (!blocks.length) {
+                try {
+                    document.execCommand(ordered ? 'insertOrderedList' : 'insertUnorderedList', false, null);
+                } catch (_) { /* ignore */ }
+                afterFormat();
+                return;
+            }
+
+            const listItems = blocks.map((block) => (
+                block.tagName?.toLowerCase() === 'li' ? block : block.closest?.('li')
+            )).filter(Boolean);
+            const allInMatchingList = listItems.length === blocks.length
+                && listItems.every((li) => li.closest(tag));
+
+            if (allInMatchingList) {
+                listItems.forEach((li) => {
+                    const paragraph = document.createElement('p');
+                    paragraph.innerHTML = li.innerHTML;
+                    // Drop nested lists from unwrap target content? keep them.
+                    const list = li.parentElement;
+                    li.replaceWith(paragraph);
+                    if (list && !list.querySelector('li')) list.remove();
+                });
+                afterFormat();
+                return;
+            }
+
+            // Unwrap foreign lists first so we re-wrap cleanly.
+            blocks = blocks.map((block) => {
+                if (block.tagName?.toLowerCase() !== 'li') return block;
+                const paragraph = document.createElement('p');
+                paragraph.innerHTML = block.innerHTML;
+                const list = block.parentElement;
+                block.replaceWith(paragraph);
+                if (list && !list.querySelector('li')) list.remove();
+                return paragraph;
+            });
+
+            const list = document.createElement(tag);
+            list.className = 'kf-list kf-user-list';
+            list.setAttribute('data-kf-list-format', format);
+            list.style.listStyleType = ordered ? 'decimal' : 'disc';
+            const anchor = blocks[0];
+            anchor.before(list);
+            blocks.forEach((block) => {
+                const li = document.createElement('li');
+                li.setAttribute('data-kf-list-format', format);
+                li.setAttribute('data-kf-list-level', '0');
+                if (block.tagName?.toLowerCase() === 'li') {
+                    li.innerHTML = block.innerHTML;
+                } else {
+                    li.innerHTML = block.innerHTML;
+                }
+                list.appendChild(li);
+                block.remove();
+            });
+            afterFormat();
+        }
+
         /** Inline style: bold / italic / underline / strike / lists (Kobo-safe HTML). */
         function runFormatCommand(cmd) {
             if (!canFormatNow() || !cmd) return;
             previewEl.focus();
+            if (cmd === 'insertOrderedList') {
+                toggleList(true);
+                return;
+            }
+            if (cmd === 'insertUnorderedList') {
+                toggleList(false);
+                return;
+            }
             try {
                 if (cmd === 'removeFormat') {
                     document.execCommand('removeFormat', false, null);
@@ -2691,6 +2784,8 @@
 
             // Sermon outlines: keep verse numbers as stable <sup class="kf-verse-num">.
             normalizeBibleVerseMarkers(root, doc);
+            // Keep list structure stable across edit/export cycles.
+            normalizeDocumentLists(root, doc);
 
             root.querySelectorAll('[data-kf-vpos], [class*="kf-user-vpos-"]').forEach((block) => {
                 const position = block.getAttribute('data-kf-vpos')
@@ -4397,11 +4492,13 @@
             let skippedImages = 0;
             let docxInput = arrayBuffer;
             let fidelityStats = null;
+            let listPlan = [];
             try {
                 const JSZipCtor = await waitForGlobal('JSZip');
                 const normalized = await prepareDocxForFidelity(arrayBuffer, { JSZipCtor });
                 docxInput = normalized.arrayBuffer;
                 fidelityStats = normalized.stats;
+                listPlan = normalized.listPlan || [];
             } catch (error) {
                 console.warn('[KoboForge] DOCX fidelity preprocessing', error);
                 warnings.push(
@@ -4441,6 +4538,8 @@
             // Normalize Word superscript/subscript verse numbers before image work
             // so later export/canonicalize keeps full verse prose after markers.
             normalizeBibleVerseMarkers(doc.body, doc);
+            // Rebuild DOCX lists (mammoth splits on empty paras / mis-nests levels).
+            normalizeDocumentLists(doc.body, doc, { listPlan });
             // Drop empty/broken img tags from oversized images so EPUB XHTML stays valid
             doc.body.querySelectorAll('img').forEach((img) => {
                 const src = img.getAttribute('src') || '';
@@ -5922,14 +6021,20 @@
             const spaceByLine = new Map(
                 whitespace.spaces.map((space) => [space.index, space])
             );
+            const textLeft = Math.min(
+                ...builtLines.map((line) => Number(line.xStart) || 0).filter((value) => value > 0),
+                Number(builtLines[0]?.xStart) || 0
+            );
             const blocks = [];
             let segment = [];
             builtLines.forEach((line, index) => {
                 segment.push(line);
                 const space = spaceByLine.get(index);
                 if (!space) return;
-                extractPdfSegmentBlocks(segment, preserveTables, tableGeometry)
-                    .forEach((block) => blocks.push(block));
+                promotePdfListBlocks(
+                    extractPdfSegmentBlocks(segment, preserveTables, tableGeometry),
+                    { textLeft }
+                ).forEach((block) => blocks.push(block));
                 blocks.push({
                     type: 'spacer',
                     lines: space.lines,
@@ -5938,8 +6043,10 @@
                 });
                 segment = [];
             });
-            extractPdfSegmentBlocks(segment, preserveTables, tableGeometry)
-                .forEach((block) => blocks.push(block));
+            promotePdfListBlocks(
+                extractPdfSegmentBlocks(segment, preserveTables, tableGeometry),
+                { textLeft }
+            ).forEach((block) => blocks.push(block));
             return blocks;
         }
 
@@ -6102,6 +6209,130 @@
                     { preserveIndent: index === 0 }
                 ))
                 .join(' ');
+        }
+
+        function pdfIndentLevelFromX(xStart, textLeft, avgCharWidth) {
+            const delta = Math.max(0, (Number(xStart) || 0) - (Number(textLeft) || 0));
+            const chars = delta / Math.max(Number(avgCharWidth) || 4, 2);
+            if (chars >= 8) return 2;
+            if (chars >= 3.5) return 1;
+            return 0;
+        }
+
+        function promotePdfListBlocks(blocks, { textLeft = 0 } = {}) {
+            if (!blocks?.length) return blocks || [];
+            const output = [];
+            let listRun = [];
+
+            const flushListRun = () => {
+                if (!listRun.length) return;
+                // Build nested structure as flat HTML with nested ol/ul.
+                const rootItems = [];
+                const stack = []; // { level, format, children }
+                listRun.forEach((item) => {
+                    while (stack.length && stack[stack.length - 1].level >= item.level) {
+                        stack.pop();
+                    }
+                    const node = {
+                        level: item.level,
+                        format: item.format,
+                        html: item.html,
+                        children: []
+                    };
+                    if (!stack.length) {
+                        rootItems.push(node);
+                    } else {
+                        stack[stack.length - 1].children.push(node);
+                    }
+                    stack.push(node);
+                });
+
+                const renderNodes = (nodes) => {
+                    if (!nodes.length) return '';
+                    // Group consecutive same-format siblings into one list
+                    let html = '';
+                    let index = 0;
+                    while (index < nodes.length) {
+                        const format = nodes[index].format || 'decimal';
+                        const tag = format === 'bullet' ? 'ul' : 'ol';
+                        const style = format === 'bullet'
+                            ? 'disc'
+                            : format === 'lowerLetter'
+                                ? 'lower-alpha'
+                                : format === 'upperLetter'
+                                    ? 'upper-alpha'
+                                    : format === 'lowerRoman'
+                                        ? 'lower-roman'
+                                        : format === 'upperRoman'
+                                            ? 'upper-roman'
+                                            : 'decimal';
+                        let j = index;
+                        while (j < nodes.length && (nodes[j].format || 'decimal') === format) j += 1;
+                        html += `<${tag} class="kf-list" data-kf-list-format="${format}" style="list-style-type:${style}">`;
+                        for (let k = index; k < j; k += 1) {
+                            const node = nodes[k];
+                            html += `<li data-kf-list-level="${node.level}" data-kf-list-format="${format}">${node.html}`;
+                            if (node.children.length) html += renderNodes(node.children);
+                            html += '</li>';
+                        }
+                        html += `</${tag}>`;
+                        index = j;
+                    }
+                    return html;
+                };
+
+                output.push({
+                    type: 'paragraph',
+                    text: listRun.map((item) => item.text).join(' '),
+                    html: renderNodes(rootItems),
+                    sourceLines: listRun.flatMap((item) => item.sourceLines || [])
+                });
+                listRun = [];
+            };
+
+            blocks.forEach((block) => {
+                if (block.type !== 'paragraph') {
+                    flushListRun();
+                    output.push(block);
+                    return;
+                }
+                const text = (block.text || '').trim();
+                const firstLine = (block.sourceLines || [])[0];
+                const indentLevel = pdfIndentLevelFromX(
+                    firstLine?.xStart,
+                    textLeft,
+                    firstLine?.avgCharWidth
+                );
+                const marker = detectPlainListMarker(text, { indentLevel });
+                if (!marker) {
+                    flushListRun();
+                    output.push(block);
+                    return;
+                }
+                // Strip leading marker from HTML when present as plain text start
+                let html = block.html || escapeHtml(marker.body);
+                const plainStart = text.slice(0, (marker.marker || '').length + 1);
+                if (text.startsWith(marker.marker)) {
+                    // Rebuild simple body; keep rich html if marker wasn't in HTML runs
+                    if ((block.html || '').includes(marker.marker)) {
+                        html = (block.html || '').replace(
+                            new RegExp(`^\\s*${marker.marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`),
+                            ''
+                        );
+                    } else {
+                        html = escapeHtml(marker.body);
+                    }
+                }
+                listRun.push({
+                    level: marker.level,
+                    format: marker.format,
+                    html,
+                    text: marker.body,
+                    sourceLines: block.sourceLines || []
+                });
+            });
+            flushListRun();
+            return output;
         }
 
         function linesToParagraphBlocks(builtLines) {
@@ -6974,7 +7205,11 @@
                 'span.kf-break-before,span.kf-break-after{display:block;}',
                 '.kf-blank-page{display:block;height:0;margin:0;padding:0;border:0;page-break-after:always;break-after:page;}',
                 'blockquote{border-left:.25em solid #888;padding-left:1em;margin:0 0 1em;color:#333;}',
-                'ul,ol{margin:0 0 1em 1.2em;padding-left:0.4em;}li{margin:0.25em 0;}',
+                'ul,ol,.kf-list{margin:0 0 0.85em 1.25em;padding-left:0.55em;}',
+                'ul{list-style-type:disc;}ol{list-style-type:decimal;}',
+                'li{margin:0.28em 0;page-break-inside:auto;}',
+                'li > ul,li > ol{margin-top:0.25em;margin-bottom:0.25em;}',
+                '.kf-indent-1{margin-left:1.25em;}.kf-indent-2{margin-left:2.25em;}.kf-indent-3{margin-left:3.25em;}',
                 'table,table.kobo-table{width:100%;border-collapse:collapse;margin:1em 0;font-size:0.88em;page-break-inside:auto !important;}',
                 'thead,tbody,tr,th,td{page-break-inside:auto !important;}',
                 'th,td{border:1px solid #555;padding:5px 7px;text-align:left;vertical-align:top;}',

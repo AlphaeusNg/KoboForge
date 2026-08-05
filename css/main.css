@@ -607,14 +607,34 @@ body {
 #deviceBookContent h3 { font-size: 1.08em; }
 
 #deviceBookContent ul,
+#deviceBookContent ol,
+#deviceBookContent .kf-list {
+    margin: 0 0 0.85em 1.25em;
+    padding-left: 0.55em;
+}
+
+#deviceBookContent ul {
+    list-style-type: disc;
+}
+
 #deviceBookContent ol {
-    margin: 0 0 1em 1.15em;
-    padding-left: 0.4em;
+    list-style-type: decimal;
 }
 
 #deviceBookContent li {
-    margin: 0.24em 0;
+    margin: 0.28em 0;
+    page-break-inside: auto;
 }
+
+#deviceBookContent li > ul,
+#deviceBookContent li > ol {
+    margin-top: 0.25em;
+    margin-bottom: 0.25em;
+}
+
+#deviceBookContent .kf-indent-1 { margin-left: 1.25em; }
+#deviceBookContent .kf-indent-2 { margin-left: 2.25em; }
+#deviceBookContent .kf-indent-3 { margin-left: 3.25em; }
 
 #deviceBookContent blockquote {
     margin: 0 0 1em;

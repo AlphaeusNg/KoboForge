@@ -36,6 +36,9 @@ tools/fixtures/           # slim DOCX fixtures (sermon outlines)
 - Horizontal alignment supports left/center/right/**justify**.
 - Sermon-outline verse numbers: Word super/subscript (and plain leading digits)
   normalize to `<sup class="kf-verse-num">` and must never drop following prose.
+- Lists: DOCX `numbering.xml` plan + plain/PDF markers (`1.`, `a.`, bullets)
+  rebuild into nested lists; toolbar list commands use `toggleList`, not only
+  `execCommand`.
 - Bump `js/version.js` for every deployment using `YYYY.MM.DD.N`.
 - GitHub Pages serves the repository root from `main`.
 
