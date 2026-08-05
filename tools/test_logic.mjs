@@ -159,10 +159,8 @@ const features = [
     ['PDF semantic table header evidence', 'function hasPdfTableHeaderEvidence'],
     ['PDF paragraph continuation checker', 'function shouldBreakPdfParagraph'],
     ['EPUB image assets', 'function extractEmbeddedImagesForEpub'],
-    ['EPUB layout selector', 'id="epubLayoutMode"'],
-    ['fixed-layout renderer', 'function renderPdfFixedLayoutPages'],
-    ['fixed-layout EPUB builder', 'function buildFixedLayoutEpubBlob'],
-    ['fixed-layout package module', 'window.SITE_VERSION?.id'],
+    ['always-reflowable layout', "return 'reflowable'"],
+    ['editable preview modes', "previewEl.contentEditable = isEdit ? 'true' : 'false'"],
     ['Floyd–Steinberg dithering', 'Floyd–Steinberg'],
 ];
 for (const [label, needle] of features) assertIncludes(label, needle);

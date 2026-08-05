@@ -1,8 +1,5 @@
         const {
-            analyzePdfLayoutComplexity,
-            buildFixedLayoutPublicationFiles,
-            fixedLayoutDownloadName,
-            resolveEpubLayoutMode
+            analyzePdfLayoutComplexity
         } = await import(
             `./fixed-layout.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
@@ -121,9 +118,7 @@
         const deviceButtonOne = document.getElementById('deviceButtonOne');
         const deviceButtonTwo = document.getElementById('deviceButtonTwo');
         const controlTooltip = document.getElementById('controlTooltip');
-        const epubLayoutMode = document.getElementById('epubLayoutMode');
-        const epubLayoutResolved = document.getElementById('epubLayoutResolved');
-        const epubLayoutHint = document.getElementById('epubLayoutHint');
+
 
         /*
          * Portrait screen pixel sizes, PPI, and body dimensions below are from
@@ -293,9 +288,6 @@
                 if (Number.isFinite(Number(p.deviceFontSize)) && deviceFontSize) deviceFontSize.value = p.deviceFontSize;
                 if (Number.isFinite(Number(p.deviceMargin)) && deviceMargin) deviceMargin.value = p.deviceMargin;
                 if (typeof p.deviceChrome === 'boolean' && deviceChrome) deviceChrome.checked = p.deviceChrome;
-                if (['auto', 'reflowable', 'fixed'].includes(p.epubLayoutMode) && epubLayoutMode) {
-                    epubLayoutMode.value = p.epubLayoutMode;
-                }
             } catch (_) { /* ignore */ }
         }
 
@@ -310,8 +302,7 @@
                     deviceOrientation: deviceOrientation?.value || 'portrait',
                     deviceFontSize: Number(deviceFontSize?.value || 3.6),
                     deviceMargin: Number(deviceMargin?.value || 8),
-                    deviceChrome: !!deviceChrome?.checked,
-                    epubLayoutMode: epubLayoutMode?.value || 'auto'
+                    deviceChrome: !!deviceChrome?.checked
                 }));
             } catch (_) { /* ignore */ }
         }
@@ -346,14 +337,14 @@
             }
         });
 
+        /** Always reflowable — every document stays editable in preview and export. */
         function resolvedEpubLayout() {
-            return resolveEpubLayoutMode(epubLayoutMode?.value || 'auto', currentOutput);
+            return 'reflowable';
         }
 
         function conciseReadyStatus(output = currentOutput) {
             if (!output) return 'Waiting for a document.';
-            const layout = resolvedEpubLayout() === 'fixed' ? 'fixed layout' : 'reflowable';
-            return `${output.formatLabel || 'Document'} ready · ${layout} · ${selectedDeviceProfile().name}`;
+            return `${output.formatLabel || 'Document'} ready · editable · ${selectedDeviceProfile().name}`;
         }
 
         function clearFixedLayoutCache() {
@@ -366,71 +357,16 @@
         }
 
         function updateEpubLayoutUi() {
-            const requested = epubLayoutMode?.value || 'auto';
-            const resolved = resolvedEpubLayout();
-            const isPdf = currentOutput?.formatLabel === 'PDF';
-            const recommendation = currentOutput?.fixedLayoutRecommendation;
-
-            if (!currentOutput) {
-                if (epubLayoutResolved) {
-                    epubLayoutResolved.textContent = requested === 'fixed'
-                        ? 'Fixed · PDF only'
-                        : requested === 'reflowable'
-                            ? 'Reflowable'
-                            : 'Auto · waiting for PDF';
-                }
-            } else if (epubLayoutResolved) {
-                epubLayoutResolved.textContent = resolved === 'fixed'
-                    ? `Fixed · ${currentOutput.pageCount || 1} source page${currentOutput.pageCount === 1 ? '' : 's'}`
-                    : requested === 'fixed' && !isPdf
-                        ? 'Reflowable · fixed is PDF only'
-                        : 'Reflowable · editable text';
-            }
-
-            if (epubLayoutHint) {
-                if (resolved === 'fixed') {
-                    const reasons = recommendation?.reasons?.length
-                        ? ` Detected: ${recommendation.reasons.join(', ')}.`
-                        : '';
-                    epubLayoutHint.textContent = `The Kobo preview and download use one locked facsimile page per PDF page.${reasons} Exact visual placement is retained; switch to Reflowable to edit text, resize type, or use Diff.`;
-                } else if (isPdf && recommendation?.recommended && requested === 'reflowable') {
-                    epubLayoutHint.textContent = `This PDF has complex layout signals (${recommendation.reasons.join(', ')}), but Reflowable is forced so text remains editable and resizable. Review page flow carefully.`;
-                } else if (requested === 'fixed' && !isPdf && currentOutput) {
-                    epubLayoutHint.textContent = 'Fixed layout is available for PDF input. This document will remain reflowable so its text and inline images stay editable.';
-                } else {
-                    epubLayoutHint.textContent = 'Reflowable EPUB keeps text editable, searchable, and resizable, and uses KoboForge’s paragraph, table, whitespace, typography, and inline-image reconstruction.';
-                }
-            }
-
+            // Fixed-layout mode was removed: Edit / Diff / HTML and text controls stay enabled.
             modeButtons.forEach((button) => {
-                const unavailable = resolved === 'fixed' && button.dataset.mode !== 'edit';
-                button.disabled = unavailable;
-                button.setAttribute('aria-disabled', String(unavailable));
+                button.disabled = false;
+                button.setAttribute('aria-disabled', 'false');
             });
             [deviceFontSize, deviceMargin, splitChaptersEl].forEach((control) => {
-                if (control) control.disabled = resolved === 'fixed';
+                if (control) control.disabled = false;
             });
         }
 
-        epubLayoutMode?.addEventListener('change', async () => {
-            if (
-                currentOutput
-                && editMode === 'edit'
-                && !deviceBookContent?.classList.contains('kf-fixed-preview')
-            ) {
-                syncBodyFromUi();
-            }
-            savePrefs();
-            updateEpubLayoutUi();
-            if (!currentOutput) return;
-            if (resolvedEpubLayout() === 'fixed') {
-                if (editMode !== 'edit') setEditMode('edit');
-                await ensureFixedLayoutPages();
-            }
-            renderDevicePreview({ resetPage: true });
-            refreshOutlineAndStats();
-            statusEl.textContent = conciseReadyStatus();
-        });
         updateEpubLayoutUi();
 
         // —— Preview modes ——
@@ -442,10 +378,6 @@
             if (!['edit', 'diff', 'html'].includes(mode)) mode = 'edit';
             if (!currentOutput) {
                 statusEl.textContent = 'Load a document first.';
-                return;
-            }
-            if (resolvedEpubLayout() === 'fixed' && mode !== 'edit') {
-                statusEl.textContent = 'Fixed layout is a locked visual facsimile. Switch EPUB layout to Reflowable to edit text or inspect Diff/HTML.';
                 return;
             }
             // Always flush UI → model before leaving a surface that can hold edits
@@ -474,24 +406,18 @@
             devicePreview?.classList.toggle('hidden', !isDeviceSurface);
             bodyHtmlSource.classList.toggle('hidden', !isHtml);
             htmlToolbar?.classList.toggle('hidden', !isHtml);
-            const fixedPreview = resolvedEpubLayout() === 'fixed';
-            editToolbar?.classList.toggle('hidden', !isEdit || fixedPreview);
+            editToolbar?.classList.toggle('hidden', !isEdit);
             diffPanel?.classList.toggle('hidden', !isDiff);
 
-            previewEl.contentEditable = isEdit && !fixedPreview ? 'true' : 'false';
-            previewEl.classList.toggle('kf-editing', isEdit && !fixedPreview);
+            previewEl.contentEditable = isEdit ? 'true' : 'false';
+            previewEl.classList.toggle('kf-editing', isEdit);
             previewEl.classList.toggle('kf-diffing', isDiff);
-            if (isEdit && !fixedPreview) {
+            if (isEdit) {
                 previewEl.setAttribute(
                     'aria-label',
                     'Editable paginated Kobo document'
                 );
                 previewEl.focus();
-            } else if (isEdit && fixedPreview) {
-                previewEl.setAttribute(
-                    'aria-label',
-                    'Fixed-layout Kobo preview of the original PDF pages'
-                );
             } else if (isDiff) {
                 previewEl.setAttribute(
                     'aria-label',
@@ -4378,68 +4304,45 @@
                 const title = bookTitleInput.value.trim() || currentOutput.title;
                 const author = bookAuthorInput.value.trim() || currentOutput.author || 'Unknown';
                 const lang = (bookLangInput?.value || 'en').trim() || 'en';
-                const layout = resolvedEpubLayout();
-                statusEl.textContent = layout === 'fixed'
-                    ? 'Preparing exact PDF pages for fixed-layout EPUB…'
-                    : 'Syncing edits into EPUB body…';
-                setProgress(8, layout === 'fixed' ? 'Preparing fixed pages' : 'Syncing edits');
-                // Fixed layout uses the source PDF page facsimiles. Reflowable
-                // export flushes the editable Kobo/HTML surface into the model.
-                const bodyHtml = layout === 'fixed'
-                    ? currentOutput.bodyHtml
-                    : bodyHtmlForExport();
-                const stats = layout === 'fixed'
-                    ? {
-                        added: 0,
-                        removed: 0,
-                        headingChanges: 0,
-                        structuredChanges: 0,
-                        navItems: []
-                    }
-                    : buildTrackChangesDocument(
-                        currentOutput.originalBodyHtml || '',
-                        bodyHtml
-                    );
+                statusEl.textContent = 'Syncing edits into EPUB body…';
+                setProgress(8, 'Syncing edits');
+                const bodyHtml = bodyHtmlForExport();
+                const stats = buildTrackChangesDocument(
+                    currentOutput.originalBodyHtml || '',
+                    bodyHtml
+                );
                 const headBit = stats.headingChanges
                     ? `, ${stats.headingChanges} heading`
                     : '';
                 const structureBit = stats.structuredChanges
                     ? `, ${stats.structuredChanges} formatting/object`
                     : '';
-                statusEl.textContent = layout === 'fixed'
-                    ? 'Building standards-based fixed-layout EPUB 3 locally…'
-                    : stats.navItems.length
-                        ? `Building EPUB with your edits (+${stats.added}/−${stats.removed}${headBit}${structureBit})…`
-                        : 'Building reflowable EPUB locally…';
+                statusEl.textContent = stats.navItems.length
+                    ? `Building EPUB with your edits (+${stats.added}/−${stats.removed}${headBit}${structureBit})…`
+                    : 'Building reflowable EPUB locally…';
                 setProgress(20, 'Building EPUB');
                 const split = !!(splitChaptersEl && splitChaptersEl.checked);
-                const blob = layout === 'fixed'
-                    ? await buildFixedLayoutEpubBlob({ title, author, lang })
-                    : await buildEpubBlob({
-                        title,
-                        author,
-                        lang,
-                        bodyHtml,
-                        splitChapters: split
-                    });
+                const blob = await buildEpubBlob({
+                    title,
+                    author,
+                    lang,
+                    bodyHtml,
+                    splitChapters: split
+                });
                 setProgress(90, 'Preparing download');
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
                 const base = currentFile?.name?.replace(/\.[^.]+$/, '') || title;
                 const outputBase = slugify(title || base) || 'koboforge-output';
-                link.download = layout === 'fixed'
-                    ? fixedLayoutDownloadName(outputBase)
-                    : `${outputBase}.epub`;
+                link.download = `${outputBase}.epub`;
                 link.click();
                 URL.revokeObjectURL(url);
                 setProgress(100, 'Done');
                 savePrefs();
-                statusEl.textContent = layout === 'fixed'
-                    ? 'Fixed-layout EPUB downloaded as .fxl.kepub.epub for accurate Kobo sideload testing. Nothing left your browser.'
-                    : stats.navItems.length
-                        ? `EPUB downloaded with your edits (+${stats.added}/−${stats.removed}${headBit}${structureBit} vs import). Nothing left your browser.`
-                        : 'Reflowable EPUB ready. Nothing left your browser.';
+                statusEl.textContent = stats.navItems.length
+                    ? `EPUB downloaded with your edits (+${stats.added}/−${stats.removed}${headBit}${structureBit} vs import). Nothing left your browser.`
+                    : 'Reflowable EPUB ready. Nothing left your browser.';
                 if (editMode === 'diff') renderDiffPanel();
             } catch (error) {
                 console.error('[KoboForge]', error);
@@ -4539,19 +4442,14 @@
             const headingCount = countHeadings(html);
             const words = countWords(html);
 
-            statFormat.textContent = resolvedEpubLayout() === 'fixed'
-                ? `${currentOutput.formatLabel} · fixed`
-                : `${currentOutput.formatLabel} · reflowable`;
+            statFormat.textContent = `${currentOutput.formatLabel} · editable`;
             if (statWords) {
                 const count = String(words).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
                 statWords.textContent = `${count} words`;
             }
             if (statChapters) {
-                const fixed = resolvedEpubLayout() === 'fixed';
-                const count = fixed ? currentOutput.pageCount || 1 : chapters.length;
-                statChapters.textContent = `${count} ${fixed
-                    ? `page${count === 1 ? '' : 's'}`
-                    : `section${count === 1 ? '' : 's'}`}`;
+                const count = chapters.length;
+                statChapters.textContent = `${count} section${count === 1 ? '' : 's'}`;
             }
             statsEl.classList.remove('hidden');
 
@@ -4639,16 +4537,9 @@
 
         function renderDiagnostics(out) {
             const warnings = out.warnings || [];
-            const fixedActive = resolvedEpubLayout() === 'fixed';
             let level = 'ok';
             let observation = 'Ready to review and export.';
-            if (fixedActive) {
-                const pages = out.pageCount || 1;
-                observation = `Exact layout kept across ${pages} page${pages === 1 ? '' : 's'}.`;
-            } else if (out.formatLabel === 'PDF' && out.fixedLayoutRecommendation?.recommended) {
-                level = 'warn';
-                observation = 'Complex PDF reflowed — spot-check the preview.';
-            } else if (out.formatLabel === 'PDF' && out.emptyPages?.length) {
+            if (out.formatLabel === 'PDF' && out.emptyPages?.length) {
                 const count = out.emptyPages.length;
                 observation = `${count} blank source page${count === 1 ? '' : 's'} preserved.`;
             } else if (warnings.length) {
@@ -5291,11 +5182,7 @@
             if (optimized.imageCount) {
                 structureParts.push(`${optimized.imageCount} Kobo-optimized image${optimized.imageCount === 1 ? '' : 's'}`);
             }
-            if (fixedLayoutRecommendation.recommended) {
-                structureParts.push(
-                    `fixed-layout recommended on ${fixedLayoutRecommendation.complexPageCount}/${total} page${total === 1 ? '' : 's'}`
-                );
-            }
+
             const structureNote = structureParts.join(' + ');
 
             if (emptyPages.length === total) {

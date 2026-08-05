@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KoboForge • Kobo EPUB Converter</title>
-    <meta name="description" content="Private client-side Kobo EPUB conversion with automatic fixed-layout PDF preservation, reflowable editing, accurate device profiles, and inline image optimization.">
+    <meta name="description" content="Private client-side Kobo EPUB conversion with reflowable editing, accurate device profiles, and inline image optimization.">
     <meta name="theme-color" content="#080d17">
     <link rel="canonical" href="https://alphaeusng.github.io/KoboForge/">
     <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
@@ -125,23 +125,6 @@
                         </div>
                     </div>
                     <input id="fileInput" type="file" accept=".docx,.pdf,.txt,.md,.markdown" class="hidden">
-                </div>
-
-                <div id="epubLayoutSetup" class="mt-5 rounded-3xl border border-white/10 bg-slate-950/35 p-5">
-                    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                        <label class="device-control block min-w-0 flex-1">
-                            <span class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.17em] text-slate-500">EPUB layout</span>
-                            <select id="epubLayoutMode" class="rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-[#C9A227]">
-                                <option value="auto" selected>Auto · inspect the PDF design</option>
-                                <option value="reflowable">Reflowable · editable, resizable text</option>
-                                <option value="fixed">Fixed layout · exact PDF pages</option>
-                            </select>
-                        </label>
-                        <span id="epubLayoutResolved" class="device-spec-pill w-fit shrink-0 rounded-full px-3 py-1.5 text-xs text-slate-300">Auto · waiting for PDF</span>
-                    </div>
-                    <p id="epubLayoutHint" class="mt-3 text-xs leading-5 text-slate-400">
-                        Auto keeps ordinary documents reflowable and switches graphic-heavy PDFs to a fixed-layout EPUB 3 facsimile. Fixed layout preserves exact positions, fonts, sidebars, image wraps, and writing space, but its text cannot be resized or edited like a normal ebook.
-                    </p>
                 </div>
 
                 <div id="koboPreviewSetup" class="mt-6 rounded-3xl border border-[#C9A227]/25 bg-[#C9A227]/[0.06] p-5">

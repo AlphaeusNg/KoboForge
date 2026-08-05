@@ -39,6 +39,7 @@ tools/fixtures/           # slim DOCX fixtures (sermon outlines)
 - Lists: DOCX `numbering.xml` plan + plain/PDF markers (`1.`, `a.`, bullets)
   rebuild into nested lists; toolbar list commands use `toggleList`, not only
   `execCommand`.
+- Always reflowable/editable — no fixed-layout EPUB mode or layout picker UI.
 - Bump `js/version.js` for every deployment using `YYYY.MM.DD.N`.
 - GitHub Pages serves the repository root from `main`.
 

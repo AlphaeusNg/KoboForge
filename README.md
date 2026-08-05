@@ -48,18 +48,12 @@ before exporting a Kobo-friendly EPUB.
 - Conservative PDF table detection requiring ruled-grid or distinct header evidence
 - PDF font profiling that retains relative size, family type, weight, and slant
 - Wide PDF column gaps that remain separated and wrap cleanly on narrow Kobos
-- Auto/Fixed/Reflowable layout choice directly below upload
-- PDF design-complexity scoring across images, columns, positioned blocks,
-  vector graphics, font profiles, tables, and intentional whitespace
-- EPUB 3 fixed-layout facsimile export with one viewport/spine item per PDF
-  page, source-page previews, hidden extracted text, and Kobo
-  `.fxl.kepub.epub` sideload naming
+- Always-reflowable EPUB: every DOCX/PDF/TXT/Markdown convert stays editable
+  in the Kobo preview (Edit / Diff / HTML) with resizable text
+- PDF design-complexity signals still inform reconstruction (columns, tables,
+  whitespace, fonts) without locking the book into a non-editable facsimile
 - Reflowable EPUB3 export with nav + NCX and packaged image manifest assets
 - Fully local browser processing; documents are never uploaded
-
-Fixed layout is intended for graphic-heavy PDFs whose exact visual hierarchy
-matters more than resizable text. It preserves the source page appearance but
-is deliberately read-only; switch to Reflowable to edit text or use Diff.
 
 ## Structure
 
