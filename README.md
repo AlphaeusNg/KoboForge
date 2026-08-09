@@ -62,12 +62,14 @@ index.html            # GitHub Pages entry point
 css/main.css          # KoboForge presentation
 js/app.js             # Conversion, editing, preview, and EPUB application
 js/document-fidelity.js # DOCX/HTML break and typography normalization
+js/epub-images.js     # Embedded-image cleanup, decoding, and deduplication
 js/epub-package.js    # Reflowable EPUB files and tested archive adapter
 js/runtime-dependencies.js # Retryable on-demand CDN dependency loading
 js/boot.js            # Loads the app with the centralized deployment version
 js/version.js         # Deployment stamp
 tools/test_logic.mjs  # Lightweight regression contracts
 tools/test_document_fidelity.mjs # Functional DOCX/HTML fidelity matrix
+tools/test_epub_images.mjs # Executable embedded-image/archive fixture
 tools/test_epub_package.mjs # Executable reflowable EPUB package fixture
 tools/test_runtime_dependencies.mjs # CDN failure/retry DOM fixture
 tools/test_workflow.mjs # GitHub Actions policy contract

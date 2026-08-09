@@ -15,6 +15,11 @@
             `./epub-package.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
         const {
+            extractEmbeddedImagesForEpub
+        } = await import(
+            `./epub-images.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
+        );
+        const {
             RUNTIME_DEPENDENCIES,
             RuntimeDependencyError,
             createModuleDependencyLoader,
@@ -6811,67 +6816,6 @@
                 if (wrappedHeading) return trimmed;
             }
             return `<h1>${escapeXml(title)}</h1>${trimmed}`;
-        }
-
-        function decodeImageDataUrl(source) {
-            const match = /^data:([^;,]+)(;base64)?,([\s\S]*)$/i.exec(source || '');
-            if (!match || !match[1].toLowerCase().startsWith('image/')) return null;
-            const mediaType = match[1].toLowerCase();
-            let bytes;
-            if (match[2]) {
-                const binary = atob(match[3]);
-                bytes = new Uint8Array(binary.length);
-                for (let index = 0; index < binary.length; index += 1) {
-                    bytes[index] = binary.charCodeAt(index);
-                }
-            } else {
-                bytes = new TextEncoder().encode(decodeURIComponent(match[3]));
-            }
-            const extension = {
-                'image/jpeg': 'jpg',
-                'image/png': 'png',
-                'image/gif': 'gif',
-                'image/svg+xml': 'svg',
-                'image/webp': 'webp'
-            }[mediaType] || 'png';
-            return { mediaType, extension, bytes };
-        }
-
-        function extractEmbeddedImagesForEpub(html) {
-            const doc = new DOMParser().parseFromString(
-                `<div id="root">${html || ''}</div>`,
-                'text/html'
-            );
-            const root = doc.getElementById('root');
-            if (!root) return { html: html || '', assets: [] };
-            const bySource = new Map();
-            const assets = [];
-
-            root.querySelectorAll('img').forEach((img) => {
-                Array.from(img.attributes).forEach((attribute) => {
-                    if (attribute.name.startsWith('data-kf-')) img.removeAttribute(attribute.name);
-                });
-                img.classList.remove('kf-inline-image');
-                if (!img.className) img.removeAttribute('class');
-                const source = img.getAttribute('src') || '';
-                if (!source.startsWith('data:image/')) return;
-                let asset = bySource.get(source);
-                if (!asset) {
-                    const decoded = decodeImageDataUrl(source);
-                    if (!decoded) return;
-                    const number = assets.length + 1;
-                    asset = {
-                        id: `image-${number}`,
-                        fileName: `image-${number}.${decoded.extension}`,
-                        mediaType: decoded.mediaType,
-                        bytes: decoded.bytes
-                    };
-                    assets.push(asset);
-                    bySource.set(source, asset);
-                }
-                img.setAttribute('src', `images/${asset.fileName}`);
-            });
-            return { html: root.innerHTML, assets };
         }
 
         async function buildEpubBlob({ title, author, lang = 'en', bodyHtml, splitChapters = true }) {

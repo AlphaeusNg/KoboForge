@@ -13,6 +13,7 @@ const cssPath = join(__dirname, '../css/main.css');
 const versionPath = join(__dirname, '../js/version.js');
 const bootPath = join(__dirname, '../js/boot.js');
 const epubPackagePath = join(__dirname, '../js/epub-package.js');
+const epubImagesPath = join(__dirname, '../js/epub-images.js');
 const runtimeDependenciesPath = join(__dirname, '../js/runtime-dependencies.js');
 const packagePath = join(__dirname, '../package.json');
 const fixedLayoutPath = join(__dirname, '../js/fixed-layout.js');
@@ -23,9 +24,17 @@ const styles = readFileSync(cssPath, 'utf8');
 const versionScript = readFileSync(versionPath, 'utf8');
 const bootScript = readFileSync(bootPath, 'utf8');
 const epubPackageScript = readFileSync(epubPackagePath, 'utf8');
+const epubImagesScript = readFileSync(epubImagesPath, 'utf8');
 const runtimeDependenciesScript = readFileSync(runtimeDependenciesPath, 'utf8');
 const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
-const page = [html, script, epubPackageScript, runtimeDependenciesScript, styles].join('\n');
+const page = [
+    html,
+    script,
+    epubPackageScript,
+    epubImagesScript,
+    runtimeDependenciesScript,
+    styles
+].join('\n');
 
 function assertIncludes(label, needle) {
     assert.ok(page.includes(needle), `missing ${label}: ${needle}`);
@@ -119,6 +128,12 @@ assert.ok(
     'browser export must use the tested archive adapter without stale direct ZIP writes'
 );
 assert.ok(
+    script.includes('./epub-images.js?v=')
+        && script.includes('const embeddedImages = extractEmbeddedImagesForEpub(preparedBody)')
+        && !script.includes('function extractEmbeddedImagesForEpub'),
+    'browser export must use the executable shared image extractor'
+);
+assert.ok(
     !script.includes('<package version="3.0"'),
     'EPUB package metadata must not be duplicated inside app.js'
 );
@@ -203,7 +218,7 @@ const features = [
     ['PDF ruled-table evidence', 'function detectPdfTableGeometry'],
     ['PDF semantic table header evidence', 'function hasPdfTableHeaderEvidence'],
     ['PDF paragraph continuation checker', 'function shouldBreakPdfParagraph'],
-    ['EPUB image assets', 'function extractEmbeddedImagesForEpub'],
+    ['EPUB image assets', 'extractEmbeddedImagesForEpub'],
     ['editable preview modes', "previewEl.contentEditable = isEdit ? 'true' : 'false'"],
     ['Floyd–Steinberg dithering', 'Floyd–Steinberg'],
 ];
