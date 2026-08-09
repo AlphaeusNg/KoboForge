@@ -1,9 +1,4 @@
         const {
-            analyzePdfLayoutComplexity
-        } = await import(
-            `./fixed-layout.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
-        );
-        const {
             DOCX_FIDELITY_STYLE_MAP,
             detectPlainListMarker,
             normalizeBibleVerseMarkers,
@@ -206,9 +201,6 @@
         let editViewportLockFrame = null;
         let documentImageConversionToken = 0;
         let tooltipHideTimer = null;
-        let fixedLayoutRenderToken = 0;
-        let fixedLayoutCache = null;
-        let fixedLayoutPromise = null;
         let savedEditRange = null;
         let tableInsertionRange = null;
         let selectedEditableImage = null;
@@ -337,37 +329,10 @@
             }
         });
 
-        /** Always reflowable — every document stays editable in preview and export. */
-        function resolvedEpubLayout() {
-            return 'reflowable';
-        }
-
         function conciseReadyStatus(output = currentOutput) {
             if (!output) return 'Waiting for a document.';
             return `${output.formatLabel || 'Document'} ready · editable · ${selectedDeviceProfile().name}`;
         }
-
-        function clearFixedLayoutCache() {
-            fixedLayoutRenderToken += 1;
-            fixedLayoutCache?.pages?.forEach((page) => {
-                if (page.previewUrl) URL.revokeObjectURL(page.previewUrl);
-            });
-            fixedLayoutCache = null;
-            fixedLayoutPromise = null;
-        }
-
-        function updateEpubLayoutUi() {
-            // Fixed-layout mode was removed: Edit / Diff / HTML and text controls stay enabled.
-            modeButtons.forEach((button) => {
-                button.disabled = false;
-                button.setAttribute('aria-disabled', 'false');
-            });
-            [deviceFontSize, deviceMargin, splitChaptersEl].forEach((control) => {
-                if (control) control.disabled = false;
-            });
-        }
-
-        updateEpubLayoutUi();
 
         // —— Preview modes ——
         modeButtons.forEach((btn) => {
@@ -563,26 +528,12 @@
             const title = bookTitleInput?.value?.trim() || currentOutput?.title || 'KoboForge preview';
             const lang = bookLangInput?.value?.trim() || 'en';
             let renderedBody = '<h1>KoboForge</h1><p>Load a document to preview its converted EPUB body on this device.</p>';
-            const fixedPreview = !!currentOutput && resolvedEpubLayout() === 'fixed';
-            if (fixedPreview) {
-                const cacheMatches = fixedLayoutCache?.file === currentFile;
-                const fixedPages = cacheMatches ? fixedLayoutCache.pages : [];
-                renderedBody = fixedPages?.length
-                    ? fixedPages.map((page, index) => (
-                        `<section class="kf-fixed-preview-page" aria-label="Source PDF page ${index + 1}">`
-                        + `<img src="${page.previewUrl}" alt="Exact visual layout of source PDF page ${index + 1}">`
-                        + '</section>'
-                    )).join('')
-                    : '<p class="kf-fixed-preview-loading">Rendering exact PDF pages for the fixed-layout preview…</p>';
-            }
             if (currentOutput) {
-                if (!fixedPreview) {
-                    renderedBody = prepareHtmlForEpub(
-                        canonicalizeBody(currentOutput.bodyHtml, { forExport: true })
-                    );
-                }
+                renderedBody = prepareHtmlForEpub(
+                    canonicalizeBody(currentOutput.bodyHtml, { forExport: true })
+                );
             }
-            if (currentOutput && editMode === 'diff' && !fixedPreview) {
+            if (currentOutput && editMode === 'diff') {
                 const tracked = buildTrackChangesDocument(
                     currentOutput.originalBodyHtml || '',
                     currentOutput.bodyHtml || ''
@@ -599,11 +550,10 @@
             savedEditRange = null;
             tableInsertionRange = null;
             closeTablePicker();
-            deviceBookContent.contentEditable = editMode === 'edit' && !fixedPreview ? 'true' : 'false';
-            deviceBookContent.classList.toggle('kf-editing', editMode === 'edit' && !fixedPreview);
-            deviceBookContent.classList.toggle('kf-diffing', editMode === 'diff' && !fixedPreview);
-            deviceBookContent.classList.toggle('kf-fixed-preview', fixedPreview);
-            editToolbar?.classList.toggle('hidden', editMode !== 'edit' || fixedPreview);
+            deviceBookContent.contentEditable = editMode === 'edit' ? 'true' : 'false';
+            deviceBookContent.classList.toggle('kf-editing', editMode === 'edit');
+            deviceBookContent.classList.toggle('kf-diffing', editMode === 'diff');
+            editToolbar?.classList.toggle('hidden', editMode !== 'edit');
             configureEditableImages();
             deviceBookContent.querySelectorAll('.kf-note-space').forEach((space) => {
                 // Keep intentional space from collapsing during ordinary text
@@ -622,16 +572,6 @@
             deviceBookContent.querySelectorAll('img').forEach((img) => {
                 if (!img.complete) img.addEventListener('load', () => scheduleDevicePagination(), { once: true });
             });
-            if (fixedPreview && !fixedLayoutCache?.pages?.length) {
-                ensureFixedLayoutPages().then(() => {
-                    if (currentOutput && resolvedEpubLayout() === 'fixed') {
-                        renderDevicePreview({ resetPage });
-                    }
-                }).catch((error) => {
-                    console.error('[KoboForge] Fixed preview', error);
-                    statusEl.textContent = error.message || 'Could not render the fixed-layout preview.';
-                });
-            }
             scheduleDevicePagination();
             savePrefs();
         }
@@ -717,9 +657,8 @@
                 return;
             }
             const cssPxPerMm = screenWidth / geometry.screenWidthMm;
-            const fixedPreview = deviceBookContent.classList.contains('kf-fixed-preview');
             const fontMm = Number(deviceFontSize?.value || 3.6);
-            const marginMm = fixedPreview ? 0 : Number(deviceMargin?.value || 8);
+            const marginMm = Number(deviceMargin?.value || 8);
             const showChrome = !!deviceChrome?.checked;
             const contentTopMm = 7;
             const contentBottomMm = showChrome ? 7 : 3.5;
@@ -741,26 +680,15 @@
                 const pageWidth = Math.max(1, Math.floor(deviceBookViewport.clientWidth));
                 const pageHeight = Math.max(1, Math.floor(deviceBookViewport.clientHeight));
                 deviceBookContent.style.setProperty('--reader-page-height', `${pageHeight}px`);
-                const fixedPageCount = fixedPreview
-                    ? Math.max(1, deviceBookContent.querySelectorAll('.kf-fixed-preview-page').length)
-                    : 1;
-                deviceBookContent.style.width = `${pageWidth * fixedPageCount}px`;
+                deviceBookContent.style.width = `${pageWidth}px`;
                 deviceBookContent.style.height = `${pageHeight}px`;
-                deviceBookContent.style.columnWidth = fixedPreview ? 'auto' : `${pageWidth}px`;
-                deviceBookContent.style.columnGap = fixedPreview ? 'normal' : '0px';
-                deviceBookContent.style.display = fixedPreview ? 'flex' : 'block';
-                if (fixedPreview) {
-                    deviceBookContent.querySelectorAll('.kf-fixed-preview-page').forEach((page) => {
-                        page.style.width = `${pageWidth}px`;
-                        page.style.height = `${pageHeight}px`;
-                    });
-                }
+                deviceBookContent.style.columnWidth = `${pageWidth}px`;
+                deviceBookContent.style.columnGap = '0px';
+                deviceBookContent.style.display = 'block';
 
                 requestAnimationFrame(() => {
                     const fullWidth = Math.max(pageWidth, deviceBookContent.scrollWidth);
-                    devicePageCount = fixedPreview
-                        ? fixedPageCount
-                        : Math.max(1, Math.ceil((fullWidth - 0.5) / pageWidth));
+                    devicePageCount = Math.max(1, Math.ceil((fullWidth - 0.5) / pageWidth));
                     const requestedPage = (
                         editMode === 'edit' && lockedEditPageIndex !== null
                     )
@@ -808,18 +736,10 @@
                 savePrefs();
                 const output = currentOutput;
                 if (output) {
-                    const fixedPreview = resolvedEpubLayout() === 'fixed';
-                    if (editMode === 'edit' && !fixedPreview) syncBodyFromUi();
-                    const imagesRetargeted = fixedPreview
-                        ? false
-                        : await retargetCurrentDocumentImages();
+                    if (editMode === 'edit') syncBodyFromUi();
+                    const imagesRetargeted = await retargetCurrentDocumentImages();
                     if (currentOutput !== output) return;
                     if (imagesRetargeted) refreshOutlineAndStats();
-                    if (fixedPreview) {
-                        clearFixedLayoutCache();
-                        await ensureFixedLayoutPages();
-                        if (currentOutput !== output) return;
-                    }
                     statusEl.textContent = conciseReadyStatus();
                 }
                 renderDevicePreview({ resetPage: true });
@@ -908,7 +828,7 @@
         }
 
         function canEditImagesNow() {
-            return canFormatNow() && resolvedEpubLayout() !== 'fixed';
+            return canFormatNow();
         }
 
         function rangeLivesInPreview(range) {
@@ -4182,7 +4102,6 @@
         function clearWorkspace() {
             releaseEditablePageLock();
             documentImageConversionToken += 1;
-            clearFixedLayoutCache();
             currentFile = null;
             currentOutput = null;
             selectedEditableImage = null;
@@ -4226,7 +4145,6 @@
             if (fileInput) fileInput.value = '';
             setProgress(0);
             setDropzoneIdle();
-            updateEpubLayoutUi();
             if (exportEditHint) {
                 exportEditHint.classList.add('hidden');
                 exportEditHint.textContent = '';
@@ -4361,7 +4279,6 @@
                 }
             }
             documentImageConversionToken += 1;
-            clearFixedLayoutCache();
             currentFile = file;
             currentOutput = null;
             selectedEditableImage = null;
@@ -4371,7 +4288,7 @@
             updateImageEditControls();
             clearEditedFlag();
             previewEl.contentEditable = 'false';
-            previewEl.classList.remove('kf-editing', 'kf-diffing', 'kf-fixed-preview');
+            previewEl.classList.remove('kf-editing', 'kf-diffing');
             setDropzoneReady(file);
             downloadBtn.disabled = true;
             if (clearBtn) clearBtn.disabled = false;
@@ -4408,11 +4325,6 @@
                 currentOutput.originalBodyHtml = canonical;
                 currentOutput.bodyHtml = canonical;
                 clearEditedFlag();
-                updateEpubLayoutUi();
-                if (resolvedEpubLayout() === 'fixed') {
-                    setProgress(90, 'Rendering fixed pages');
-                    await ensureFixedLayoutPages();
-                }
                 refreshOutlineAndStats();
                 // Open the converted document directly in the selected Kobo editor.
                 devicePageIndex = 0;
@@ -4508,13 +4420,9 @@
                     chip.addEventListener('click', () => {
                         if (editMode !== 'edit') setEditMode('edit');
                         requestAnimationFrame(() => {
-                            const sourceSection = resolvedEpubLayout() === 'fixed'
-                                ? previewEl.querySelector(
-                                    `.kf-fixed-preview-page:nth-child(${p})`
-                                )
-                                : previewEl.querySelector(
-                                    `.kf-pdf-page[data-source-page="${p}"]`
-                                );
+                            const sourceSection = previewEl.querySelector(
+                                `.kf-pdf-page[data-source-page="${p}"]`
+                            );
                             if (sourceSection) {
                                 jumpDeviceToElement(sourceSection);
                                 return;
@@ -4901,54 +4809,6 @@
             return canvas.toDataURL('image/jpeg', 0.88);
         }
 
-        function summarizePdfPageDesign({
-            textContent,
-            operatorList,
-            pageBlocks,
-            pageImages,
-            tableGeometry,
-            viewport
-        }) {
-            const ops = pdfjsLib.OPS || {};
-            const imageOps = new Set([
-                ops.paintImageXObject,
-                ops.paintJpegXObject,
-                ops.paintInlineImageXObject,
-                ops.paintImageMaskXObject,
-                ops.paintSolidColorImageMask
-            ].filter(Number.isFinite));
-            const functions = operatorList?.fnArray || [];
-            const imageOperatorCount = functions.filter((fn) => imageOps.has(fn)).length;
-            const vectorPathCount = Number.isFinite(ops.constructPath)
-                ? functions.filter((fn) => fn === ops.constructPath).length
-                : 0;
-            const items = (textContent?.items || []).filter((item) => (
-                item?.str && item?.transform?.length >= 6
-            ));
-            const pageWidth = Math.max(1, Number(viewport?.width) || 1);
-            const xClusters = new Set(items.map((item) => (
-                Math.round((Number(item.transform[4]) || 0) / pageWidth * 20)
-            )));
-            const fonts = new Set(items.map((item) => item.fontName).filter(Boolean));
-            const blocks = Array.from(pageBlocks || []);
-
-            return {
-                textItemCount: items.length,
-                imageCount: pageImages?.length || 0,
-                imageOperatorCount,
-                imageOnly: blocks.length === 0 && (
-                    (pageImages?.length || 0) > 0
-                    || imageOperatorCount > 0
-                ),
-                readingColumns: Number(pageBlocks?.pageLayout?.readingColumns) || 1,
-                hasGrid: !!tableGeometry?.hasGrid,
-                vectorPathCount,
-                fontCount: fonts.size,
-                xClusterCount: xClusters.size,
-                noteSpaceCount: blocks.filter((block) => block.type === 'spacer').length
-            };
-        }
-
         async function parsePdf(file) {
             await loadPdfJs();
             const arrayBuffer = await file.arrayBuffer();
@@ -4982,7 +4842,6 @@
             const emptyPages = [];
             const imageOnlyPages = [];
             const failedPages = [];
-            const pageDesignSignals = [];
             const total = pdf.numPages || 1;
             const warnings = [];
 
@@ -4995,7 +4854,6 @@
                     topRatio: 0,
                     remainingRatio: 0.92
                 };
-                let pageDesignSignal = {};
                 try {
                     const page = await pdf.getPage(pageNumber);
                     const textContent = await page.getTextContent();
@@ -5093,14 +4951,6 @@
                             }
                         }
                     }
-                    pageDesignSignal = summarizePdfPageDesign({
-                        textContent,
-                        operatorList,
-                        pageBlocks,
-                        pageImages,
-                        tableGeometry,
-                        viewport
-                    });
                     const imageLayout = ['left', 'right'].includes(pageLayout.sideRail)
                         ? `inline-${pageLayout.sideRail}`
                         : 'block';
@@ -5134,7 +4984,6 @@
                         `<p class="preserve-structure"><em>(Failed to extract page ${pageNumber}: ${escapeHtml(pageErr?.message || 'unknown error')})</em></p>`
                     );
                 }
-                pageDesignSignals.push(pageDesignSignal);
                 const startZone = ['top', 'middle', 'bottom'].includes(pageLayout.startZone)
                     ? pageLayout.startZone
                     : 'top';
@@ -5164,7 +5013,6 @@
             } catch (_) { /* ignore */ }
 
             const paragraphCount = (optimized.html.match(/<p\b/gi) || []).length || 1;
-            const fixedLayoutRecommendation = analyzePdfLayoutComplexity(pageDesignSignals);
             const structureParts = [];
             if (tableCount) structureParts.push(`${tableCount} table${tableCount === 1 ? '' : 's'}`);
             if (noteSpaceCount) {
@@ -5233,8 +5081,7 @@
                 noteSpaceCount,
                 detectedFontCount: detectedFontFamilies.size,
                 readingColumnPageCount,
-                pageCount: total,
-                fixedLayoutRecommendation
+                pageCount: total
             };
         }
 
@@ -7035,187 +6882,6 @@
                 img.setAttribute('src', `images/${asset.fileName}`);
             });
             return { html: root.innerHTML, assets };
-        }
-
-        function canvasToBlob(canvas, type = 'image/jpeg', quality = 0.92) {
-            return new Promise((resolve, reject) => {
-                canvas.toBlob((blob) => {
-                    if (blob) resolve(blob);
-                    else reject(new Error('Browser could not encode a fixed-layout PDF page.'));
-                }, type, quality);
-            });
-        }
-
-        function fixedLayoutTargetKey(file = currentFile) {
-            const target = documentImageTarget();
-            return [
-                file?.name || '',
-                file?.size || 0,
-                file?.lastModified || 0,
-                target.profileKey,
-                target.orientation,
-                target.width,
-                target.height
-            ].join('|');
-        }
-
-        async function renderPdfFixedLayoutPages(file, renderToken) {
-            if (!file || !/\.pdf$/i.test(file.name || '')) {
-                throw new Error('Fixed-layout export requires a PDF source.');
-            }
-            await loadPdfJs();
-            const data = new Uint8Array((await file.arrayBuffer()).slice(0));
-            const pdf = await pdfjsLib.getDocument({
-                data,
-                useSystemFonts: true,
-                isEvalSupported: false
-            }).promise;
-            const target = documentImageTarget();
-            const total = pdf.numPages || 1;
-            const oversample = total > 80 ? 1 : total > 30 ? 1.1 : 1.25;
-            const pages = [];
-
-            try {
-                for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
-                    if (renderToken !== fixedLayoutRenderToken || file !== currentFile) {
-                        pages.forEach((page) => URL.revokeObjectURL(page.previewUrl));
-                        return null;
-                    }
-                    const page = await pdf.getPage(pageNumber);
-                    const base = page.getViewport({ scale: 1 });
-                    const fitScale = Math.min(
-                        target.width / Math.max(base.width, 1),
-                        target.height / Math.max(base.height, 1)
-                    );
-                    let scale = Math.max(1, Math.min(3.2, fitScale * oversample));
-                    const estimatedPixels = base.width * base.height * scale * scale;
-                    const maxPagePixels = 4_800_000;
-                    if (estimatedPixels > maxPagePixels) {
-                        scale *= Math.sqrt(maxPagePixels / estimatedPixels);
-                    }
-                    const viewport = page.getViewport({ scale });
-                    const canvas = document.createElement('canvas');
-                    canvas.width = Math.max(1, Math.round(viewport.width));
-                    canvas.height = Math.max(1, Math.round(viewport.height));
-                    const context = canvas.getContext('2d', { alpha: false });
-                    if (!context) throw new Error('Canvas is unavailable for fixed-layout rendering.');
-                    context.fillStyle = '#ffffff';
-                    context.fillRect(0, 0, canvas.width, canvas.height);
-                    await page.render({
-                        canvasContext: context,
-                        viewport,
-                        background: '#ffffff'
-                    }).promise;
-
-                    let text = '';
-                    try {
-                        const textContent = await page.getTextContent();
-                        text = (textContent.items || []).map((item) => (
-                            `${item?.str || ''}${item?.hasEOL ? '\n' : ' '}`
-                        )).join('').replace(/[^\S\n]+/g, ' ').trim();
-                    } catch (_) { /* visual page remains valid without hidden text */ }
-
-                    const designReasons = (
-                        currentOutput?.fixedLayoutRecommendation?.pages?.[pageNumber - 1]?.reasons
-                        || []
-                    );
-                    const hasRasterArtwork = designReasons.some((reason) => (
-                        /image|artwork|scanned/i.test(reason)
-                    ));
-                    // InDesign-style automatic image choice: lossless PNG keeps
-                    // text/vector worksheets crisp; JPEG contains photo-heavy
-                    // pages and long publications without runaway file sizes.
-                    const mediaType = total <= 30 && !hasRasterArtwork
-                        ? 'image/png'
-                        : 'image/jpeg';
-                    const blob = await canvasToBlob(
-                        canvas,
-                        mediaType,
-                        mediaType === 'image/jpeg' ? 0.92 : undefined
-                    );
-                    const bytes = new Uint8Array(await blob.arrayBuffer());
-                    const previewUrl = URL.createObjectURL(blob);
-                    pages.push({
-                        width: canvas.width,
-                        height: canvas.height,
-                        mediaType,
-                        bytes,
-                        text,
-                        previewUrl
-                    });
-                    canvas.width = 1;
-                    canvas.height = 1;
-                    page.cleanup?.();
-                    setProgress(
-                        90 + (pageNumber / total) * 8,
-                        `Fixed page ${pageNumber}/${total}`
-                    );
-                    await new Promise((resolve) => setTimeout(resolve, 0));
-                }
-            } catch (error) {
-                pages.forEach((page) => URL.revokeObjectURL(page.previewUrl));
-                throw error;
-            } finally {
-                try {
-                    pdf.destroy?.();
-                } catch (_) { /* ignore */ }
-            }
-            return pages;
-        }
-
-        async function ensureFixedLayoutPages() {
-            if (resolvedEpubLayout() !== 'fixed' || !currentFile) return null;
-            const key = fixedLayoutTargetKey();
-            if (fixedLayoutCache?.key === key && fixedLayoutCache.pages?.length) {
-                return fixedLayoutCache.pages;
-            }
-            if (fixedLayoutPromise?.key === key) return fixedLayoutPromise.promise;
-
-            const token = ++fixedLayoutRenderToken;
-            const file = currentFile;
-            const promise = renderPdfFixedLayoutPages(file, token).then((pages) => {
-                if (
-                    !pages
-                    || token !== fixedLayoutRenderToken
-                    || file !== currentFile
-                ) {
-                    return null;
-                }
-                fixedLayoutCache = { key, file, pages };
-                return pages;
-            }).finally(() => {
-                if (fixedLayoutPromise?.key === key) fixedLayoutPromise = null;
-            });
-            fixedLayoutPromise = { key, promise };
-            return promise;
-        }
-
-        async function buildFixedLayoutEpubBlob({ title, author, lang = 'en' }) {
-            const pages = await ensureFixedLayoutPages();
-            if (!pages?.length) {
-                throw new Error('No PDF pages were available for fixed-layout export.');
-            }
-            const JSZipCtor = await waitForGlobal('JSZip');
-            const zip = new JSZipCtor();
-            const files = buildFixedLayoutPublicationFiles({
-                title,
-                author,
-                lang,
-                identifier: `urn:uuid:${crypto.randomUUID()}`,
-                modified: new Date().toISOString(),
-                pages
-            });
-            zip.file('mimetype', files.get('mimetype'), { compression: 'STORE' });
-            files.forEach((value, path) => {
-                if (path === 'mimetype') return;
-                zip.file(path, value);
-            });
-            return zip.generateAsync({
-                type: 'blob',
-                mimeType: 'application/epub+zip',
-                compression: 'DEFLATE',
-                compressionOptions: { level: 6 }
-            });
         }
 
         async function buildEpubBlob({ title, author, lang = 'en', bodyHtml, splitChapters = true }) {

@@ -323,46 +323,6 @@ body {
     outline-color: rgba(201, 162, 39, 0.95);
 }
 
-#deviceBookContent.kf-fixed-preview {
-    column-width: auto !important;
-    column-gap: normal !important;
-    overflow: visible;
-    background: #d8d3c7;
-    transition: transform 0.14s ease-out;
-}
-
-#deviceBookContent .kf-fixed-preview-page {
-    display: flex;
-    flex: 0 0 auto;
-    box-sizing: border-box;
-    align-items: center;
-    justify-content: center;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    background: #d8d3c7;
-}
-
-#deviceBookContent .kf-fixed-preview-page img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    max-width: none;
-    margin: 0;
-    object-fit: contain;
-    background: #fff;
-}
-
-#deviceBookContent .kf-fixed-preview-loading {
-    box-sizing: border-box;
-    width: 100%;
-    margin: 0;
-    padding: 1.5em;
-    color: #555;
-    font-style: italic;
-    text-align: center;
-}
-
 #deviceBookContent .kf-empty-hint {
     color: #666;
     text-align: left;

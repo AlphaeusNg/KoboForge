@@ -63,11 +63,9 @@ css/main.css          # KoboForge presentation
 js/app.js             # Conversion, editing, preview, and EPUB application
 js/document-fidelity.js # DOCX/HTML break and typography normalization
 js/boot.js            # Loads the app with the centralized deployment version
-js/fixed-layout.js    # Browser-neutral fixed-layout scoring/package contract
 js/version.js         # Deployment stamp
 tools/test_logic.mjs  # Lightweight regression contracts
 tools/test_document_fidelity.mjs # Functional DOCX/HTML fidelity matrix
-tools/test_fixed_epub.mjs # Real EPUB fixture + optional EPUBCheck validation
 tools/fixtures/       # Slim DOCX fixtures (e.g. Numbers 13–15 outline)
 ```
 
@@ -82,13 +80,9 @@ python3 -m http.server 8000
 
 node --check js/app.js
 node --check js/document-fidelity.js
-node --check js/fixed-layout.js
 node --check js/version.js
 npm install
 npm test
-
-# Optional standards validation
-EPUBCHECK_JAR=/path/to/epubcheck.jar node tools/test_fixed_epub.mjs
 ```
 
 ## Privacy
