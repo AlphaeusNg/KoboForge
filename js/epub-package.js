@@ -222,3 +222,12 @@ export async function generateEpubArchive(JSZipCtor, files, { type = 'blob' } = 
         compressionOptions: { level: 6 }
     });
 }
+
+export async function buildReflowableEpubArchive(
+    JSZipCtor,
+    publication,
+    options = {}
+) {
+    const files = buildReflowablePublicationFiles(publication);
+    return generateEpubArchive(JSZipCtor, files, options);
+}

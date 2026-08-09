@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import JSZip from 'jszip';
 import {
+    buildReflowableEpubArchive,
     buildReflowablePublicationFiles,
     generateEpubArchive
 } from '../js/epub-package.js';
@@ -73,6 +74,41 @@ assert.deepEqual(
 );
 assert.equal(await loaded.file('mimetype').async('string'), 'application/epub+zip');
 
+const adapterArchive = await buildReflowableEpubArchive(JSZip, {
+    title: 'Adapter image test',
+    author: 'KoboForge',
+    lang: 'en',
+    identifier: 'urn:uuid:adapter-image-fixture',
+    modified: '2026-08-09T00:00:00Z',
+    chapters: [
+        { title: 'Image', html: '<h1>Image</h1><img src="images/image-1.png" alt="One image"/>' }
+    ],
+    assets: [
+        { id: 'image-1', fileName: 'image-1.png', mediaType: 'image/png', bytes: imageBytes }
+    ]
+}, { type: 'nodebuffer' });
+const adapterLoaded = await JSZip.loadAsync(adapterArchive);
+assert.deepEqual(
+    Object.keys(adapterLoaded.files).filter((name) => name.startsWith('OEBPS/images/')),
+    ['OEBPS/images/image-1.png'],
+    'the combined archive adapter packages each prepared image exactly once'
+);
+assert.deepEqual(
+    await adapterLoaded.file('OEBPS/images/image-1.png').async('uint8array'),
+    imageBytes,
+    'the combined archive adapter preserves prepared image bytes'
+);
+assert.match(
+    await adapterLoaded.file('OEBPS/content.opf').async('string'),
+    /href="images\/image-1\.png" media-type="image\/png"/,
+    'the combined archive adapter manifests its image'
+);
+assert.match(
+    await adapterLoaded.file('OEBPS/chapter-1.xhtml').async('string'),
+    /src="images\/image-1\.png"/,
+    'the combined archive adapter keeps the chapter image reference'
+);
+
 if (process.env.EPUBCHECK_JAR) {
     const fixtureRoot = mkdtempSync(join(tmpdir(), 'koboforge-reflowable-'));
     const outputPath = join(fixtureRoot, 'fixture.epub');
@@ -88,4 +124,4 @@ if (process.env.EPUBCHECK_JAR) {
     }
 }
 
-console.log('KoboForge reflowable EPUB package tests passed (20 assertions).');
+console.log('KoboForge reflowable EPUB package tests passed (24 assertions).');

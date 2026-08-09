@@ -114,9 +114,9 @@ assert.ok(
     'the only EPUB download path must use the reflowable .epub suffix'
 );
 assert.ok(
-    script.includes('buildReflowablePublicationFiles({')
-        && script.includes('return generateEpubArchive(JSZipCtor, files'),
-    'browser export must use the shared tested package and ZIP builders'
+    script.includes('return buildReflowableEpubArchive(JSZipCtor, {')
+        && !/\boebps\b/.test(script),
+    'browser export must use the tested archive adapter without stale direct ZIP writes'
 );
 assert.ok(
     !script.includes('<package version="3.0"'),

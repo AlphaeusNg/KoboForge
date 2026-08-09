@@ -10,8 +10,7 @@
             `./document-fidelity.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
         const {
-            buildReflowablePublicationFiles,
-            generateEpubArchive
+            buildReflowableEpubArchive
         } = await import(
             `./epub-package.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
@@ -6881,12 +6880,6 @@
             const preparedBody = canonicalizeBody(bodyHtml, { forExport: true });
             const embeddedImages = extractEmbeddedImagesForEpub(preparedBody);
             const cleanBody = embeddedImages.html;
-            if (embeddedImages.assets.length) {
-                const imageFolder = oebps.folder('images');
-                embeddedImages.assets.forEach((asset) => {
-                    imageFolder.file(asset.fileName, asset.bytes);
-                });
-            }
             // Default path: ONE continuous spine item so Kobo page-turn works end-to-end.
             // Optional H1-only split when the user opts in.
             let chapters = splitChapters
@@ -6924,7 +6917,7 @@
                 const body = ensureChapterTitle(ch.html, ch.title);
                 return { title: ch.title, html: xhtmlBodyFragment(body) };
             });
-            const files = buildReflowablePublicationFiles({
+            return buildReflowableEpubArchive(JSZipCtor, {
                 title,
                 author,
                 lang,
@@ -6932,8 +6925,7 @@
                 modified: new Date().toISOString(),
                 chapters: packagedChapters,
                 assets: embeddedImages.assets
-            });
-            return generateEpubArchive(JSZipCtor, files, { type: 'blob' });
+            }, { type: 'blob' });
         }
 
         function documentImageTarget() {
