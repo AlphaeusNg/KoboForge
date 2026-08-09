@@ -1,28 +1,84 @@
 /** DOM-backed preparation of embedded images for EPUB packaging. */
 
-function decodeImageDataUrl(source, { atobFn, TextEncoderCtor }) {
-  const match = /^data:([^;,]+)(;base64)?,([\s\S]*)$/i.exec(source || "");
-  if (!match || !match[1].toLowerCase().startsWith("image/")) return null;
+const IMAGE_EXTENSIONS = Object.freeze({
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/svg+xml": "svg",
+  "image/webp": "webp",
+});
 
-  const mediaType = match[1].toLowerCase();
-  let bytes;
-  if (match[2]) {
-    const binary = atobFn(match[3]);
-    bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
-    }
-  } else {
-    bytes = new TextEncoderCtor().encode(decodeURIComponent(match[3]));
+export class EmbeddedImageError extends Error {
+  constructor(message, { imageNumber, mediaType = "", cause } = {}) {
+    super(message);
+    this.name = "EmbeddedImageError";
+    this.imageNumber = imageNumber;
+    this.mediaType = mediaType;
+    if (cause) this.cause = cause;
+  }
+}
+
+function imageError(imageNumber, problem, details = {}) {
+  return new EmbeddedImageError(
+    `Embedded image ${imageNumber} ${problem}`,
+    { imageNumber, ...details },
+  );
+}
+
+function decodeImageDataUrl(source, imageNumber, { atobFn, TextEncoderCtor }) {
+  const match = /^data:([^,]*),([\s\S]*)$/i.exec(source || "");
+  if (!match) {
+    throw imageError(
+      imageNumber,
+      "has a malformed data URL. Replace or remove it, then download again.",
+    );
   }
 
-  const extension = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/gif": "gif",
-    "image/svg+xml": "svg",
-    "image/webp": "webp",
-  }[mediaType] || "png";
+  const metadata = match[1].split(";").map((part) => part.trim());
+  const mediaType = metadata.shift()?.toLowerCase() || "";
+  if (!mediaType.startsWith("image/")) {
+    throw imageError(
+      imageNumber,
+      "does not declare an image media type. Replace or remove it, then download again.",
+      { mediaType },
+    );
+  }
+  const extension = IMAGE_EXTENSIONS[mediaType];
+  if (!extension) {
+    throw imageError(
+      imageNumber,
+      `uses unsupported type "${mediaType}". Convert it to PNG, JPEG, GIF, SVG, or WebP, then download again.`,
+      { mediaType },
+    );
+  }
+
+  const payload = match[2];
+  const isBase64 = metadata.some((part) => part.toLowerCase() === "base64");
+  let bytes;
+  try {
+    if (isBase64) {
+      const binary = atobFn(payload);
+      bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+    } else {
+      bytes = new TextEncoderCtor().encode(decodeURIComponent(payload));
+    }
+  } catch (cause) {
+    throw imageError(
+      imageNumber,
+      `has invalid ${isBase64 ? "base64" : "percent-encoded"} data. Replace or remove it, then download again.`,
+      { mediaType, cause },
+    );
+  }
+  if (!bytes.length) {
+    throw imageError(
+      imageNumber,
+      "contains no image data. Replace or remove it, then download again.",
+      { mediaType },
+    );
+  }
   return { mediaType, extension, bytes };
 }
 
@@ -50,7 +106,7 @@ export function extractEmbeddedImagesForEpub(
 
   const bySource = new Map();
   const assets = [];
-  root.querySelectorAll("img").forEach((img) => {
+  root.querySelectorAll("img").forEach((img, index) => {
     Array.from(img.attributes).forEach((attribute) => {
       if (attribute.name.startsWith("data-kf-")) {
         img.removeAttribute(attribute.name);
@@ -60,11 +116,14 @@ export function extractEmbeddedImagesForEpub(
     if (!img.className) img.removeAttribute("class");
 
     const source = img.getAttribute("src") || "";
-    if (!source.startsWith("data:image/")) return;
+    if (!/^data:/i.test(source)) return;
     let asset = bySource.get(source);
     if (!asset) {
-      const decoded = decodeImageDataUrl(source, { atobFn, TextEncoderCtor });
-      if (!decoded) return;
+      const decoded = decodeImageDataUrl(
+        source,
+        index + 1,
+        { atobFn, TextEncoderCtor },
+      );
       const number = assets.length + 1;
       asset = {
         id: `image-${number}`,

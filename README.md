@@ -53,6 +53,8 @@ before exporting a Kobo-friendly EPUB.
 - PDF design-complexity signals still inform reconstruction (columns, tables,
   whitespace, fonts) without locking the book into a non-editable facsimile
 - Reflowable EPUB3 export with nav + NCX and packaged image manifest assets
+- Actionable download errors identify malformed, empty, or unsupported embedded
+  images without exposing their encoded contents
 - Fully local browser processing; documents are never uploaded
 
 ## Structure

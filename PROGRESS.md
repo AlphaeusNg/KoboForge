@@ -1,53 +1,53 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-09 (Cycle 50 across the projects workspace)
+Last updated: 2026-08-10 (Cycle 80 across the projects workspace; KoboForge Cycle 51)
 
 ## Current state
 
 - Branch: `main`; working tree was clean and aligned with `origin/main` at cycle start.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.09.8`.
-- Baseline verification: `npm test` plus syntax checks for all runtime JavaScript.
-- Automated verification: GitHub Actions installs locked dependencies and runs workflow/dependency policy, a 13-assertion runtime-loader DOM fixture, logic contracts, document-fidelity fixtures, a 10-assertion embedded-image/archive fixture, the 24-assertion reflowable package/archive fixture, and all JavaScript syntax checks on Node 24.
+- Deployment version: `2026.08.10.1`.
+- Baseline verification: `npm test` plus syntax checks for all runtime and test JavaScript.
+- Automated verification: GitHub Actions installs locked dependencies and runs workflow/dependency policy, a 13-assertion runtime-loader DOM fixture, logic contracts, document-fidelity fixtures, an 18-assertion embedded-image/archive fixture, the 24-assertion reflowable package/archive fixture, and all JavaScript syntax checks on Node 24.
 
-## Latest cycle: execute embedded-image preparation
+## Latest cycle: make malformed embedded-image failures actionable
 
 ### Why this was selected
 
-Cycle 49 proved that prepared assets package correctly, but the browser-only function that decoded data URLs, removed editor attributes, deduplicated repeated sources, and rewrote chapter references remained source-inspected rather than executed. A regression there could still feed an invalid asset graph into the tested archive adapter.
+The executable image pipeline still leaked low-level `atob` or `decodeURIComponent` exceptions when edited HTML contained malformed image data. Some malformed/unsupported `data:image` URLs could instead remain unresolved or be packaged with a false PNG extension. The generic download catch displayed those implementation errors directly, giving users no safe repair path.
 
 ### Changes
 
-- Extracted data-image preparation into `js/epub-images.js` with explicit DOM/parser and decoder injection for executable browser-equivalent tests.
-- Removed the duplicate app-local decoder/extractor and routed the browser download path through the shared module with deployment cache busting.
-- Added a 10-assertion jsdom fixture covering duplicate-source collapse, stable asset metadata, exact decoded bytes, both rewritten references, editor-attribute/class removal, author-class retention, and external URL preservation.
-- Fed the fixture's real extracted HTML/assets through the combined archive adapter and verified one image entry with unchanged bytes.
-- Added a source contract preventing the extractor from drifting back into unexecuted app-local code.
-- Documented the module/fixture and bumped the deployment version to `2026.08.09.8`.
+- Added `EmbeddedImageError` with an image position, safe media-type metadata, optional decoder cause, and repair-focused messages.
+- Parse media types and data-URL parameters explicitly, preserving parameterized percent-encoded SVG and case-insensitive schemes.
+- Reject malformed separators, invalid base64/percent encoding, empty payloads, and unsupported image types before package construction.
+- Removed the unsafe extension fallback that labeled unknown image bytes as PNG.
+- Keep raw encoded data out of user-visible error messages; the existing download handler now displays the actionable domain message automatically.
+- Expanded the embedded-image fixture from 10 to 18 contracts and documented the user-facing failure behavior.
+- Bumped the deployment version to `2026.08.10.1`.
 
 ### Verification and scores
 
-- Test-first extraction fixture: failed because `js/epub-images.js` did not exist, then passed all 10 assertions.
-- `npm ci --ignore-scripts`: clean 65-package install with zero vulnerabilities.
-- `npm test`: workflow/dependency policy, runtime dependency DOM fixture, logic, document fidelity, 10 image/archive assertions, and all 24 package/archive assertions passed.
-- `npm audit --json`: zero vulnerabilities at every severity.
-- `node --check js/*.js tools/*.mjs`: passed.
-- `git diff --check`: passed.
-- Correctness/reliability: 9/10 (the full data-image-to-archive relationship is now executed with repeated sources and mixed image origins).
-- Verifiability: 9/10 (DOM cleanup, byte decoding, deduplication, reference rewriting, and ZIP handoff share one fixture).
-- Maintainability: 9/10 (one injected helper owns embedded-image preparation instead of burying it in the 7,000-line app module).
-- Performance: 9/10 (duplicate image sources are explicitly proven to occupy one archive asset).
-- Security/robustness: 9/10 (editor-only metadata is stripped and existing package validation/audit checks remain green).
+- Test-first image fixture: failed because `EmbeddedImageError` was not exported.
+- `node tools/test_epub_images.mjs`: all 18 valid, malformed, compatibility, deduplication, and archive-handoff contracts passed.
+- Invalid fixtures now identify the correct DOM image position and never echo the corrupt encoded payload.
+- `npm ci --ignore-scripts`, the full suite, zero-vulnerability audit, every-file syntax checks, and `git diff --check` passed.
+- Correctness/reliability: 9/10 (known malformed and unsupported embedded images fail before corrupt EPUB construction).
+- Verifiability: 9/10 (seven failure/compatibility classes extend the real data-image-to-ZIP fixture).
+- Maintainability: 9/10 (one typed error and one explicit media map define the decoder boundary).
+- Performance: 9/10 (valid decoding and source deduplication remain single-pass).
+- Security/robustness: 9/10 (encoded content is not reflected in UI errors and unknown formats are fail-closed).
 
 ### Lessons and process improvements
 
-- Injecting `DOMParser`, `atob`, and `TextEncoder` preserves the exact browser algorithm while keeping the fixture deterministic under Node/jsdom.
-- Asset-graph tests should begin before packaging: correct ZIP entries cannot compensate for duplicate or stale HTML references produced upstream.
-- Removing only editor-specific classes/attributes needs an explicit preservation check for unrelated author markup.
-- After two consecutive image-export cycles with strong positive evidence, the next workspace cycle should pivot to a different project rather than over-optimize the same path.
+- Wrapping low-level decoders is not only a UX improvement: it creates one fail-closed boundary before malformed bytes reach package metadata.
+- Never invent a file extension for unknown binary content; reject unsupported types with a conversion path.
+- Include the source element's position, not its encoded payload, so users can repair a document without leaking large or sensitive data into status text.
+- Compatibility fixtures must accompany stricter parsing; parameterized SVG and case-insensitive data URLs protect valid inputs from the hardening change.
 
-## Previous cycle
+## Previous cycles
 
+- Cycle 50 (`c07101f`): executed embedded-image preparation and its composed archive handoff.
 - Cycle 49 (`21252f6`): repaired image-bearing downloads and directly tested the composed archive adapter.
 - Cycle 48 (`6eacc5a`): made DOCX/PDF/ZIP CDN dependencies on-demand, observable, and retryable with DOM coverage.
 - Cycle 47 (`b92a8b6`): upgraded jsdom, removed deprecated encoding ancestry, and added lockfile dependency policies.
@@ -58,8 +58,8 @@ Cycle 49 proved that prepared assets package correctly, but the browser-only fun
 |---|---|---|---|---|---|
 | 1 | Add browser-level import/edit/export smoke coverage | Verification | High | Large / medium | Module fixtures cover boundaries, but the full contenteditable/device UI is still not executed end to end |
 | 2 | Add standards validation to hosted EPUB checks | Verification | Medium | Medium / low | The package fixture supports `EPUBCHECK_JAR`, but CI does not currently provision or execute it |
-| 3 | Improve malformed embedded-image errors | Reliability / UX | Medium | Small / low | Invalid base64 or percent encoding currently bubbles a low-level decoder exception during download |
+| 3 | Validate decoded image signatures against declared media types | Correctness / robustness | Medium | Medium / low | Decoder syntax and type allowlists are enforced, but arbitrary non-image bytes can still claim a supported media type |
 
 ## Next cycle
 
-Pause KoboForge after three compounding verification/correctness cycles and rotate workspace analysis to an untouched project. When returning, prioritize a minimal browser-level import/edit/export smoke path over further source-string contracts.
+Design the smallest browser-level TXT import, edit, and EPUB-download smoke that can execute locally and in CI without depending on conversion CDNs.
