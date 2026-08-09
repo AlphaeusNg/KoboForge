@@ -104,6 +104,10 @@ npm run test:browser
 EPUBCHECK_JAR=/path/to/epubcheck.jar node tools/test_epub_package.mjs
 ```
 
+Hosted CI always validates the package fixture with pinned EPUBCheck `5.3.0`
+on Java 21. Its release archive is checked against the committed SHA-256 before
+execution; the environment variable above provides the same gate locally.
+
 ## Privacy
 
 All document parsing, editing, image conversion, and EPUB creation happen in

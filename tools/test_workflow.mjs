@@ -26,6 +26,35 @@ assert.match(
 );
 assert.match(
     workflow,
+    /uses:\s*actions\/setup-java@v5\b/,
+    'CI uses the Node 24-compatible Java setup action'
+);
+assert.match(workflow, /distribution:\s*temurin\b/, 'CI pins the Java distribution');
+assert.match(workflow, /java-version:\s*["']?21["']?\b/, 'CI pins Java 21');
+assert.match(
+    workflow,
+    /EPUBCHECK_VERSION:\s*["']?5\.3\.0["']?\b/,
+    'CI pins EPUBCheck 5.3.0'
+);
+assert.match(
+    workflow,
+    /EPUBCHECK_SHA256:\s*6c07e68584b2e2ce2f89fe06e1246dfead3eb36b46b340e7d93524f29dcff6c5\b/,
+    'CI pins the official EPUBCheck archive digest'
+);
+assert.doesNotMatch(workflow, /releases\/latest/, 'CI must not download a floating release');
+assert.match(workflow, /sha256sum --check/, 'CI verifies EPUBCheck before extraction');
+assert.match(
+    workflow,
+    /EPUBCHECK_JAR:[\s\S]*run:\s*node tools\/test_epub_package\.mjs/,
+    'CI runs the package fixture through EPUBCheck'
+);
+assert.ok(
+    workflow.indexOf('Standards-check reflowable fixture')
+        < workflow.indexOf('Install Chromium'),
+    'EPUB standards validation must run before the more expensive browser install'
+);
+assert.match(
+    workflow,
     /run:\s*find js tools -type f/,
     'CI recursively discovers runtime and test modules for syntax checks'
 );
