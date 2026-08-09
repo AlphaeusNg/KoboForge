@@ -77,6 +77,14 @@ assert.ok(
     !html.includes('Selected device output'),
     'obsolete selected-device copy must not consume preview space'
 );
+assert.ok(
+    !/lock exact PDF pages|Auto fixed-layout EPUB|choose exact fixed|For Fixed/i.test(html),
+    'public workflow copy must not advertise the removed fixed-layout mode'
+);
+assert.ok(
+    html.includes('Always reflowable &amp; editable'),
+    'the public feature summary must state the current editable EPUB contract'
+);
 const previewControlsAt = html.indexOf('id="devicePreviewControls"');
 const inlineToolbarAt = html.indexOf('id="editToolbar"');
 const deviceStageAt = html.indexOf('class="device-stage"');
