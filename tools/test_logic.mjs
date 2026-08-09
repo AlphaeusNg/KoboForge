@@ -12,6 +12,7 @@ const jsPath = join(__dirname, '../js/app.js');
 const cssPath = join(__dirname, '../css/main.css');
 const versionPath = join(__dirname, '../js/version.js');
 const bootPath = join(__dirname, '../js/boot.js');
+const epubPackagePath = join(__dirname, '../js/epub-package.js');
 const packagePath = join(__dirname, '../package.json');
 const fixedLayoutPath = join(__dirname, '../js/fixed-layout.js');
 const fixedFixturePath = join(__dirname, './test_fixed_epub.mjs');
@@ -20,8 +21,9 @@ const script = readFileSync(jsPath, 'utf8');
 const styles = readFileSync(cssPath, 'utf8');
 const versionScript = readFileSync(versionPath, 'utf8');
 const bootScript = readFileSync(bootPath, 'utf8');
+const epubPackageScript = readFileSync(epubPackagePath, 'utf8');
 const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
-const page = [html, script, styles].join('\n');
+const page = [html, script, epubPackageScript, styles].join('\n');
 
 function assertIncludes(label, needle) {
     assert.ok(page.includes(needle), `missing ${label}: ${needle}`);
@@ -42,7 +44,8 @@ assert.ok(
     versionScript.includes('asset: function (path)')
         && html.includes("window.SITE_VERSION.asset('css/main.css')")
         && bootScript.includes('new URL("app.js", import.meta.url).href')
-        && script.includes('window.SITE_VERSION?.id'),
+        && script.includes('window.SITE_VERSION?.id')
+        && script.includes('./epub-package.js?v='),
     'one deployment constant must cache-bust CSS and application modules'
 );
 assert.ok(
@@ -94,6 +97,15 @@ assert.ok(
 assert.ok(
     script.includes('link.download = `${outputBase}.epub`;'),
     'the only EPUB download path must use the reflowable .epub suffix'
+);
+assert.ok(
+    script.includes('buildReflowablePublicationFiles({')
+        && script.includes('return generateEpubArchive(JSZipCtor, files'),
+    'browser export must use the shared tested package and ZIP builders'
+);
+assert.ok(
+    !script.includes('<package version="3.0"'),
+    'EPUB package metadata must not be duplicated inside app.js'
 );
 const previewControlsAt = html.indexOf('id="devicePreviewControls"');
 const inlineToolbarAt = html.indexOf('id="editToolbar"');
@@ -698,8 +710,8 @@ assert.ok(
     'Kobo Libra Colour must be the default document preview target'
 );
 // EPUB styles.css string must not set pre-wrap (preview CSS may still use it)
-const epubCssMatch = page.match(/oebps\.file\('styles\.css',\s*\[([\s\S]*?)\]\.join/);
-assert.ok(epubCssMatch, 'EPUB CSS built as array join');
+const epubCssMatch = epubPackageScript.match(/REFLOWABLE_EPUB_CSS\s*=\s*\[([\s\S]*?)\]\.join/);
+assert.ok(epubCssMatch, 'shared reflowable EPUB CSS is declared as an array join');
 assert.ok(
     !epubCssMatch[1].includes('pre-wrap'),
     'EPUB styles.css must not use white-space:pre-wrap (Kobo page-turn freeze)'

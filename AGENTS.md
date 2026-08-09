@@ -19,10 +19,12 @@ index.html
 css/main.css
 js/app.js
 js/document-fidelity.js   # DOCX fidelity + Bible verse marker normalize
+js/epub-package.js        # Browser-neutral reflowable EPUB package + ZIP builder
 js/boot.js
 js/version.js
 tools/test_logic.mjs
 tools/test_document_fidelity.mjs
+tools/test_epub_package.mjs
 tools/fixtures/           # slim DOCX fixtures (sermon outlines)
 ```
 
@@ -48,6 +50,7 @@ tools/fixtures/           # slim DOCX fixtures (sermon outlines)
 ```bash
 node --check js/app.js
 node --check js/document-fidelity.js
+node --check js/epub-package.js
 node --check js/version.js
 npm install
 npm test

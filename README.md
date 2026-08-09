@@ -62,10 +62,12 @@ index.html            # GitHub Pages entry point
 css/main.css          # KoboForge presentation
 js/app.js             # Conversion, editing, preview, and EPUB application
 js/document-fidelity.js # DOCX/HTML break and typography normalization
+js/epub-package.js    # Reflowable EPUB files and ZIP generation
 js/boot.js            # Loads the app with the centralized deployment version
 js/version.js         # Deployment stamp
 tools/test_logic.mjs  # Lightweight regression contracts
 tools/test_document_fidelity.mjs # Functional DOCX/HTML fidelity matrix
+tools/test_epub_package.mjs # Executable reflowable EPUB package fixture
 tools/test_workflow.mjs # GitHub Actions policy contract
 tools/fixtures/       # Slim DOCX fixtures (e.g. Numbers 13–15 outline)
 ```
@@ -81,9 +83,13 @@ python3 -m http.server 8000
 
 node --check js/app.js
 node --check js/document-fidelity.js
+node --check js/epub-package.js
 node --check js/version.js
 npm install
 npm test
+
+# Optional standards validation of the real reflowable fixture
+EPUBCHECK_JAR=/path/to/epubcheck.jar node tools/test_epub_package.mjs
 ```
 
 ## Privacy
