@@ -66,6 +66,7 @@ js/boot.js            # Loads the app with the centralized deployment version
 js/version.js         # Deployment stamp
 tools/test_logic.mjs  # Lightweight regression contracts
 tools/test_document_fidelity.mjs # Functional DOCX/HTML fidelity matrix
+tools/test_workflow.mjs # GitHub Actions policy contract
 tools/fixtures/       # Slim DOCX fixtures (e.g. Numbers 13–15 outline)
 ```
 
