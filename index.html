@@ -11,10 +11,7 @@
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="dns-prefetch" href="https://unpkg.com">
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Conversion libs: defer so the chrome paints first; used only after file pick.
-         PDF.js is imported from the page module below (avoid double-loading). -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
-    <script src="https://unpkg.com/mammoth@1.12.0/mammoth.browser.min.js" defer></script>
+    <!-- Conversion libraries load on demand after file pick or export. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap">

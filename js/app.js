@@ -15,26 +15,24 @@
         } = await import(
             `./epub-package.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
-        const PDFJS_MODULE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
-        const PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+        const {
+            RUNTIME_DEPENDENCIES,
+            RuntimeDependencyError,
+            createModuleDependencyLoader,
+            createScriptDependencyLoader
+        } = await import(
+            `./runtime-dependencies.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
+        );
+        const loadModuleDependency = createModuleDependencyLoader();
+        const loadScriptDependency = createScriptDependencyLoader();
         let pdfjsLib = null;
-        let pdfjsLoadPromise = null;
 
         async function loadPdfJs() {
             if (pdfjsLib) return pdfjsLib;
-            if (!pdfjsLoadPromise) {
-                pdfjsLoadPromise = import(PDFJS_MODULE_URL)
-                    .then((module) => {
-                        module.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
-                        pdfjsLib = module;
-                        return module;
-                    })
-                    .catch((error) => {
-                        pdfjsLoadPromise = null;
-                        throw error;
-                    });
-            }
-            return pdfjsLoadPromise;
+            const module = await loadModuleDependency(RUNTIME_DEPENDENCIES.pdfjs);
+            module.GlobalWorkerOptions.workerSrc = RUNTIME_DEPENDENCIES.pdfjs.workerUrl;
+            pdfjsLib = module;
+            return pdfjsLib;
         }
 
         const PREFS_KEY = 'koboforge.prefs.v3';
@@ -4168,22 +4166,6 @@
             clearWorkspace();
         });
 
-        function waitForGlobal(name, timeoutMs = 12000) {
-            if (window[name]) return Promise.resolve(window[name]);
-            return new Promise((resolve, reject) => {
-                const start = Date.now();
-                const id = setInterval(() => {
-                    if (window[name]) {
-                        clearInterval(id);
-                        resolve(window[name]);
-                    } else if (Date.now() - start > timeoutMs) {
-                        clearInterval(id);
-                        reject(new Error(`${name} failed to load`));
-                    }
-                }, 40);
-            });
-        }
-
         function openFilePicker() {
             if (fileInput) fileInput.click();
         }
@@ -4342,7 +4324,10 @@
             } catch (error) {
                 console.error('[KoboForge]', error);
                 statusEl.textContent = error.message || 'Failed to process file.';
-                previewEl.innerHTML = '<p class="kf-empty-hint">Processing failed. Try DOCX for the cleanest result, or a simpler PDF. Scanned PDFs need OCR first.</p>';
+                previewEl.innerHTML = error instanceof RuntimeDependencyError
+                    ? '<p class="kf-empty-hint">Required conversion tools could not load. Check your connection, then choose this file again.</p>'
+                    : '<p class="kf-empty-hint">Processing failed. Try DOCX for the cleanest result, or a simpler PDF. Scanned PDFs need OCR first.</p>';
+                if (fileInput) fileInput.value = '';
                 setProgress(0);
             }
         }
@@ -4475,14 +4460,14 @@
 
         async function parseDocx(file) {
             const arrayBuffer = await file.arrayBuffer();
-            const mammoth = await waitForGlobal('mammoth');
+            const mammoth = await loadScriptDependency(RUNTIME_DEPENDENCIES.mammoth);
             const warnings = [];
             let skippedImages = 0;
             let docxInput = arrayBuffer;
             let fidelityStats = null;
             let listPlan = [];
             try {
-                const JSZipCtor = await waitForGlobal('JSZip');
+                const JSZipCtor = await loadScriptDependency(RUNTIME_DEPENDENCIES.jszip);
                 const normalized = await prepareDocxForFidelity(arrayBuffer, { JSZipCtor });
                 docxInput = normalized.arrayBuffer;
                 fidelityStats = normalized.stats;
@@ -6891,7 +6876,7 @@
         }
 
         async function buildEpubBlob({ title, author, lang = 'en', bodyHtml, splitChapters = true }) {
-            const JSZipCtor = await waitForGlobal('JSZip');
+            const JSZipCtor = await loadScriptDependency(RUNTIME_DEPENDENCIES.jszip);
             // bodyHtml should already be export-clean; strip any residual chrome
             const preparedBody = canonicalizeBody(bodyHtml, { forExport: true });
             const embeddedImages = extractEmbeddedImagesForEpub(preparedBody);

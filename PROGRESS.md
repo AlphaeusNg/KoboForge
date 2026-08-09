@@ -1,63 +1,65 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-09 (Cycle 47 across the projects workspace)
+Last updated: 2026-08-09 (Cycle 48 across the projects workspace)
 
 ## Current state
 
 - Branch: `main`; working tree was clean and aligned with `origin/main` at cycle start.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.09.5`.
+- Deployment version: `2026.08.09.6`.
 - Baseline verification: `npm test` plus syntax checks for all runtime JavaScript.
-- Automated verification: GitHub Actions installs locked dependencies and runs workflow/dependency policy, logic contracts, document-fidelity fixtures, the 20-assertion reflowable package fixture, and all JavaScript syntax checks on Node 24.
+- Automated verification: GitHub Actions installs locked dependencies and runs workflow/dependency policy, a 13-assertion runtime-loader DOM fixture, logic contracts, document-fidelity fixtures, the 20-assertion reflowable package fixture, and all JavaScript syntax checks on Node 24.
 
-## Latest cycle: remove the deprecated DOM-test dependency chain
+## Latest cycle: make conversion-library failures retryable
 
 ### Why this was selected
 
-Every clean install warned about deprecated `whatwg-encoding`, pulled through the directly pinned jsdom 26 test dependency. The warning did not affect browser runtime, but it obscured actionable install output and left the verification stack on an avoidably stale encoding implementation.
+DOCX and ZIP libraries loaded eagerly from CDNs, while the lazy PDF module had an untested retry cache. Failures surfaced raw library names only after a 12-second poll, and selecting the same file again could emit no change event because the file input retained its old value.
 
 ### Changes
 
-- Upgraded the dev-only jsdom test harness from `26.1.0` to Node-24-compatible `29.1.1`, replacing its deprecated encoding dependency chain.
-- Added a four-assertion dependency policy test that keeps jsdom exactly locked, verifies manifest/lock agreement, enforces the cleaned major baseline, and rejects `whatwg-encoding` in the lockfile.
-- Wired dependency policy into the default local and hosted test command.
-- Regenerated the lockfile exclusively through npm and bumped the deployment version to `2026.08.09.5`.
+- Added a shared runtime dependency module with typed, actionable errors plus deduplicated, retryable script/module loaders and bounded script timeouts.
+- Moved Mammoth and JSZip from eager page scripts to on-demand DOCX/preprocessing/export loads; PDF.js now uses the same retry contract.
+- Removed failed script nodes and cleared failed module promises so a recovered connection creates a real fresh request.
+- Added a 13-assertion jsdom fixture covering concurrent deduplication, cached success, safe error/cause handling, failed-node cleanup, and successful script/module retries.
+- Made processing failures reset the file input and display a connection-specific recovery hint, allowing the same document to be selected again.
+- Documented the loader/test boundary and bumped the deployment version to `2026.08.09.6`.
 
 ### Verification and scores
 
-- Test-first dependency policy: failed against jsdom 26 before the upgrade, then passed all four assertions.
-- `npm ci --ignore-scripts`: installed 65 packages with no deprecation warning and reported zero vulnerabilities.
-- `npm ls whatwg-encoding --all`: returned an empty dependency tree.
-- `npm test`: workflow/dependency policy, logic, document fidelity, and 20 package assertions passed.
+- Test-first runtime fixture: failed because the shared loader module did not exist, then passed all 13 assertions.
+- `npm ci --ignore-scripts`: clean 65-package install with zero vulnerabilities.
+- `npm test`: workflow/dependency policy, runtime dependency DOM fixture, logic, document fidelity, and 20 package assertions passed.
 - `npm audit --json`: zero vulnerabilities at every severity.
 - `node --check js/*.js tools/*.mjs`: passed.
 - `git diff --check`: passed.
-- Correctness/reliability: 9/10 (the existing DOM, fidelity, and package behavior remained green across the major test-harness upgrade).
-- Verifiability: 9/10 (the exact removed chain and manifest/lock consistency now have executable policy checks).
-- Maintainability: 9/10 (clean installs are warning-free and the test DOM is on a current Node-24-compatible release).
-- Performance: 9/10 (no browser dependency or runtime path changed).
-- Security/robustness: 9/10 (the lockfile is audit-clean and deprecated encoding code was removed).
+- Correctness/reliability: 9/10 (failed CDN loads recover on the next attempt, including same-file selection).
+- Verifiability: 9/10 (real DOM script events and controlled module imports exercise success and failure state transitions).
+- Maintainability: 9/10 (one browser-neutral module owns all conversion dependency policies and user-safe errors).
+- Performance: 9/10 (DOCX and ZIP payloads no longer load for visitors who do not use those paths).
+- Security/robustness: 9/10 (script timeouts remain bounded, raw network details stay in causes, and audit remains clean).
 
 ### Lessons and process improvements
 
-- Registry `latest` is not automatically usable: jsdom 30 required Node `24.15+`, while the current environment is `24.14.1`; jsdom 29 was the newest compatible safe step.
-- A warning-removal cycle should prove both clean-install output and absent ancestry. An audit alone would not detect deprecated packages.
-- Dependency policies should encode the property being protected (exact locking, minimum cleaned baseline, forbidden package), not one release forever.
+- Retryability requires resetting both network state and UI state: clearing a rejected promise is insufficient when a file input suppresses same-value changes.
+- Testing script loaders with jsdom events catches node cleanup and duplicate-request behavior without adding a heavyweight browser runner.
+- Loader errors should expose one stable recovery message to users while preserving the original cause for diagnostics.
+- Review of the export call site exposed a separate pre-existing `oebps` reference after the packager extraction; it is now the top correctness opportunity.
 
 ## Previous cycle
 
+- Cycle 47 (`b92a8b6`): upgraded jsdom, removed deprecated encoding ancestry, and added lockfile dependency policies.
 - Cycle 46 (`eab8ae8`): extracted and directly tested the real reflowable EPUB package/ZIP generator with 20 assertions.
 - Cycle 45 (`fec279a`): added least-privilege Node 24 CI with ten locally enforced workflow invariants.
-- Cycle 44 (`682a82d`): removed 921 lines of obsolete fixed-layout runtime/package/test code and enforced the reflowable-only boundary.
 
 ## Prioritized opportunities
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependency |
 |---|---|---|---|---|---|
-| 1 | Add startup smoke coverage for conversion-library failure states | Reliability | Medium-high | Medium / low | `boot.js` covers app-module failure, while lazy DOCX/PDF library load failures lack integrated DOM coverage |
-| 2 | Add browser-level import/edit/export smoke coverage | Verification | High | Large / medium | Pure package and fidelity suites do not execute the full contenteditable/device UI; no browser runner is currently configured |
+| 1 | Remove the stale `oebps` image-export write and execute the app packaging adapter | Bug / verification | High | Small-medium / low | `buildEpubBlob` references undefined `oebps` whenever embedded images exist, before passing those same assets to the extracted packager |
+| 2 | Add browser-level import/edit/export smoke coverage | Verification | High | Large / medium | Pure package and fidelity suites still do not execute the full contenteditable/device UI |
 | 3 | Add standards validation to hosted EPUB checks | Verification | Medium | Medium / low | The package fixture supports `EPUBCHECK_JAR`, but CI does not currently provision or execute it |
 
 ## Next cycle
 
-Exercise the lazy conversion-library loader and its user-visible failure states in jsdom, beginning with the highest-impact DOCX/PDF dependency path. Preserve retry behavior and actionable status messaging while preventing unhandled startup failures.
+Remove the undefined legacy `oebps` write from image-bearing EPUB export and add an executable test around the browser adapter that prepares chapters/assets for the shared packager. Prove embedded images package exactly once and downloads no longer fail before ZIP generation.

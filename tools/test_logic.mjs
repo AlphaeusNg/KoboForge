@@ -13,6 +13,7 @@ const cssPath = join(__dirname, '../css/main.css');
 const versionPath = join(__dirname, '../js/version.js');
 const bootPath = join(__dirname, '../js/boot.js');
 const epubPackagePath = join(__dirname, '../js/epub-package.js');
+const runtimeDependenciesPath = join(__dirname, '../js/runtime-dependencies.js');
 const packagePath = join(__dirname, '../package.json');
 const fixedLayoutPath = join(__dirname, '../js/fixed-layout.js');
 const fixedFixturePath = join(__dirname, './test_fixed_epub.mjs');
@@ -22,8 +23,9 @@ const styles = readFileSync(cssPath, 'utf8');
 const versionScript = readFileSync(versionPath, 'utf8');
 const bootScript = readFileSync(bootPath, 'utf8');
 const epubPackageScript = readFileSync(epubPackagePath, 'utf8');
+const runtimeDependenciesScript = readFileSync(runtimeDependenciesPath, 'utf8');
 const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
-const page = [html, script, epubPackageScript, styles].join('\n');
+const page = [html, script, epubPackageScript, runtimeDependenciesScript, styles].join('\n');
 
 function assertIncludes(label, needle) {
     assert.ok(page.includes(needle), `missing ${label}: ${needle}`);
@@ -68,8 +70,21 @@ assert.ok(
 assert.ok(
     script.includes('async function loadPdfJs()')
         && script.includes('await loadPdfJs();')
+        && script.includes('loadModuleDependency(RUNTIME_DEPENDENCIES.pdfjs)')
         && !script.includes("import * as pdfjsLib from 'https://"),
     'PDF.js must load only for PDF work so other imports remain available if its CDN fails'
+);
+assert.ok(
+    !/mammoth\.browser\.min\.js|jszip\.min\.js/.test(html)
+        && script.includes('loadScriptDependency(RUNTIME_DEPENDENCIES.mammoth)')
+        && script.includes('loadScriptDependency(RUNTIME_DEPENDENCIES.jszip)'),
+    'DOCX and ZIP dependencies must load only when their workflows need them'
+);
+assert.ok(
+    script.includes('error instanceof RuntimeDependencyError')
+        && script.includes("if (fileInput) fileInput.value = ''")
+        && script.includes('then choose this file again'),
+    'dependency failures must explain recovery and allow selecting the same file again'
 );
 assert.ok(!html.includes('<script type="module">'), 'application code must not remain inline');
 assert.ok(

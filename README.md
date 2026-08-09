@@ -63,17 +63,20 @@ css/main.css          # KoboForge presentation
 js/app.js             # Conversion, editing, preview, and EPUB application
 js/document-fidelity.js # DOCX/HTML break and typography normalization
 js/epub-package.js    # Reflowable EPUB files and ZIP generation
+js/runtime-dependencies.js # Retryable on-demand CDN dependency loading
 js/boot.js            # Loads the app with the centralized deployment version
 js/version.js         # Deployment stamp
 tools/test_logic.mjs  # Lightweight regression contracts
 tools/test_document_fidelity.mjs # Functional DOCX/HTML fidelity matrix
 tools/test_epub_package.mjs # Executable reflowable EPUB package fixture
+tools/test_runtime_dependencies.mjs # CDN failure/retry DOM fixture
 tools/test_workflow.mjs # GitHub Actions policy contract
 tools/fixtures/       # Slim DOCX fixtures (e.g. Numbers 13–15 outline)
 ```
 
 The site intentionally uses plain HTML, CSS, and JavaScript with no build step.
-Runtime conversion libraries load from CDNs.
+Runtime conversion libraries load from CDNs only when their workflow needs them;
+failed loads show a retryable connection error rather than disabling other formats.
 
 ## Local development
 
@@ -84,6 +87,7 @@ python3 -m http.server 8000
 node --check js/app.js
 node --check js/document-fidelity.js
 node --check js/epub-package.js
+node --check js/runtime-dependencies.js
 node --check js/version.js
 npm install
 npm test
