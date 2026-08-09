@@ -3,3 +3,5 @@ Thumbs.db
 *.log
 *.epub
 node_modules/
+playwright-report/
+test-results/

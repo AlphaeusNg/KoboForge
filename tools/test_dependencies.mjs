@@ -17,6 +17,8 @@ function check(condition, message) {
 
 const requestedJsdom = packageJson.devDependencies?.jsdom;
 const lockedJsdom = packageLock.packages?.["node_modules/jsdom"]?.version;
+const requestedPlaywright = packageJson.devDependencies?.["@playwright/test"];
+const lockedPlaywright = packageLock.packages?.["node_modules/@playwright/test"]?.version;
 
 check(/^\d+\.\d+\.\d+$/.test(requestedJsdom), "jsdom should use an exact version");
 check(requestedJsdom === lockedJsdom, "package.json and package-lock should agree on jsdom");
@@ -27,6 +29,14 @@ check(
 check(
   !("node_modules/whatwg-encoding" in packageLock.packages),
   "the lockfile should not include deprecated whatwg-encoding",
+);
+check(
+  /^\d+\.\d+\.\d+$/.test(requestedPlaywright),
+  "Playwright should use an exact version",
+);
+check(
+  requestedPlaywright === lockedPlaywright,
+  "package.json and package-lock should agree on Playwright",
 );
 
 console.log(`Dependency policy tests passed (${assertions} assertions).`);

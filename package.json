@@ -4,9 +4,11 @@
   "type": "module",
   "scripts": {
     "test": "node tools/test_workflow.mjs && node tools/test_dependencies.mjs && node tools/test_runtime_dependencies.mjs && node tools/test_logic.mjs && node tools/test_document_fidelity.mjs && node tools/test_epub_images.mjs && node tools/test_epub_package.mjs",
+    "test:browser": "playwright test",
     "test:fidelity": "node tools/test_document_fidelity.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "jsdom": "29.1.1",
     "jszip": "3.10.1",
     "mammoth": "1.12.0"

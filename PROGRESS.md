@@ -1,65 +1,69 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-10 (Cycle 80 across the projects workspace; KoboForge Cycle 51)
+Last updated: 2026-08-10 (Cycle 81 across the projects workspace; KoboForge Cycle 52)
 
 ## Current state
 
 - Branch: `main`; working tree was clean and aligned with `origin/main` at cycle start.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.10.1`.
-- Baseline verification: `npm test` plus syntax checks for all runtime and test JavaScript.
-- Automated verification: GitHub Actions installs locked dependencies and runs workflow/dependency policy, a 13-assertion runtime-loader DOM fixture, logic contracts, document-fidelity fixtures, an 18-assertion embedded-image/archive fixture, the 24-assertion reflowable package/archive fixture, and all JavaScript syntax checks on Node 24.
+- Deployment version: `2026.08.10.2`.
+- Baseline verification: the full dependency/module fixture suite, one real Chromium import/edit/export flow, zero-vulnerability audit, and recursive syntax checks.
+- Automated verification: least-privilege GitHub Actions runs cheap policy/unit fixtures first, then installs locked Chromium and executes the offline TXT-to-downloaded-EPUB smoke on Node 24.
 
-## Latest cycle: make malformed embedded-image failures actionable
+## Latest cycle: execute TXT import, direct edit, and downloaded EPUB in Chromium
 
 ### Why this was selected
 
-The executable image pipeline still leaked low-level `atob` or `decodeURIComponent` exceptions when edited HTML contained malformed image data. Some malformed/unsupported `data:image` URLs could instead remain unresolved or be packaged with a false PNG extension. The generic download catch displayed those implementation errors directly, giving users no safe repair path.
+KoboForge had strong module fixtures but no browser-level proof that the actual file input, paginated contenteditable, edit synchronization, download handler, Blob URL, and packaged archive worked together. A full DOCX/PDF matrix would add CDN and rendering complexity; TXT exercises the same core edit/export path without external conversion dependencies.
 
 ### Changes
 
-- Added `EmbeddedImageError` with an image position, safe media-type metadata, optional decoder cause, and repair-focused messages.
-- Parse media types and data-URL parameters explicitly, preserving parameterized percent-encoded SVG and case-insensitive schemes.
-- Reject malformed separators, invalid base64/percent encoding, empty payloads, and unsupported image types before package construction.
-- Removed the unsafe extension fallback that labeled unknown image bytes as PNG.
-- Keep raw encoded data out of user-visible error messages; the existing download handler now displays the actionable domain message automatically.
-- Expanded the embedded-image fixture from 10 to 18 contracts and documented the user-facing failure behavior.
-- Bumped the deployment version to `2026.08.10.1`.
+- Added exact Playwright `1.62.1`, a one-worker Chromium configuration, report ignores, and a canonical `test:browser` command.
+- Added a single flow that uploads an in-memory TXT file through the real input and waits for the editable Libra Colour preview.
+- Mutates the actual paginated `contenteditable`, verifies the edit badge, triggers the real browser download, and opens the downloaded EPUB with locked JSZip.
+- Verifies mimetype, edited XHTML, removal of original text, title/author OPF metadata, suggested filename, and final edited-download status.
+- Injects the locked JSZip browser bundle and stubs unrelated external page assets so the smoke is deterministic and does not depend on conversion CDNs.
+- Promotes uncaught browser exceptions and console errors to test failures.
+- Added exact dependency and workflow policies; CI runs cheap tests before installing Chromium.
+- Replaced the shallow syntax glob with recursive per-file checking so nested browser modules are covered.
+- Documented the browser gate and bumped the deployment version to `2026.08.10.2`.
 
 ### Verification and scores
 
-- Test-first image fixture: failed because `EmbeddedImageError` was not exported.
-- `node tools/test_epub_images.mjs`: all 18 valid, malformed, compatibility, deduplication, and archive-handoff contracts passed.
-- Invalid fixtures now identify the correct DOM image position and never echo the corrupt encoded payload.
-- `npm ci --ignore-scripts`, the full suite, zero-vulnerability audit, every-file syntax checks, and `git diff --check` passed.
-- Correctness/reliability: 9/10 (known malformed and unsupported embedded images fail before corrupt EPUB construction).
-- Verifiability: 9/10 (seven failure/compatibility classes extend the real data-image-to-ZIP fixture).
-- Maintainability: 9/10 (one typed error and one explicit media map define the decoder boundary).
-- Performance: 9/10 (valid decoding and source deduplication remain single-pass).
-- Security/robustness: 9/10 (encoded content is not reflected in UI errors and unknown formats are fail-closed).
+- Test-first baseline: `npm run test:browser` failed because no browser command existed.
+- The dependency policy then failed the caret range created by npm, catching and correcting Playwright to an exact lock before Chromium ran.
+- Mutation evidence: changing the archive expectation to absent text failed with the downloaded chapter body, which visibly contained the direct edit; the probe was reverted.
+- `npm test`: workflow policy, six dependency policies, 13 runtime-loader assertions, logic/fidelity suites, 18 image assertions, and 24 package assertions passed.
+- `npm run test:browser`: the real import/edit/download/archive flow passed in about 1.2 seconds with zero browser runtime errors.
+- The complete clean-install, zero-vulnerability audit, unit/browser, recursive syntax, config syntax, and diff gate passed.
+- Correctness/reliability: 9/10 (the core no-CDN user journey now executes through its real browser boundaries).
+- Verifiability: 10/10 (downloaded bytes and internal EPUB content are asserted, not merely a success status).
+- Maintainability: 9/10 (one focused flow, one config, exact dependency, and policy-enforced CI wiring).
+- Performance: 9/10 (the browser test itself is ~1.2 seconds; CI pays a Chromium installation cost after cheap gates pass).
+- Security/robustness: 9/10 (the smoke remains offline for conversion assets and fails on uncaught/console errors).
 
 ### Lessons and process improvements
 
-- Wrapping low-level decoders is not only a UX improvement: it creates one fail-closed boundary before malformed bytes reach package metadata.
-- Never invent a file extension for unknown binary content; reject unsupported types with a conversion path.
-- Include the source element's position, not its encoded payload, so users can repair a document without leaking large or sensitive data into status text.
-- Compatibility fixtures must accompany stricter parsing; parameterized SVG and case-insensitive data URLs protect valid inputs from the hardening change.
+- Choose the simplest format that crosses the full architecture; TXT reached the same editable/exportable core without hiding browser behavior behind DOCX/PDF dependencies.
+- Inspect the downloaded archive, not only the download event—an event can succeed while stale edits or metadata are packaged.
+- Keep browser dependencies exact and policy-checked before expensive runtime installation.
+- Recursive syntax discovery matters as soon as tests become nested; shell globs at one directory depth give false confidence.
 
 ## Previous cycles
 
+- Cycle 51 (`478245d`): made malformed embedded-image failures actionable and fail-closed.
 - Cycle 50 (`c07101f`): executed embedded-image preparation and its composed archive handoff.
 - Cycle 49 (`21252f6`): repaired image-bearing downloads and directly tested the composed archive adapter.
 - Cycle 48 (`6eacc5a`): made DOCX/PDF/ZIP CDN dependencies on-demand, observable, and retryable with DOM coverage.
-- Cycle 47 (`b92a8b6`): upgraded jsdom, removed deprecated encoding ancestry, and added lockfile dependency policies.
 
 ## Prioritized opportunities
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependency |
 |---|---|---|---|---|---|
-| 1 | Add browser-level import/edit/export smoke coverage | Verification | High | Large / medium | Module fixtures cover boundaries, but the full contenteditable/device UI is still not executed end to end |
-| 2 | Add standards validation to hosted EPUB checks | Verification | Medium | Medium / low | The package fixture supports `EPUBCHECK_JAR`, but CI does not currently provision or execute it |
+| 1 | Add standards validation to hosted EPUB checks | Verification | Medium-high | Medium / low | Downloaded archive content is proven, while the optional `EPUBCHECK_JAR` branch is still absent from CI |
+| 2 | Extend browser coverage to one DOCX fidelity fixture | Verification | High | Medium-large / medium | Core browser path is stable; DOCX adds Mammoth, ZIP preprocessing, images, and a larger fixture boundary |
 | 3 | Validate decoded image signatures against declared media types | Correctness / robustness | Medium | Medium / low | Decoder syntax and type allowlists are enforced, but arbitrary non-image bytes can still claim a supported media type |
 
 ## Next cycle
 
-Design the smallest browser-level TXT import, edit, and EPUB-download smoke that can execute locally and in CI without depending on conversion CDNs.
+Provision a pinned EPUBCheck release in hosted CI and require the existing reflowable package fixture to pass standards validation without slowing local default tests.

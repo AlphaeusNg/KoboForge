@@ -54,6 +54,8 @@ node --check js/epub-package.js
 node --check js/version.js
 npm install
 npm test
+npx playwright install chromium
+npm run test:browser
 python3 -m http.server 8000
 ```
 

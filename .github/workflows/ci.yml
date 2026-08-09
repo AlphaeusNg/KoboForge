@@ -26,5 +26,9 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Test
         run: npm test
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser import/edit/export smoke
+        run: npm run test:browser
       - name: JavaScript syntax
-        run: node --check js/*.js && node --check tools/*.mjs
+        run: find js tools -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | sort -z | xargs -0 -n1 node --check

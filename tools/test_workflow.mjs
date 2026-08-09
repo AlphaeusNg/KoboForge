@@ -16,8 +16,23 @@ assert.match(workflow, /run:\s*npm ci --ignore-scripts\b/, 'CI installs from the
 assert.match(workflow, /run:\s*npm test\b/, 'CI runs the full default suite');
 assert.match(
     workflow,
-    /run:\s*node --check js\/\*\.js && node --check tools\/\*\.mjs/,
-    'CI syntax-checks every runtime and test module'
+    /run:\s*npx playwright install --with-deps chromium\b/,
+    'CI installs the locked Chromium runtime'
+);
+assert.match(
+    workflow,
+    /run:\s*npm run test:browser\b/,
+    'CI runs the browser import/edit/export smoke'
+);
+assert.match(
+    workflow,
+    /run:\s*find js tools -type f/,
+    'CI recursively discovers runtime and test modules for syntax checks'
+);
+assert.match(
+    workflow,
+    /xargs -0 -n1 node --check/,
+    'CI syntax-checks every discovered module independently'
 );
 assert.match(workflow, /permissions:\s*\n\s+contents:\s*read\b/, 'CI retains read-only permissions');
 assert.match(workflow, /timeout-minutes:\s*10\b/, 'CI retains a bounded job timeout');

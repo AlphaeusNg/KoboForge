@@ -75,6 +75,8 @@ tools/test_epub_images.mjs # Executable embedded-image/archive fixture
 tools/test_epub_package.mjs # Executable reflowable EPUB package fixture
 tools/test_runtime_dependencies.mjs # CDN failure/retry DOM fixture
 tools/test_workflow.mjs # GitHub Actions policy contract
+tools/browser/koboforge.spec.mjs # Chromium TXT import/edit/download/archive smoke
+playwright.config.mjs # Local static server + deterministic Chromium settings
 tools/fixtures/       # Slim DOCX fixtures (e.g. Numbers 13–15 outline)
 ```
 
@@ -95,6 +97,8 @@ node --check js/runtime-dependencies.js
 node --check js/version.js
 npm install
 npm test
+npx playwright install chromium
+npm run test:browser
 
 # Optional standards validation of the real reflowable fixture
 EPUBCHECK_JAR=/path/to/epubcheck.jar node tools/test_epub_package.mjs
