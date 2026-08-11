@@ -53,8 +53,9 @@ before exporting a Kobo-friendly EPUB.
 - PDF design-complexity signals still inform reconstruction (columns, tables,
   whitespace, fonts) without locking the book into a non-editable facsimile
 - Reflowable EPUB3 export with nav + NCX and packaged image manifest assets
-- Actionable download errors identify malformed, empty, or unsupported embedded
-  images without exposing their encoded contents
+- Actionable download errors identify malformed, empty, unsupported, or
+  signature-mismatched PNG/JPEG/GIF/WebP/SVG images without exposing their
+  encoded contents
 - Fully local browser processing; documents are never uploaded
 
 ## Structure
@@ -64,7 +65,7 @@ index.html            # GitHub Pages entry point
 css/main.css          # KoboForge presentation
 js/app.js             # Conversion, editing, preview, and EPUB application
 js/document-fidelity.js # DOCX/HTML break and typography normalization
-js/epub-images.js     # Embedded-image cleanup, decoding, and deduplication
+js/epub-images.js     # Embedded-image cleanup, decoding, signatures, and deduplication
 js/epub-package.js    # Reflowable EPUB files and tested archive adapter
 js/runtime-dependencies.js # Retryable on-demand CDN dependency loading
 js/boot.js            # Loads the app with the centralized deployment version

@@ -10,12 +10,23 @@ import { buildReflowableEpubArchive } from "../js/epub-package.js";
 const imageBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const dataSource = `data:image/png;base64,${imageBase64}`;
+const asDataUrl = (mediaType, bytes) =>
+  `data:${mediaType};base64,${Buffer.from(bytes).toString("base64")}`;
 const dom = new JSDOM("<!doctype html><html><body></body></html>");
 const extractionOptions = {
   DOMParserCtor: dom.window.DOMParser,
   atobFn: dom.window.atob.bind(dom.window),
   TextEncoderCtor: TextEncoder,
+  TextDecoderCtor: TextDecoder,
 };
+assert.throws(
+  () => extractEmbeddedImagesForEpub("", {
+    ...extractionOptions,
+    TextDecoderCtor: null,
+  }),
+  /Image data decoders are required/,
+  "signature validation should fail early without a byte decoder",
+);
 const extracted = extractEmbeddedImagesForEpub(
   [
     `<p><img class="hero kf-inline-image" data-kf-width="42" src="${dataSource}" alt="First"/></p>`,
@@ -52,6 +63,99 @@ assert.match(
   extracted.html,
   /src="https:\/\/example\.test\/remote\.png"/,
   "external image references should remain unchanged",
+);
+
+const supportedSignatures = [
+  {
+    mediaType: "image/png",
+    extension: "png",
+    bytes: Buffer.from(imageBase64, "base64"),
+  },
+  {
+    mediaType: "image/jpeg",
+    extension: "jpg",
+    bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]),
+  },
+  {
+    mediaType: "image/gif",
+    extension: "gif",
+    bytes: new TextEncoder().encode("GIF89a"),
+  },
+  {
+    mediaType: "image/webp",
+    extension: "webp",
+    bytes: new TextEncoder().encode("RIFF\u0000\u0000\u0000\u0000WEBP"),
+  },
+  {
+    mediaType: "image/svg+xml",
+    extension: "svg",
+    bytes: new TextEncoder().encode(
+      '\uFEFF<?xml version="1.0"?>\n<!-- icon --><svg xmlns="http://www.w3.org/2000/svg"/>',
+    ),
+  },
+];
+
+for (const fixture of supportedSignatures) {
+  const result = extractEmbeddedImagesForEpub(
+    `<img src="${asDataUrl(fixture.mediaType, fixture.bytes)}">`,
+    extractionOptions,
+  );
+  assert.deepEqual(
+    {
+      mediaType: result.assets[0].mediaType,
+      fileName: result.assets[0].fileName,
+    },
+    {
+      mediaType: fixture.mediaType,
+      fileName: `image-1.${fixture.extension}`,
+    },
+    `${fixture.mediaType} should pass its decoded signature contract`,
+  );
+}
+
+const arbitraryBytes = new TextEncoder().encode("not an image");
+for (const mediaType of [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/svg+xml",
+]) {
+  assert.throws(
+    () => extractEmbeddedImagesForEpub(
+      `<img src="${asDataUrl(mediaType, arbitraryBytes)}">`,
+      extractionOptions,
+    ),
+    (error) => error instanceof EmbeddedImageError
+      && error.mediaType === mediaType
+      && error.message === `Embedded image 1 does not match its declared type "${mediaType}". Replace or convert it, then download again.`,
+    `${mediaType} must reject arbitrary decoded bytes`,
+  );
+}
+
+assert.throws(
+  () => extractEmbeddedImagesForEpub(
+    `<img src="${asDataUrl("image/jpeg", Buffer.from(imageBase64, "base64"))}">`,
+    extractionOptions,
+  ),
+  (error) => error instanceof EmbeddedImageError
+    && error.mediaType === "image/jpeg"
+    && error.message.includes("does not match its declared type"),
+  "valid image bytes must not be packaged under a mismatched declared type",
+);
+
+assert.throws(
+  () => extractEmbeddedImagesForEpub(
+    `<img src="${asDataUrl(
+      "image/svg+xml",
+      new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg">'),
+    )}">`,
+    extractionOptions,
+  ),
+  (error) => error instanceof EmbeddedImageError
+    && error.mediaType === "image/svg+xml"
+    && error.message.includes("does not match its declared type"),
+  "malformed SVG XML must not pass on its opening tag alone",
 );
 
 assert.throws(
@@ -162,4 +266,4 @@ assert.deepEqual(
   "the archive should preserve the extracted bytes",
 );
 
-console.log("KoboForge EPUB image tests passed (18 assertions).");
+console.log("KoboForge EPUB image tests passed (31 assertions).");

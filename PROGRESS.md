@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-11 (Cycle 105 across the projects workspace; KoboForge Cycle 54)
+Last updated: 2026-08-11 (Cycle 115 across the projects workspace; KoboForge Cycle 55)
 
 ## Current state
 
 - Branch: `main`; working tree was clean and aligned with `origin/main` at cycle start.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.11.1`.
+- Deployment version: `2026.08.11.2`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, optional local EPUBCheck, zero-vulnerability
   audit, and recursive syntax checks.
@@ -14,7 +14,64 @@ Last updated: 2026-08-11 (Cycle 105 across the projects workspace; KoboForge Cyc
   fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
   browser-to-downloaded-EPUB flows, and recursive syntax checks on Node 24.
 
-## Latest cycle: exercise DOCX fidelity through the real browser
+## Latest cycle: validate decoded embedded-image signatures
+
+### Why this was selected
+
+EPUB extraction accepted a supported `image/*` declaration, valid data-URL
+encoding, and any non-empty decoded byte sequence. Arbitrary text could
+therefore become an `image-1.png` manifest asset, and valid PNG bytes could be
+mislabelled as JPEG. The result passed internal packaging even though Kobo
+could not decode the asset.
+
+### Changes
+
+- Added post-decode signatures for the complete supported set: eight-byte PNG,
+  JPEG start-of-image, GIF87a/GIF89a, RIFF/WebP container markers, and parsed
+  namespace-correct SVG XML.
+- Rejects arbitrary, truncated, cross-type, malformed-XML, and invalid-UTF-8
+  payloads with the existing contextual `EmbeddedImageError`, declared media
+  type, and repair guidance without exposing encoded contents.
+- Added valid fixtures for all five types, arbitrary-byte rejection for all
+  five, PNG-as-JPEG rejection, malformed SVG rejection, and an explicit decoder
+  availability contract; image assertions increased from 18 to 31.
+- Documented signature-aware download errors and bumped the deployment version
+  to `2026.08.11.2`.
+
+### Verification and scores
+
+- Test-first evidence: the new suite failed because arbitrary bytes declared as
+  `image/png` produced no exception.
+- Process correction: the first “valid SVG” fixture put whitespace between its
+  BOM and XML declaration. The XML parser correctly rejected that invalid
+  document; fixing the fixture preserved strict validation.
+- The 31-assertion image suite and complete dependency, workflow, runtime,
+  logic, fidelity, and 24-assertion package suite passed.
+- Both offline TXT/DOCX browser exports passed in 2.0s with zero runtime errors;
+  the zero-vulnerability audit, recursive syntax, and whitespace gates passed.
+- Hosted EPUBCheck, CI, Pages, and live-version evidence are recorded in the
+  Cycle 115 completion summary.
+- Correctness/reliability: 6/10 → 9/10 (declared types now agree with decoded
+  container evidence before app packaging).
+- Verifiability: 7/10 → 10/10 (every accepted type has a positive fixture and
+  every type rejects arbitrary bytes).
+- Maintainability: 8/10 → 9/10 (one switch owns the allowlist's byte contracts).
+- Performance: 9/10 → 9/10 (constant-prefix checks for raster formats; SVG is
+  parsed once during export).
+- Security/robustness: 7/10 → 9/10 (type spoofing and malformed SVG XML fail
+  closed with no payload leakage).
+- Developer/user experience: 8/10 → 9/10 (corrupt assets fail before a broken
+  EPUB reaches the device).
+
+### Lessons and process improvements
+
+- Validate the bytes after decoding; syntax and MIME allowlists establish only
+  what a payload claims to be.
+- SVG needs XML/root/namespace validation, not a text-prefix approximation.
+- When a strict validator rejects a supposedly valid test fixture, inspect the
+  fixture against the format grammar before relaxing production behavior.
+
+## Previous cycle: exercise DOCX fidelity through the real browser
 
 ### Why this was selected
 
@@ -127,12 +184,13 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependency |
 |---|---|---|---|---|---|
-| 1 | Validate decoded image signatures against declared media types | Correctness / robustness | Medium | Medium / low | Decoder syntax and type allowlists are enforced, but arbitrary non-image bytes can still claim a supported media type |
+| 1 | Enforce exact asset types/extensions at the archive boundary | Correctness / robustness | Medium | Small-medium / low | The app extractor is signature-safe, but direct package-module callers can still submit arbitrary `image/*` metadata and extension mismatches |
 | 2 | Cache the verified EPUBCheck archive in CI | Performance / process | Low-medium | Small-medium / low | The immutable 33 MB artifact is downloaded on each run; correctness must remain checksum-gated on cache hits |
+| — | Validate decoded image signatures against declared media types | Correctness / robustness | Medium | Medium / low | Thirty-one fixtures cover every accepted signature plus arbitrary, cross-type, and malformed payloads | Completed in Cycle 55 |
 | — | Extend browser coverage to one DOCX fidelity fixture | Verification | High | Medium-large / medium | Offline real-browser upload/edit/download now preserves the slim sermon fixture through EPUB XHTML | Completed in Cycle 54 |
 
 ## Next cycle
 
 Rotate workspace attention after closing the declared return target. On the next
-KoboForge cycle, validate decoded image signatures against declared media types
-before packaged EPUB assets are accepted.
+KoboForge cycle, enforce the same exact type/extension trust boundary for direct
+archive-module inputs before optimizing the verified EPUBCheck download.

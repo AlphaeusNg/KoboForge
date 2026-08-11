@@ -7,6 +7,45 @@ const IMAGE_EXTENSIONS = Object.freeze({
   "image/svg+xml": "svg",
   "image/webp": "webp",
 });
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+
+function startsWithBytes(bytes, signature) {
+  return signature.every((value, index) => bytes[index] === value);
+}
+
+function hasDecodedImageSignature(
+  mediaType,
+  bytes,
+  { DOMParserCtor, TextDecoderCtor },
+) {
+  switch (mediaType) {
+    case "image/png":
+      return startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    case "image/jpeg":
+      return startsWithBytes(bytes, [0xff, 0xd8, 0xff]);
+    case "image/gif":
+      return startsWithBytes(bytes, [0x47, 0x49, 0x46, 0x38, 0x37, 0x61])
+        || startsWithBytes(bytes, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+    case "image/webp":
+      return startsWithBytes(bytes, [0x52, 0x49, 0x46, 0x46])
+        && [0x57, 0x45, 0x42, 0x50].every(
+          (value, index) => bytes[index + 8] === value,
+        );
+    case "image/svg+xml": {
+      try {
+        const source = new TextDecoderCtor("utf-8", { fatal: true }).decode(bytes);
+        const parsed = new DOMParserCtor().parseFromString(source, "image/svg+xml");
+        return parsed.documentElement?.localName?.toLowerCase() === "svg"
+          && parsed.documentElement.namespaceURI === SVG_NAMESPACE
+          && !parsed.querySelector("parsererror");
+      } catch (_) {
+        return false;
+      }
+    }
+    default:
+      return false;
+  }
+}
 
 export class EmbeddedImageError extends Error {
   constructor(message, { imageNumber, mediaType = "", cause } = {}) {
@@ -25,7 +64,11 @@ function imageError(imageNumber, problem, details = {}) {
   );
 }
 
-function decodeImageDataUrl(source, imageNumber, { atobFn, TextEncoderCtor }) {
+function decodeImageDataUrl(
+  source,
+  imageNumber,
+  { atobFn, DOMParserCtor, TextDecoderCtor, TextEncoderCtor },
+) {
   const match = /^data:([^,]*),([\s\S]*)$/i.exec(source || "");
   if (!match) {
     throw imageError(
@@ -79,6 +122,17 @@ function decodeImageDataUrl(source, imageNumber, { atobFn, TextEncoderCtor }) {
       { mediaType },
     );
   }
+  if (!hasDecodedImageSignature(
+    mediaType,
+    bytes,
+    { DOMParserCtor, TextDecoderCtor },
+  )) {
+    throw imageError(
+      imageNumber,
+      `does not match its declared type "${mediaType}". Replace or convert it, then download again.`,
+      { mediaType },
+    );
+  }
   return { mediaType, extension, bytes };
 }
 
@@ -87,13 +141,18 @@ export function extractEmbeddedImagesForEpub(
   {
     DOMParserCtor = globalThis.DOMParser,
     atobFn = globalThis.atob?.bind(globalThis),
+    TextDecoderCtor = globalThis.TextDecoder,
     TextEncoderCtor = globalThis.TextEncoder,
   } = {},
 ) {
   if (typeof DOMParserCtor !== "function") {
     throw new TypeError("DOMParser is required to extract EPUB images.");
   }
-  if (typeof atobFn !== "function" || typeof TextEncoderCtor !== "function") {
+  if (
+    typeof atobFn !== "function"
+    || typeof TextDecoderCtor !== "function"
+    || typeof TextEncoderCtor !== "function"
+  ) {
     throw new TypeError("Image data decoders are required to extract EPUB images.");
   }
 
@@ -122,7 +181,7 @@ export function extractEmbeddedImagesForEpub(
       const decoded = decodeImageDataUrl(
         source,
         index + 1,
-        { atobFn, TextEncoderCtor },
+        { atobFn, DOMParserCtor, TextDecoderCtor, TextEncoderCtor },
       );
       const number = assets.length + 1;
       asset = {
