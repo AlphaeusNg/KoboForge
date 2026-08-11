@@ -56,6 +56,8 @@ before exporting a Kobo-friendly EPUB.
 - Actionable download errors identify malformed, empty, unsupported, or
   signature-mismatched PNG/JPEG/GIF/WebP/SVG images without exposing their
   encoded contents
+- The package boundary independently restricts image manifest types and
+  requires a matching PNG/JPEG/GIF/WebP/SVG filename extension
 - Fully local browser processing; documents are never uploaded
 
 ## Structure

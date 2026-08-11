@@ -1,75 +1,75 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-11 (Cycle 115 across the projects workspace; KoboForge Cycle 55)
+Last updated: 2026-08-11 (Cycle 125 across the projects workspace; KoboForge Cycle 56)
 
 ## Current state
 
 - Branch: `main`; working tree was clean and aligned with `origin/main` at cycle start.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.11.2`.
+- Deployment version: `2026.08.11.3`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, optional local EPUBCheck, zero-vulnerability
-  audit, and recursive syntax checks.
+  audit, 31 decoded-image assertions, 44 package assertions, and recursive
+  syntax checks.
 - Automated verification: least-privilege GitHub Actions runs cheap policy/unit
   fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
   browser-to-downloaded-EPUB flows, and recursive syntax checks on Node 24.
 
-## Latest cycle: validate decoded embedded-image signatures
+## Latest cycle: enforce package image types and extensions
 
 ### Why this was selected
 
-EPUB extraction accepted a supported `image/*` declaration, valid data-URL
-encoding, and any non-empty decoded byte sequence. Arbitrary text could
-therefore become an `image-1.png` manifest asset, and valid PNG bytes could be
-mislabelled as JPEG. The result passed internal packaging even though Kobo
-could not decode the asset.
+The app extractor produced signature-checked assets with canonical metadata,
+but the reusable package module accepted every syntactically shaped `image/*`
+value and never compared it with the final filename extension. A direct caller
+could therefore create internally contradictory OPF/image entries despite the
+safer user-facing path.
 
 ### Changes
 
-- Added post-decode signatures for the complete supported set: eight-byte PNG,
-  JPEG start-of-image, GIF87a/GIF89a, RIFF/WebP container markers, and parsed
-  namespace-correct SVG XML.
-- Rejects arbitrary, truncated, cross-type, malformed-XML, and invalid-UTF-8
-  payloads with the existing contextual `EmbeddedImageError`, declared media
-  type, and repair guidance without exposing encoded contents.
-- Added valid fixtures for all five types, arbitrary-byte rejection for all
-  five, PNG-as-JPEG rejection, malformed SVG rejection, and an explicit decoder
-  availability contract; image assertions increased from 18 to 31.
-- Documented signature-aware download errors and bumped the deployment version
-  to `2026.08.11.2`.
+- Added a package-owned exact mapping for PNG, JPEG (`.jpg`/`.jpeg`), GIF, SVG,
+  and WebP; accepted media types are normalized before OPF rendering.
+- Rejects unsupported image types, cross-type final extensions, filenames
+  without a real extension separator, and empty basenames before creating any
+  publication file-map entry.
+- Added 20 direct-package assertions across every allowed type/extension,
+  every cross-type mismatch, BMP, and the separator edge case; package coverage
+  increased from 24 to 44 assertions.
+- Documented the independent archive boundary and bumped the deployment version
+  to `2026.08.11.3`.
 
 ### Verification and scores
 
-- Test-first evidence: the new suite failed because arbitrary bytes declared as
-  `image/png` produced no exception.
-- Process correction: the first “valid SVG” fixture put whitespace between its
-  BOM and XML declaration. The XML parser correctly rejected that invalid
-  document; fixing the fixture preserved strict validation.
-- The 31-assertion image suite and complete dependency, workflow, runtime,
-  logic, fidelity, and 24-assertion package suite passed.
-- Both offline TXT/DOCX browser exports passed in 2.0s with zero runtime errors;
-  the zero-vulnerability audit, recursive syntax, and whitespace gates passed.
-- Hosted EPUBCheck, CI, Pages, and live-version evidence are recorded in the
-  Cycle 115 completion summary.
-- Correctness/reliability: 6/10 → 9/10 (declared types now agree with decoded
-  container evidence before app packaging).
-- Verifiability: 7/10 → 10/10 (every accepted type has a positive fixture and
-  every type rejects arbitrary bytes).
-- Maintainability: 8/10 → 9/10 (one switch owns the allowlist's byte contracts).
-- Performance: 9/10 → 9/10 (constant-prefix checks for raster formats; SVG is
-  parsed once during export).
-- Security/robustness: 7/10 → 9/10 (type spoofing and malformed SVG XML fail
-  closed with no payload leakage).
-- Developer/user experience: 8/10 → 9/10 (corrupt assets fail before a broken
-  EPUB reaches the device).
+- Test-first evidence: PNG metadata paired with `asset.jpg` produced no
+  exception under the previous package validator.
+- Follow-up red evidence: the first implementation treated a filename equal to
+  `png` as if it contained a `.png` extension; requiring a separator fixed it.
+- The 44-assertion package suite and complete dependency, workflow, runtime,
+  logic, fidelity, and 31-assertion signature suite passed.
+- A freshly downloaded EPUBCheck 5.3.0 archive matched the pinned SHA-256 and
+  independently accepted the generated EPUB fixture.
+- Both offline TXT/DOCX browser exports passed three consecutive runs each
+  (six of six) with zero runtime errors.
+- `npm audit --audit-level=high` found zero vulnerabilities; recursive syntax,
+  whitespace, and diff gates passed.
+- Process correction: the command guard rejected a destructive temporary-file
+  cleanup trap before any verification ran. A dedicated retained `/tmp` cache
+  path allowed the exact checksum/EPUBCheck gate to run safely.
+- Correctness/reliability: 6/10 → 9/10 (manifest metadata cannot contradict its packaged filename type).
+- Verifiability: 7/10 → 10/10 (all accepted families and mismatch directions have direct package fixtures).
+- Maintainability: 8/10 → 9/10 (one package-owned map replaces an open-ended media-type regex).
+- Performance: 9/10 → 9/10 (constant-size map and suffix checks run only during export).
+- Security/robustness: 7/10 → 9/10 (unsupported and misleading asset metadata fails before XML/ZIP construction).
+- Developer/user experience: 8/10 → 9/10 (direct integrations fail early instead of producing a Kobo-incompatible EPUB).
 
 ### Lessons and process improvements
 
-- Validate the bytes after decoding; syntax and MIME allowlists establish only
-  what a payload claims to be.
-- SVG needs XML/root/namespace validation, not a text-prefix approximation.
-- When a strict validator rejects a supposedly valid test fixture, inspect the
-  fixture against the format grammar before relaxing production behavior.
+- Trust boundaries must repeat their own invariants when a lower-level module
+  is callable independently of a safer adapter.
+- Extract the final extension only after proving a real separator exists;
+  `lastIndexOf('.') + 1` otherwise turns “not found” into index zero.
+- Positive coverage for the complete allowlist prevents a stricter validator
+  from fixing mismatches by accidentally disabling supported formats.
 
 ## Previous cycle: exercise DOCX fidelity through the real browser
 
@@ -173,6 +173,7 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 ## Previous cycles
 
+- Cycle 56: restricted direct package image metadata to supported matching types/extensions.
 - Cycle 54: executed the real offline browser DOCX import, direct edit,
   download, and verse-fidelity archive checks.
 - Cycle 52 (`49f3e3f`): executed the real browser TXT import, direct edit, download, and archive contents.
@@ -184,13 +185,14 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependency |
 |---|---|---|---|---|---|
-| 1 | Enforce exact asset types/extensions at the archive boundary | Correctness / robustness | Medium | Small-medium / low | The app extractor is signature-safe, but direct package-module callers can still submit arbitrary `image/*` metadata and extension mismatches |
+| 1 | Reject duplicate or missing package asset identities/bytes | Correctness / robustness | Medium | Small-medium / low | Direct package callers can still omit byte payloads or reuse IDs/filenames, producing late JSZip failures or invalid duplicate OPF entries |
 | 2 | Cache the verified EPUBCheck archive in CI | Performance / process | Low-medium | Small-medium / low | The immutable 33 MB artifact is downloaded on each run; correctness must remain checksum-gated on cache hits |
+| — | Enforce exact asset types/extensions at the archive boundary | Correctness / robustness | Medium | Small-medium / low | Forty-four package assertions cover five types, both JPEG suffixes, cross-type mismatches, unsupported types, separators, and basenames | Completed in Cycle 56 |
 | — | Validate decoded image signatures against declared media types | Correctness / robustness | Medium | Medium / low | Thirty-one fixtures cover every accepted signature plus arbitrary, cross-type, and malformed payloads | Completed in Cycle 55 |
 | — | Extend browser coverage to one DOCX fidelity fixture | Verification | High | Medium-large / medium | Offline real-browser upload/edit/download now preserves the slim sermon fixture through EPUB XHTML | Completed in Cycle 54 |
 
 ## Next cycle
 
-Rotate workspace attention after closing the declared return target. On the next
-KoboForge cycle, enforce the same exact type/extension trust boundary for direct
-archive-module inputs before optimizing the verified EPUBCheck download.
+Rotate workspace attention to Seeking Biblical Truth. On the next KoboForge
+cycle, reject duplicate/missing direct-package asset identities and byte
+payloads before optimizing the verified EPUBCheck download.

@@ -1,5 +1,13 @@
 /** Browser-neutral reflowable EPUB file and ZIP builder. */
 
+const EPUB_IMAGE_EXTENSIONS = new Map([
+    ['image/png', ['png']],
+    ['image/jpeg', ['jpg', 'jpeg']],
+    ['image/gif', ['gif']],
+    ['image/svg+xml', ['svg']],
+    ['image/webp', ['webp']]
+]);
+
 function escapeXml(value) {
     return String(value ?? '')
         .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
@@ -99,10 +107,18 @@ export function buildReflowablePublicationFiles({
     const normalizedAssets = assets.map((asset, index) => {
         const fileName = String(asset?.fileName || '');
         const id = String(asset?.id || `image-${index + 1}`);
-        const mediaType = String(asset?.mediaType || '');
+        const mediaType = String(asset?.mediaType || '').trim().toLowerCase();
         if (!/^[A-Za-z0-9._-]+$/.test(fileName)) throw new Error('Invalid EPUB image filename.');
         if (!/^[A-Za-z0-9._-]+$/.test(id)) throw new Error('Invalid EPUB image id.');
-        if (!/^image\/[A-Za-z0-9.+-]+$/.test(mediaType)) throw new Error('Invalid EPUB image type.');
+        const allowedExtensions = EPUB_IMAGE_EXTENSIONS.get(mediaType);
+        if (!allowedExtensions) throw new Error('Unsupported EPUB image type.');
+        const extensionSeparator = fileName.lastIndexOf('.');
+        const extension = extensionSeparator > 0
+            ? fileName.slice(extensionSeparator + 1).toLowerCase()
+            : '';
+        if (!allowedExtensions.includes(extension)) {
+            throw new Error('EPUB image filename does not match its media type.');
+        }
         return { ...asset, fileName, id, mediaType };
     });
 

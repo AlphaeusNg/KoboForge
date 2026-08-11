@@ -55,6 +55,81 @@ assert.throws(
     /at least one chapter/
 );
 
+const supportedImageAssets = [
+    { mediaType: 'image/png', fileName: 'asset.png' },
+    { mediaType: 'image/jpeg', fileName: 'asset.jpg' },
+    { mediaType: 'image/jpeg', fileName: 'asset.jpeg' },
+    { mediaType: 'image/gif', fileName: 'asset.gif' },
+    { mediaType: 'image/svg+xml', fileName: 'asset.svg' },
+    { mediaType: 'image/webp', fileName: 'asset.webp' }
+];
+for (const asset of supportedImageAssets) {
+    const typedFiles = buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{ title: 'Typed asset', html: '<p>Typed asset</p>' }],
+        assets: [{ id: 'typed-asset', ...asset, bytes: imageBytes }]
+    });
+    assert.equal(
+        typedFiles.has(`OEBPS/images/${asset.fileName}`),
+        true,
+        `${asset.mediaType} should retain its matching filename`
+    );
+    assert.ok(
+        typedFiles.get('OEBPS/content.opf').includes(`media-type="${asset.mediaType}"`),
+        `${asset.mediaType} should retain its exact manifest type`
+    );
+}
+
+const mismatchedImageAssets = [
+    { mediaType: 'image/png', fileName: 'asset.jpg' },
+    { mediaType: 'image/jpeg', fileName: 'asset.png' },
+    { mediaType: 'image/gif', fileName: 'asset.webp' },
+    { mediaType: 'image/svg+xml', fileName: 'asset.gif' },
+    { mediaType: 'image/webp', fileName: 'asset.svg' }
+];
+for (const asset of mismatchedImageAssets) {
+    assert.throws(
+        () => buildReflowablePublicationFiles({
+            identifier,
+            chapters: [{ title: 'Mismatch', html: '<p>Mismatch</p>' }],
+            assets: [{ id: 'mismatch', ...asset, bytes: imageBytes }]
+        }),
+        /filename does not match its media type/,
+        `${asset.mediaType} should reject ${asset.fileName}`
+    );
+}
+
+assert.throws(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{ title: 'Unsupported', html: '<p>Unsupported</p>' }],
+        assets: [{
+            id: 'unsupported',
+            fileName: 'asset.bmp',
+            mediaType: 'image/bmp',
+            bytes: imageBytes
+        }]
+    }),
+    /Unsupported EPUB image type/,
+    'the package boundary should reject image types outside the extractor allowlist'
+);
+for (const fileName of ['png', '.png']) {
+    assert.throws(
+        () => buildReflowablePublicationFiles({
+            identifier,
+            chapters: [{ title: 'Missing filename', html: '<p>Missing filename</p>' }],
+            assets: [{
+                id: 'missing-filename',
+                fileName,
+                mediaType: 'image/png',
+                bytes: imageBytes
+            }]
+        }),
+        /filename does not match its media type/,
+        `${fileName} should not pass without both a basename and extension separator`
+    );
+}
+
 const archive = await generateEpubArchive(JSZip, files, { type: 'nodebuffer' });
 assert.equal(archive.readUInt32LE(0), 0x04034b50, 'archive starts with a local file header');
 assert.equal(archive.readUInt16LE(8), 0, 'mimetype entry is stored without compression');
@@ -124,4 +199,4 @@ if (process.env.EPUBCHECK_JAR) {
     }
 }
 
-console.log('KoboForge reflowable EPUB package tests passed (24 assertions).');
+console.log('KoboForge reflowable EPUB package tests passed (44 assertions).');
