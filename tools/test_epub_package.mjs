@@ -130,6 +130,81 @@ for (const fileName of ['png', '.png']) {
     );
 }
 
+const packageFixture = (assets, chapters = [
+    { title: 'Asset identity', html: '<p>Asset identity</p>' }
+]) => ({ identifier, chapters, assets });
+
+for (const id of [undefined, null, '']) {
+    assert.throws(
+        () => buildReflowablePublicationFiles(packageFixture([{
+            id,
+            fileName: 'missing-id.png',
+            mediaType: 'image/png',
+            bytes: imageBytes
+        }])),
+        /EPUB image id is required/,
+        'every package asset should provide an explicit non-empty id'
+    );
+}
+
+for (const bytes of [undefined, null, new Uint8Array(), new Uint16Array([1]), []]) {
+    assert.throws(
+        () => buildReflowablePublicationFiles(packageFixture([{
+            id: 'missing-bytes',
+            fileName: 'missing-bytes.png',
+            mediaType: 'image/png',
+            bytes
+        }])),
+        /non-empty byte payload/,
+        'every package asset should provide typed, non-empty bytes'
+    );
+}
+
+const arrayBufferFiles = buildReflowablePublicationFiles(packageFixture([{
+    id: 'array-buffer',
+    fileName: 'array-buffer.png',
+    mediaType: 'image/png',
+    bytes: imageBytes.buffer
+}]));
+assert.equal(
+    arrayBufferFiles.get('OEBPS/images/array-buffer.png'),
+    imageBytes.buffer,
+    'a non-empty ArrayBuffer should remain a supported binary payload'
+);
+
+assert.throws(
+    () => buildReflowablePublicationFiles(packageFixture([
+        { id: 'duplicate', fileName: 'first.png', mediaType: 'image/png', bytes: imageBytes },
+        { id: 'duplicate', fileName: 'second.png', mediaType: 'image/png', bytes: imageBytes }
+    ])),
+    /Duplicate EPUB package item id/,
+    'image manifest ids should be unique'
+);
+assert.throws(
+    () => buildReflowablePublicationFiles(packageFixture([
+        { id: 'first', fileName: 'duplicate.png', mediaType: 'image/png', bytes: imageBytes },
+        { id: 'second', fileName: 'duplicate.png', mediaType: 'image/png', bytes: imageBytes }
+    ])),
+    /Duplicate EPUB image filename/,
+    'image archive filenames should be unique'
+);
+
+for (const id of ['bookid', 'nav', 'ncx', 'css', 'ch1', 'ch2']) {
+    assert.throws(
+        () => buildReflowablePublicationFiles(packageFixture([{
+            id,
+            fileName: `${id}.png`,
+            mediaType: 'image/png',
+            bytes: imageBytes
+        }], [
+            { title: 'First', html: '<p>First</p>' },
+            { title: 'Second', html: '<p>Second</p>' }
+        ])),
+        /Duplicate EPUB package item id/,
+        `${id} should remain reserved for package-owned metadata or manifest items`
+    );
+}
+
 const archive = await generateEpubArchive(JSZip, files, { type: 'nodebuffer' });
 assert.equal(archive.readUInt32LE(0), 0x04034b50, 'archive starts with a local file header');
 assert.equal(archive.readUInt16LE(8), 0, 'mimetype entry is stored without compression');
@@ -199,4 +274,4 @@ if (process.env.EPUBCHECK_JAR) {
     }
 }
 
-console.log('KoboForge reflowable EPUB package tests passed (44 assertions).');
+console.log('KoboForge reflowable EPUB package tests passed (61 assertions).');

@@ -57,7 +57,8 @@ before exporting a Kobo-friendly EPUB.
   signature-mismatched PNG/JPEG/GIF/WebP/SVG images without exposing their
   encoded contents
 - The package boundary independently restricts image manifest types and
-  requires a matching PNG/JPEG/GIF/WebP/SVG filename extension
+  requires a matching PNG/JPEG/GIF/WebP/SVG filename extension, explicit unique
+  manifest IDs and filenames, and non-empty binary payloads
 - Fully local browser processing; documents are never uploaded
 
 ## Structure

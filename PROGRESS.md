@@ -1,21 +1,75 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-11 (Cycle 125 across the projects workspace; KoboForge Cycle 56)
+Last updated: 2026-08-11 (Cycle 134 across the projects workspace; KoboForge Cycle 57)
 
 ## Current state
 
 - Branch: `main`; working tree was clean and aligned with `origin/main` at cycle start.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.11.3`.
+- Deployment version: `2026.08.11.4`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, optional local EPUBCheck, zero-vulnerability
-  audit, 31 decoded-image assertions, 44 package assertions, and recursive
+  audit, 31 decoded-image assertions, 61 package assertions, and recursive
   syntax checks.
 - Automated verification: least-privilege GitHub Actions runs cheap policy/unit
   fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
   browser-to-downloaded-EPUB flows, and recursive syntax checks on Node 24.
 
-## Latest cycle: enforce package image types and extensions
+## Latest cycle: require complete unique package image assets
+
+### Why this was selected
+
+The reusable package boundary validated image metadata but still generated an
+ID when callers omitted one, accepted missing or empty bytes, allowed duplicate
+manifest IDs, and silently overwrote duplicate archive filenames in its `Map`.
+Image IDs could also collide with package-owned OPF identities such as `nav`,
+`css`, `bookid`, or `ch1`, producing invalid publications from otherwise
+well-shaped direct calls.
+
+### Changes
+
+- Require every image asset to provide an explicit non-empty ID and a non-empty
+  `Uint8Array` or `ArrayBuffer` payload.
+- Track image filenames during normalization and reject duplicates before the
+  publication file map is created.
+- Track all OPF identities from metadata, navigation, CSS, chapters, and images;
+  reject duplicate image IDs and collisions with package-owned IDs.
+- Added 17 direct-package assertions for missing IDs, absent/empty/wrong-width
+  byte containers, valid `ArrayBuffer` input, duplicate IDs/filenames, and all
+  current reserved-ID families.
+- Documented the stronger archive boundary and bumped the deployment version to
+  `2026.08.11.4`.
+
+### Verification and scores
+
+- Test-first evidence: an asset without an ID produced a valid-looking package
+  under the previous builder because `image-1` was silently generated.
+- The focused package suite passed all 61 assertions (up from 44).
+- EPUBCheck 5.3.0 independently accepted the resulting real archive using the
+  previously checksum-verified local tool.
+- The complete workflow, dependency, runtime-dependency, logic, document
+  fidelity, 31-assertion image, and 61-assertion package suite passed.
+- Both offline TXT and DOCX browser imports/edits/downloads passed three
+  consecutive runs each (six of six) with the new `2026.08.11.4` modules.
+- `npm audit --audit-level=high` found zero vulnerabilities; recursive syntax,
+  whitespace, and diff gates passed.
+- Correctness/reliability: 6/10 → 10/10 (package entries cannot be missing, overwritten, or identity-conflicting).
+- Verifiability: 8/10 → 10/10 (every missing/duplicate/reserved class has a direct boundary fixture).
+- Maintainability: 8/10 → 9/10 (normalization owns one explicit identity set and filename set).
+- Performance: 9/10 → 9/10 (linear set checks run once per image during export).
+- Security/robustness: 7/10 → 10/10 (malformed direct inputs fail before any ZIP entries are assembled).
+- Developer/user experience: 7/10 → 9/10 (callers receive precise early errors instead of JSZip or EPUBCheck failures).
+
+### Lessons and process improvements
+
+- A `Map` is not a duplicate detector: validate uniqueness before insertion or
+  later assets silently replace earlier bytes.
+- Manifest IDs share a namespace with package-owned metadata and spine items,
+  so uniqueness must cover the whole OPF document rather than only image peers.
+- Validate all assets before mutating the file map; a failed publication builder
+  should not leave a partially assembled result.
+
+## Previous cycle: enforce package image types and extensions
 
 ### Why this was selected
 
@@ -185,8 +239,8 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependency |
 |---|---|---|---|---|---|
-| 1 | Reject duplicate or missing package asset identities/bytes | Correctness / robustness | Medium | Small-medium / low | Direct package callers can still omit byte payloads or reuse IDs/filenames, producing late JSZip failures or invalid duplicate OPF entries |
-| 2 | Cache the verified EPUBCheck archive in CI | Performance / process | Low-medium | Small-medium / low | The immutable 33 MB artifact is downloaded on each run; correctness must remain checksum-gated on cache hits |
+| 1 | Cache the verified EPUBCheck archive in CI | Performance / process | Low-medium | Small-medium / low | The immutable 33 MB artifact is downloaded on each run; correctness must remain checksum-gated on cache hits |
+| — | Reject duplicate or missing package asset identities/bytes | Correctness / robustness | Medium | Small-medium / low | Sixty-one package assertions cover required IDs/bytes, archive filenames, and the complete package-owned ID namespace | Completed in Cycle 57 |
 | — | Enforce exact asset types/extensions at the archive boundary | Correctness / robustness | Medium | Small-medium / low | Forty-four package assertions cover five types, both JPEG suffixes, cross-type mismatches, unsupported types, separators, and basenames | Completed in Cycle 56 |
 | — | Validate decoded image signatures against declared media types | Correctness / robustness | Medium | Medium / low | Thirty-one fixtures cover every accepted signature plus arbitrary, cross-type, and malformed payloads | Completed in Cycle 55 |
 | — | Extend browser coverage to one DOCX fidelity fixture | Verification | High | Medium-large / medium | Offline real-browser upload/edit/download now preserves the slim sermon fixture through EPUB XHTML | Completed in Cycle 54 |
@@ -194,5 +248,5 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 ## Next cycle
 
 Rotate workspace attention to Seeking Biblical Truth. On the next KoboForge
-cycle, reject duplicate/missing direct-package asset identities and byte
-payloads before optimizing the verified EPUBCheck download.
+cycle, cache the verified EPUBCheck download without weakening checksum
+validation on cache hits.

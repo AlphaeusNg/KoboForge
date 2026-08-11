@@ -104,12 +104,25 @@ export function buildReflowablePublicationFiles({
         title: String(chapter?.title || `Chapter ${index + 1}`),
         html: String(chapter?.html || '<p>(Empty document)</p>')
     }));
-    const normalizedAssets = assets.map((asset, index) => {
+    const packageItemIds = new Set([
+        'bookid',
+        'nav',
+        'ncx',
+        'css',
+        ...normalizedChapters.map((chapter) => `ch${chapter.number}`)
+    ]);
+    const imageFileNames = new Set();
+    const normalizedAssets = assets.map((asset) => {
         const fileName = String(asset?.fileName || '');
-        const id = String(asset?.id || `image-${index + 1}`);
+        if (typeof asset?.id !== 'string' || !asset.id.trim()) {
+            throw new Error('EPUB image id is required.');
+        }
+        const id = asset.id;
         const mediaType = String(asset?.mediaType || '').trim().toLowerCase();
         if (!/^[A-Za-z0-9._-]+$/.test(fileName)) throw new Error('Invalid EPUB image filename.');
         if (!/^[A-Za-z0-9._-]+$/.test(id)) throw new Error('Invalid EPUB image id.');
+        if (packageItemIds.has(id)) throw new Error('Duplicate EPUB package item id.');
+        if (imageFileNames.has(fileName)) throw new Error('Duplicate EPUB image filename.');
         const allowedExtensions = EPUB_IMAGE_EXTENSIONS.get(mediaType);
         if (!allowedExtensions) throw new Error('Unsupported EPUB image type.');
         const extensionSeparator = fileName.lastIndexOf('.');
@@ -119,7 +132,18 @@ export function buildReflowablePublicationFiles({
         if (!allowedExtensions.includes(extension)) {
             throw new Error('EPUB image filename does not match its media type.');
         }
-        return { ...asset, fileName, id, mediaType };
+        const bytes = asset?.bytes;
+        if (
+            !(
+                (bytes instanceof Uint8Array || bytes instanceof ArrayBuffer)
+                && bytes.byteLength > 0
+            )
+        ) {
+            throw new Error('EPUB image needs a non-empty byte payload.');
+        }
+        packageItemIds.add(id);
+        imageFileNames.add(fileName);
+        return { ...asset, fileName, id, mediaType, bytes };
     });
 
     const files = new Map();
