@@ -75,7 +75,7 @@ tools/test_epub_images.mjs # Executable embedded-image/archive fixture
 tools/test_epub_package.mjs # Executable reflowable EPUB package fixture
 tools/test_runtime_dependencies.mjs # CDN failure/retry DOM fixture
 tools/test_workflow.mjs # GitHub Actions policy contract
-tools/browser/koboforge.spec.mjs # Chromium TXT import/edit/download/archive smoke
+tools/browser/koboforge.spec.mjs # Offline Chromium TXT + DOCX import/edit/export flows
 playwright.config.mjs # Local static server + deterministic Chromium settings
 tools/fixtures/       # Slim DOCX fixtures (e.g. Numbers 13–15 outline)
 ```
@@ -106,7 +106,10 @@ EPUBCHECK_JAR=/path/to/epubcheck.jar node tools/test_epub_package.mjs
 
 Hosted CI always validates the package fixture with pinned EPUBCheck `5.3.0`
 on Java 21. Its release archive is checked against the committed SHA-256 before
-execution; the environment variable above provides the same gate locally.
+execution; the environment variable above provides the same gate locally. The
+browser suite injects the exact locked JSZip and Mammoth bundles, blocks network
+dependencies, and verifies both TXT and the slim sermon DOCX through downloaded
+EPUB contents.
 
 ## Privacy
 

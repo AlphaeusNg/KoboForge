@@ -1,16 +1,83 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-10 (Cycle 82 across the projects workspace; KoboForge Cycle 53)
+Last updated: 2026-08-11 (Cycle 105 across the projects workspace; KoboForge Cycle 54)
 
 ## Current state
 
 - Branch: `main`; working tree was clean and aligned with `origin/main` at cycle start.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.10.3`.
-- Baseline verification: dependency/module fixtures, a real Chromium import/edit/export flow, optional local EPUBCheck, zero-vulnerability audit, and recursive syntax checks.
-- Automated verification: least-privilege GitHub Actions runs cheap policy/unit fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, the offline TXT-to-downloaded-EPUB Chromium smoke, and recursive syntax checks on Node 24.
+- Deployment version: `2026.08.11.1`.
+- Baseline verification: dependency/module fixtures, offline real-Chromium TXT
+  and DOCX import/edit/export flows, optional local EPUBCheck, zero-vulnerability
+  audit, and recursive syntax checks.
+- Automated verification: least-privilege GitHub Actions runs cheap policy/unit
+  fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
+  browser-to-downloaded-EPUB flows, and recursive syntax checks on Node 24.
 
-## Latest cycle: require pinned EPUB standards validation in CI
+## Latest cycle: exercise DOCX fidelity through the real browser
+
+### Why this was selected
+
+DOCX is KoboForge's richest import path: it crosses on-demand Mammoth loading,
+ZIP preprocessing, Word style/page/list normalization, verse-marker repair,
+the paginated editor, and EPUB packaging. Unit fixtures covered the conversion
+pieces, but only TXT had executed the composed browser workflow and inspected
+its actual download.
+
+### Changes
+
+- Injected the exact lockfile-backed Mammoth 1.12.0 browser bundle alongside
+  JSZip 3.10.1 in the offline Playwright harness; all HTTPS remains blocked.
+- Added a second real-browser flow using the committed 18 KB Numbers 13–15
+  sermon fixture.
+- Required import readiness, preserved Numbers 14:33 prose immediately after
+  its semantic verse marker, retained later sermon/discussion content, direct
+  editor mutation, download metadata, and final EPUB XHTML fidelity.
+- Made app initialization an explicit test precondition after the combined
+  suite exposed a file-selection/listener race.
+- Updated browser-test documentation and bumped the deployment version to
+  `2026.08.11.1`.
+
+### Verification and scores
+
+- Test-first evidence: the new flow failed with the expected retryable “DOCX
+  converter could not load” status while the CDN was blocked and Mammoth was
+  not injected.
+- Focused flow: passed in 1.3s after locked bundle injection.
+- Process failure: the first combined run left DOCX at “Waiting for a document”
+  because file selection raced dynamic app initialization. Waiting for the
+  populated device specification fixed the precondition rather than masking
+  the timeout.
+- Stability run: both TXT and DOCX flows passed three times each (six total) in
+  5.2s, with zero console errors or uncaught page exceptions.
+- The default dependency/workflow/runtime/logic/fidelity/image/package suite
+  passed; it retains 6 dependency, 13 runtime-dependency, 18 image, and 24 EPUB
+  package assertions plus the larger logic/fidelity matrices.
+- `npm audit --audit-level=high`, recursive `node --check`, and `git diff
+  --check` pass in the final gate.
+- Correctness/reliability: 7/10 → 9/10 (the composed DOCX workflow now proves
+  the same sermon fidelity promised by its units).
+- Verifiability: 7/10 → 10/10 (real upload, edit, download, ZIP, OPF, and XHTML
+  agree under an offline browser).
+- Maintainability: 8/10 → 9/10 (one shared harness injects version-locked tools
+  and captures runtime errors for both formats).
+- Performance: 8/10 → 8/10 (CI gains one ~1s browser flow; deployed runtime is
+  unchanged).
+- Security/robustness: 9/10 → 10/10 (tests cannot silently fall back to a CDN
+  or a different dependency version).
+
+### Lessons and process improvements
+
+- Unit fidelity and archive tests do not prove the dynamically loaded browser
+  composition; carry one representative high-risk fixture across the entire
+  user path.
+- Test-only dependency injection should come from the same lockfile as unit
+  imports while external requests stay blocked.
+- A test that interacts after `DOMContentLoaded` can still race a dynamically
+  imported application. Wait on a user-visible initialized state before
+  selecting files, and repeat the full suite to validate the fix.
+
+## Previous cycle: require pinned EPUB standards validation in CI
 
 ### Why this was selected
 
@@ -49,6 +116,8 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 ## Previous cycles
 
+- Cycle 54: executed the real offline browser DOCX import, direct edit,
+  download, and verse-fidelity archive checks.
 - Cycle 52 (`49f3e3f`): executed the real browser TXT import, direct edit, download, and archive contents.
 - Cycle 51 (`478245d`): made malformed embedded-image failures actionable and fail-closed.
 - Cycle 50 (`c07101f`): executed embedded-image preparation and its composed archive handoff.
@@ -58,10 +127,12 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependency |
 |---|---|---|---|---|---|
-| 1 | Extend browser coverage to one DOCX fidelity fixture | Verification | High | Medium-large / medium | Core browser path and standards gate are stable; DOCX adds Mammoth, ZIP preprocessing, images, and a larger fixture boundary |
-| 2 | Validate decoded image signatures against declared media types | Correctness / robustness | Medium | Medium / low | Decoder syntax and type allowlists are enforced, but arbitrary non-image bytes can still claim a supported media type |
-| 3 | Cache the verified EPUBCheck archive in CI | Performance / process | Low-medium | Small-medium / low | The immutable 33 MB artifact is downloaded on each run; correctness must remain checksum-gated on cache hits |
+| 1 | Validate decoded image signatures against declared media types | Correctness / robustness | Medium | Medium / low | Decoder syntax and type allowlists are enforced, but arbitrary non-image bytes can still claim a supported media type |
+| 2 | Cache the verified EPUBCheck archive in CI | Performance / process | Low-medium | Small-medium / low | The immutable 33 MB artifact is downloaded on each run; correctness must remain checksum-gated on cache hits |
+| — | Extend browser coverage to one DOCX fidelity fixture | Verification | High | Medium-large / medium | Offline real-browser upload/edit/download now preserves the slim sermon fixture through EPUB XHTML | Completed in Cycle 54 |
 
 ## Next cycle
 
-Pause KoboForge after three consecutive high-value cycles and rotate workspace attention. On return, extend the proven browser harness through the slim DOCX fidelity fixture and locally injected locked Mammoth/JSZip bundles.
+Rotate workspace attention after closing the declared return target. On the next
+KoboForge cycle, validate decoded image signatures against declared media types
+before packaged EPUB assets are accepted.
