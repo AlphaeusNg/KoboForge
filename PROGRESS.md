@@ -55,6 +55,12 @@ remain subject to the exact same checksum and standards gates.
 - Both offline TXT and DOCX browser exports passed three consecutive runs each
   (six of six); recursive syntax, whitespace, and zero-vulnerability audit
   gates passed.
+- Hosted CI attempt 1 exercised the miss path, verified the downloaded ZIP,
+  passed EPUBCheck, and saved the exact 32 MB cache entry. An immediate rerun
+  of the same commit hit that key, skipped the download, reverified the cached
+  ZIP (`sha256sum: OK`), passed EPUBCheck, and completed successfully in 45s.
+- GitHub Pages deployed successfully and the live site serves
+  `2026.08.11.5`; the final working tree is clean and aligned with `origin/main`.
 - Correctness/reliability: 9/10 → 10/10 (cache state cannot bypass byte or EPUB validation).
 - Verifiability: 8/10 → 10/10 (both cache decisions and the trust sequence are policy-locked).
 - Maintainability: 8/10 → 9/10 (one immutable key derives from existing source-of-truth pins).
