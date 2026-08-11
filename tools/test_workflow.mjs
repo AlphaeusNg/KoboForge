@@ -33,6 +33,36 @@ assert.match(workflow, /distribution:\s*temurin\b/, 'CI pins the Java distributi
 assert.match(workflow, /java-version:\s*["']?21["']?\b/, 'CI pins Java 21');
 assert.match(
     workflow,
+    /uses:\s*actions\/cache@v6\b/,
+    'CI uses the Node 24-compatible cache action'
+);
+assert.match(
+    workflow,
+    /id:\s*epubcheck-cache\b/,
+    'CI names the EPUBCheck cache result for exact-hit branching'
+);
+assert.match(
+    workflow,
+    /path:\s*\$\{\{\s*runner\.temp\s*\}\}\/koboforge-epubcheck\.zip\b/,
+    'CI caches only the immutable EPUBCheck archive'
+);
+assert.match(
+    workflow,
+    /key:\s*epubcheck-\$\{\{\s*runner\.os\s*\}\}-\$\{\{\s*env\.EPUBCHECK_VERSION\s*\}\}-\$\{\{\s*env\.EPUBCHECK_SHA256\s*\}\}/,
+    'CI keys EPUBCheck by platform, version, and committed digest'
+);
+assert.doesNotMatch(
+    workflow,
+    /restore-keys:/,
+    'CI must not restore a prefix-matched EPUBCheck archive'
+);
+assert.match(
+    workflow,
+    /name:\s*Download EPUBCheck on cache miss\s*\n\s+if:\s*steps\.epubcheck-cache\.outputs\.cache-hit\s*!=\s*['"]true['"]/,
+    'CI downloads EPUBCheck only when the exact cache key misses'
+);
+assert.match(
+    workflow,
     /EPUBCHECK_VERSION:\s*["']?5\.3\.0["']?\b/,
     'CI pins EPUBCheck 5.3.0'
 );
@@ -43,6 +73,18 @@ assert.match(
 );
 assert.doesNotMatch(workflow, /releases\/latest/, 'CI must not download a floating release');
 assert.match(workflow, /sha256sum --check/, 'CI verifies EPUBCheck before extraction');
+const cacheIndex = workflow.indexOf('Restore EPUBCheck archive');
+const downloadIndex = workflow.indexOf('Download EPUBCheck on cache miss');
+const verificationIndex = workflow.indexOf('Verify and extract EPUBCheck');
+const standardsIndex = workflow.indexOf('Standards-check reflowable fixture');
+assert.ok(
+    cacheIndex >= 0 && cacheIndex < downloadIndex,
+    'CI restores the exact cache before considering a download'
+);
+assert.ok(
+    downloadIndex < verificationIndex && verificationIndex < standardsIndex,
+    'CI always verifies cached or downloaded bytes before standards validation'
+);
 assert.match(
     workflow,
     /EPUBCHECK_JAR:[\s\S]*run:\s*node tools\/test_epub_package\.mjs/,

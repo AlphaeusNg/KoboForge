@@ -1,21 +1,77 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-11 (Cycle 134 across the projects workspace; KoboForge Cycle 57)
+Last updated: 2026-08-11 (Cycle 143 across the projects workspace; KoboForge Cycle 58)
 
 ## Current state
 
 - Branch: `main`; working tree was clean and aligned with `origin/main` at cycle start.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.11.4`.
+- Deployment version: `2026.08.11.5`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, optional local EPUBCheck, zero-vulnerability
   audit, 31 decoded-image assertions, 61 package assertions, and recursive
   syntax checks.
 - Automated verification: least-privilege GitHub Actions runs cheap policy/unit
   fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
-  browser-to-downloaded-EPUB flows, and recursive syntax checks on Node 24.
+  browser-to-downloaded-EPUB flows, and recursive syntax checks on Node 24. The
+  immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
+  checksum-verified before every extraction, including cache hits.
 
-## Latest cycle: require complete unique package image assets
+## Latest cycle: cache EPUBCheck without weakening verification
+
+### Why this was selected
+
+Hosted CI downloaded the same immutable 33 MB EPUBCheck archive on every run,
+even though its version and SHA-256 were already pinned. Caching that artifact
+reduces network work and release-host dependence, but only if restored bytes
+remain subject to the exact same checksum and standards gates.
+
+### Changes
+
+- Added the official Node 24 `actions/cache@v6` action after Java setup and
+  before any EPUBCheck download.
+- Cache only the release ZIP under an exact runner OS, EPUBCheck version, and
+  committed SHA-256 key; no prefix restore keys can supply older bytes.
+- Download only when the exact key misses, then run SHA-256 verification and
+  extraction in a separate unconditional step for both cache states.
+- Moved transient paths to GitHub's runner temp directory and retained standards
+  validation before the more expensive Chromium installation.
+- Added eight workflow-policy assertions for action runtime, path, key, exact
+  hit branch, absence of prefix restore, and restore/download/verify ordering.
+- Documented the cache trust model and bumped deployment version to
+  `2026.08.11.5`.
+
+### Verification and scores
+
+- Test-first evidence: the expanded policy failed on the absent
+  `actions/cache@v6` step before the workflow changed.
+- Official action metadata reports current release `v6.1.0`; the v6 action and
+  package declare Node 24.
+- The focused workflow policy passes after implementation and preserves every
+  prior least-privilege, pin, digest, ordering, and standards assertion.
+- The complete dependency, runtime-dependency, logic, document-fidelity,
+  31-assertion image, and 61-assertion package suites passed; the real package
+  fixture again passed EPUBCheck 5.3.0 on Java.
+- Both offline TXT and DOCX browser exports passed three consecutive runs each
+  (six of six); recursive syntax, whitespace, and zero-vulnerability audit
+  gates passed.
+- Correctness/reliability: 9/10 → 10/10 (cache state cannot bypass byte or EPUB validation).
+- Verifiability: 8/10 → 10/10 (both cache decisions and the trust sequence are policy-locked).
+- Maintainability: 8/10 → 9/10 (one immutable key derives from existing source-of-truth pins).
+- Performance/resources: 6/10 → 9/10 (exact hits avoid a repeated 33 MB download).
+- Security/robustness: 8/10 → 10/10 (no stale prefix restore; every restored ZIP is checksum-gated).
+- Developer experience: 7/10 → 9/10 (hosted reruns are less dependent on release download availability).
+
+### Lessons and process improvements
+
+- A cache is an optimization, not a trust source: verify restored artifacts in
+  a separate unconditional step.
+- Include the immutable digest in the key and omit prefix restore keys so a
+  version change cannot silently reuse older tool bytes.
+- Test workflow ordering as well as individual lines; correctness depends on
+  restore → optional download → mandatory verify → execution.
+
+## Previous cycle: require complete unique package image assets
 
 ### Why this was selected
 
@@ -239,7 +295,8 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependency |
 |---|---|---|---|---|---|
-| 1 | Cache the verified EPUBCheck archive in CI | Performance / process | Low-medium | Small-medium / low | The immutable 33 MB artifact is downloaded on each run; correctness must remain checksum-gated on cache hits |
+| 1 | Reject unresolved chapter image references at the package boundary | Correctness / robustness | Medium-high | Medium / low | Direct package callers can reference absent `images/*` assets or retain data/blob URLs despite valid asset metadata |
+| — | Cache the verified EPUBCheck archive in CI | Performance / process | Low-medium | Small-medium / low | Exact platform/version/digest hits skip download; checksum and EPUBCheck remain mandatory | Completed in Cycle 58 |
 | — | Reject duplicate or missing package asset identities/bytes | Correctness / robustness | Medium | Small-medium / low | Sixty-one package assertions cover required IDs/bytes, archive filenames, and the complete package-owned ID namespace | Completed in Cycle 57 |
 | — | Enforce exact asset types/extensions at the archive boundary | Correctness / robustness | Medium | Small-medium / low | Forty-four package assertions cover five types, both JPEG suffixes, cross-type mismatches, unsupported types, separators, and basenames | Completed in Cycle 56 |
 | — | Validate decoded image signatures against declared media types | Correctness / robustness | Medium | Medium / low | Thirty-one fixtures cover every accepted signature plus arbitrary, cross-type, and malformed payloads | Completed in Cycle 55 |
@@ -248,5 +305,4 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 ## Next cycle
 
 Rotate workspace attention to Seeking Biblical Truth. On the next KoboForge
-cycle, cache the verified EPUBCheck download without weakening checksum
-validation on cache hits.
+cycle, reject unresolved chapter image sources at the direct package boundary.

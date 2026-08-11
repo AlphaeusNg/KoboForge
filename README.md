@@ -110,7 +110,9 @@ EPUBCHECK_JAR=/path/to/epubcheck.jar node tools/test_epub_package.mjs
 
 Hosted CI always validates the package fixture with pinned EPUBCheck `5.3.0`
 on Java 21. Its release archive is checked against the committed SHA-256 before
-execution; the environment variable above provides the same gate locally. The
+execution. CI caches only that ZIP under an exact OS, version, and digest key;
+cache hits still pass the same checksum gate before extraction. The environment
+variable above provides the same gate locally. The
 browser suite injects the exact locked JSZip and Mammoth bundles, blocks network
 dependencies, and verifies both TXT and the slim sermon DOCX through downloaded
 EPUB contents.

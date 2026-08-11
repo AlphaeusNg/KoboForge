@@ -35,17 +35,26 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - name: Download verified EPUBCheck
+      - name: Restore EPUBCheck archive
+        id: epubcheck-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/koboforge-epubcheck.zip
+          key: epubcheck-${{ runner.os }}-${{ env.EPUBCHECK_VERSION }}-${{ env.EPUBCHECK_SHA256 }}
+      - name: Download EPUBCheck on cache miss
+        if: steps.epubcheck-cache.outputs.cache-hit != 'true'
         run: |
           curl -fsSL --retry 3 \
-            -o /tmp/koboforge-epubcheck.zip \
+            -o "$RUNNER_TEMP/koboforge-epubcheck.zip" \
             "https://github.com/w3c/epubcheck/releases/download/v${EPUBCHECK_VERSION}/epubcheck-${EPUBCHECK_VERSION}.zip"
-          printf '%s  %s\n' "$EPUBCHECK_SHA256" /tmp/koboforge-epubcheck.zip | sha256sum --check
-          mkdir -p /tmp/koboforge-epubcheck
-          unzip -q /tmp/koboforge-epubcheck.zip -d /tmp/koboforge-epubcheck
+      - name: Verify and extract EPUBCheck
+        run: |
+          printf '%s  %s\n' "$EPUBCHECK_SHA256" "$RUNNER_TEMP/koboforge-epubcheck.zip" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/koboforge-epubcheck"
+          unzip -q "$RUNNER_TEMP/koboforge-epubcheck.zip" -d "$RUNNER_TEMP/koboforge-epubcheck"
       - name: Standards-check reflowable fixture
         env:
-          EPUBCHECK_JAR: /tmp/koboforge-epubcheck/epubcheck-${{ env.EPUBCHECK_VERSION }}/epubcheck.jar
+          EPUBCHECK_JAR: ${{ runner.temp }}/koboforge-epubcheck/epubcheck-${{ env.EPUBCHECK_VERSION }}/epubcheck.jar
         run: node tools/test_epub_package.mjs
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
