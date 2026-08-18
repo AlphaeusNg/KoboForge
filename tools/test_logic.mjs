@@ -242,7 +242,7 @@ const features = [
     ['PDF semantic table header evidence', 'function hasPdfTableHeaderEvidence'],
     ['PDF paragraph continuation checker', 'function shouldBreakPdfParagraph'],
     ['EPUB image assets', 'extractEmbeddedImagesForEpub'],
-    ['editable preview modes', "previewEl.contentEditable = isEdit ? 'true' : 'false'"],
+    ['editable preview modes', "previewEl.contentEditable = isDeviceSurface ? 'true' : 'false'"],
     ['Floyd–Steinberg dithering', 'Floyd–Steinberg'],
 ];
 for (const [label, needle] of features) assertIncludes(label, needle);
@@ -648,13 +648,20 @@ assert.ok(
 );
 assert.ok(
     page.includes("const isDeviceSurface = isEdit || isDiff")
-        && page.includes("deviceBookContent.contentEditable = editMode === 'edit'"),
-    'Edit and Diff reuse the paginated Kobo device surface'
+        && page.includes("previewEl.contentEditable = isDeviceSurface ? 'true' : 'false'")
+        && page.includes("deviceBookContent.contentEditable = deviceEditable ? 'true' : 'false'"),
+    'Edit and Diff reuse the paginated editable Kobo device surface'
 );
 assert.ok(
     page.includes("diffPanel?.classList.toggle('hidden', !isDiff)")
         && page.includes('without replacing the editable DOM'),
     'Diff owns the change index while Edit refresh preserves the DOM'
+);
+assert.ok(
+    page.includes("function isDeviceEditableMode")
+        && page.includes(".kf-tc-del, .kf-tc-removed-page, del.kf-tc-del")
+        && page.includes("editToolbar?.classList.toggle('hidden', !isDeviceSurface)"),
+    'Diff keeps the Kobo page and toolbar editable while deletion marks stay non-editable'
 );
 assert.ok(page.includes('updateDevicePage({ animate: false })')
     && page.includes("deviceBookContent.style.transition = 'none'"),

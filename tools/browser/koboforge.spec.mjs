@@ -237,6 +237,58 @@ test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ 
   );
 });
 
+test("keeps Diff editable and exports the Diff-mode revision", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+
+  await page.locator("#fileInput").setInputFiles({
+    name: "diff-edit.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Original browser smoke text."),
+  });
+
+  const preview = page.locator("#deviceBookContent");
+  await expect(preview).toHaveAttribute("contenteditable", "true");
+  await preview.evaluate((element) => {
+    const paragraph = element.querySelector("p");
+    if (!paragraph) throw new Error("TXT preview did not contain an editable paragraph");
+    paragraph.textContent = "Edited before opening Diff.";
+    element.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      inputType: "insertText",
+      data: "Edited before opening Diff.",
+    }));
+  });
+
+  await page.locator('[data-mode="diff"]').click();
+  await expect(preview).toHaveAttribute("contenteditable", "true");
+  await expect(preview).toHaveClass(/kf-diffing/);
+  await expect(page.locator("#editToolbar")).not.toHaveClass(/hidden/);
+  await expect(preview).toContainText("Edited before opening Diff.");
+
+  await preview.evaluate((element) => {
+    const paragraph = element.querySelector("p");
+    if (!paragraph) throw new Error("Diff preview did not keep an editable paragraph");
+    paragraph.textContent = "Edited inside Diff mode.";
+    element.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      inputType: "insertText",
+      data: "Edited inside Diff mode.",
+    }));
+  });
+  await expect(page.locator("#editedBadge")).toBeVisible();
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#downloadBtn").click();
+  const download = await downloadPromise;
+  const downloadPath = await download.path();
+  const archive = await JSZip.loadAsync(await readFile(downloadPath));
+  const chapter = await archive.file("OEBPS/chapter-1.xhtml").async("string");
+  expect(chapter).toContain("Edited inside Diff mode.");
+  expect(chapter).not.toContain("kf-tc-del");
+  expect(chapter).not.toContain("Original browser smoke text.");
+});
+
 test("imports DOCX fidelity, preserves verse prose, and exports an edit", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");

@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-18 (KoboForge Cycle 61)
+Last updated: 2026-08-18 (KoboForge Cycle 62)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.18.5`.
+- Deployment version: `2026.08.18.6`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, optional local EPUBCheck, zero-vulnerability
   audit, 31 decoded-image assertions, 70 package assertions, and recursive
@@ -17,7 +17,22 @@ Last updated: 2026-08-18 (KoboForge Cycle 61)
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
   checksum-verified before every extraction, including cache hits.
 
-## Latest cycle: remember the last Kobo and name export stages
+## Latest cycle: keep Diff editable
+
+### Why this was selected
+
+Diff already painted red/green marks on the same Kobo page, but the
+surface was read-only. Users had to bounce back to Edit to revise text.
+
+### Changes
+
+- Edit and Diff share one contenteditable device surface and toolbar.
+- Deletion marks stay non-editable; sync still unwraps insertions and
+  drops deletion markup so EPUB output is the current body.
+- Live change index updates while typing in Diff without replacing the
+  caret DOM.
+
+## Previous cycle: remember the last Kobo and name export stages
 
 ### Why this was selected
 

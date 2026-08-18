@@ -455,6 +455,10 @@
             btn.addEventListener('click', () => setEditMode(btn.dataset.mode));
         });
 
+        function isDeviceEditableMode(mode = editMode) {
+            return mode === 'edit' || mode === 'diff';
+        }
+
         function setEditMode(mode) {
             if (!['edit', 'diff', 'html'].includes(mode)) mode = 'edit';
             if (!currentOutput) {
@@ -462,7 +466,7 @@
                 return;
             }
             // Always flush UI → model before leaving a surface that can hold edits
-            if (editMode === 'edit' || editMode === 'html') {
+            if (isDeviceEditableMode() || editMode === 'html') {
                 syncBodyFromUi();
             }
             releaseEditablePageLock();
@@ -487,23 +491,20 @@
             devicePreview?.classList.toggle('hidden', !isDeviceSurface);
             bodyHtmlSource.classList.toggle('hidden', !isHtml);
             htmlToolbar?.classList.toggle('hidden', !isHtml);
-            editToolbar?.classList.toggle('hidden', !isEdit);
+            editToolbar?.classList.toggle('hidden', !isDeviceSurface);
             diffPanel?.classList.toggle('hidden', !isDiff);
 
-            previewEl.contentEditable = isEdit ? 'true' : 'false';
-            previewEl.classList.toggle('kf-editing', isEdit);
+            previewEl.contentEditable = isDeviceSurface ? 'true' : 'false';
+            previewEl.classList.toggle('kf-editing', isDeviceSurface);
             previewEl.classList.toggle('kf-diffing', isDiff);
-            if (isEdit) {
+            if (isDeviceSurface) {
                 previewEl.setAttribute(
                     'aria-label',
-                    'Editable paginated Kobo document'
+                    isDiff
+                        ? 'Editable paginated Kobo document with change marks'
+                        : 'Editable paginated Kobo document'
                 );
                 previewEl.focus();
-            } else if (isDiff) {
-                previewEl.setAttribute(
-                    'aria-label',
-                    'Paginated Kobo document showing text, formatting, object, and placement changes'
-                );
             } else {
                 previewEl.removeAttribute('aria-label');
             }
@@ -666,10 +667,16 @@
             savedEditRange = null;
             tableInsertionRange = null;
             closeTablePicker();
-            deviceBookContent.contentEditable = editMode === 'edit' ? 'true' : 'false';
-            deviceBookContent.classList.toggle('kf-editing', editMode === 'edit');
+            const deviceEditable = isDeviceEditableMode();
+            deviceBookContent.contentEditable = deviceEditable ? 'true' : 'false';
+            deviceBookContent.classList.toggle('kf-editing', deviceEditable);
             deviceBookContent.classList.toggle('kf-diffing', editMode === 'diff');
-            editToolbar?.classList.toggle('hidden', editMode !== 'edit');
+            editToolbar?.classList.toggle('hidden', !deviceEditable);
+            if (editMode === 'diff') {
+                deviceBookContent.querySelectorAll('.kf-tc-del, .kf-tc-removed-page, del.kf-tc-del').forEach((mark) => {
+                    mark.setAttribute('contenteditable', 'false');
+                });
+            }
             configureEditableImages();
             deviceBookContent.querySelectorAll('.kf-note-space').forEach((space) => {
                 // Keep intentional space from collapsing during ordinary text
@@ -718,7 +725,7 @@
 
         function pinEditableViewport() {
             if (
-                editMode !== 'edit'
+                !isDeviceEditableMode()
                 || lockedEditPageIndex === null
                 || !deviceBookContent
             ) {
@@ -737,7 +744,7 @@
         }
 
         function beginEditablePageLock() {
-            if (editMode !== 'edit' || !currentOutput || !deviceBookContent) return;
+            if (!isDeviceEditableMode() || !currentOutput || !deviceBookContent) return;
             if (lockedEditPageIndex === null) lockedEditPageIndex = devicePageIndex;
             clearTimeout(editPageUnlockTimer);
             if (editViewportLockFrame !== null) cancelAnimationFrame(editViewportLockFrame);
@@ -807,7 +814,7 @@
                     const fullWidth = Math.max(pageWidth, deviceBookContent.scrollWidth);
                     devicePageCount = Math.max(1, Math.ceil((fullWidth - 0.5) / pageWidth));
                     const requestedPage = (
-                        editMode === 'edit' && lockedEditPageIndex !== null
+                        isDeviceEditableMode() && lockedEditPageIndex !== null
                     )
                         ? lockedEditPageIndex
                         : devicePageIndex;
@@ -823,7 +830,7 @@
 
         function updateDevicePage({ animate = true } = {}) {
             const pageWidth = Number(deviceBookContent?.dataset.pageWidth || 0);
-            if (editMode === 'edit' && lockedEditPageIndex !== null) {
+            if (isDeviceEditableMode() && lockedEditPageIndex !== null) {
                 devicePageIndex = lockedEditPageIndex;
             }
             devicePageIndex = Math.max(0, Math.min(devicePageIndex, Math.max(0, devicePageCount - 1)));
@@ -854,7 +861,7 @@
                 saveDevicePrefs();
                 const output = currentOutput;
                 if (output) {
-                    if (editMode === 'edit') syncBodyFromUi();
+                    if (isDeviceEditableMode()) syncBodyFromUi();
                     const imagesRetargeted = await retargetCurrentDocumentImages();
                     if (currentOutput !== output) return;
                     if (imagesRetargeted) refreshOutlineAndStats();
@@ -877,7 +884,7 @@
                 releaseEditablePageLock();
                 updateDeviceControlLabels();
                 devicePageIndex = 0;
-                if (currentOutput && editMode === 'edit') syncBodyFromUi();
+                if (currentOutput && isDeviceEditableMode()) syncBodyFromUi();
                 renderDevicePreview({ resetPage: true });
                 scheduleDevicePagination();
                 savePrefs();
@@ -895,7 +902,7 @@
             updateDevicePage();
         });
         devicePreview?.addEventListener('keydown', (event) => {
-            if (editMode === 'edit' && deviceBookContent?.contains(event.target)) return;
+            if (isDeviceEditableMode() && deviceBookContent?.contains(event.target)) return;
             if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
                 event.preventDefault();
                 releaseEditablePageLock();
@@ -945,7 +952,7 @@
         saveDevicePrefs();
 
         function canFormatNow() {
-            return editMode === 'edit' && !!currentOutput && previewEl?.isContentEditable;
+            return isDeviceEditableMode() && !!currentOutput && previewEl?.isContentEditable;
         }
 
         function canEditImagesNow() {
@@ -2347,7 +2354,7 @@
         });
 
         previewEl.addEventListener('pointerdown', (event) => {
-            if (editMode !== 'edit') return;
+            if (!isDeviceEditableMode()) return;
             const img = event.target?.closest?.('img.kf-editable-image');
             if (!img) clearEditableImageSelection();
         });
@@ -2441,7 +2448,7 @@
         });
 
         document.addEventListener('selectionchange', () => {
-            if (editMode !== 'edit') return;
+            if (!isDeviceEditableMode()) return;
             updateToolbarActiveState();
             const selection = window.getSelection();
             if (!selection?.rangeCount) return;
@@ -2455,10 +2462,10 @@
         });
 
         previewEl.addEventListener('beforeinput', () => {
-            if (editMode === 'edit' && currentOutput) beginEditablePageLock();
+            if (isDeviceEditableMode() && currentOutput) beginEditablePageLock();
         });
         previewEl.addEventListener('input', () => {
-            if (editMode !== 'edit' || !currentOutput) return;
+            if (!isDeviceEditableMode() || !currentOutput) return;
             beginEditablePageLock();
             markEdited();
             clearTimeout(commitTimer);
@@ -2467,7 +2474,7 @@
         previewEl.addEventListener('keydown', handleEditorTab);
 
         previewEl.addEventListener('blur', () => {
-            if (editMode === 'edit') {
+            if (isDeviceEditableMode()) {
                 clearTimeout(commitTimer);
                 syncBodyFromUi();
                 updateEditChrome();
@@ -2764,7 +2771,7 @@
          * Keeping that DOM intact preserves bold, lists, tables, images, and caret.
          */
         function refreshDiffLive() {
-            if (editMode !== 'edit' || !currentOutput || !previewEl) return;
+            if (!isDeviceEditableMode() || !currentOutput || !previewEl) return;
             syncBodyFromUi();
             const tc = buildTrackChangesDocument(
                 currentOutput.originalBodyHtml || '',
@@ -2780,7 +2787,7 @@
             if (!diffBody) return;
             if (diffSummary) {
                 if (!tc.navItems.length) {
-                    diffSummary.textContent = 'No differences vs the original import. Return to Edit to make changes.';
+                    diffSummary.textContent = 'No differences vs the original import. Keep editing here or in Edit.';
                 } else {
                     const wordBit = tc.added + tc.removed
                         ? `+${tc.added} words · −${tc.removed} words`
@@ -2796,7 +2803,7 @@
             }
             const rows = [];
             if (!tc.navItems.length) {
-                rows.push('<div class="diff-meta">No changes yet. Return to Edit to revise the Kobo document.</div>');
+                rows.push('<div class="diff-meta">No changes yet. Type in this Kobo page to revise the document.</div>');
             } else {
                 tc.navItems.forEach((item, idx) => {
                     const label = item.summary
@@ -3034,7 +3041,7 @@
             if (editMode === 'html' && bodyHtmlSource && !bodyHtmlSource.classList.contains('hidden')) {
                 currentOutput.bodyHtml = canonicalizeBody(bodyHtmlSource.value);
             } else if (
-                editMode === 'edit'
+                isDeviceEditableMode()
                 && previewEl
                 && previewEl.isContentEditable
             ) {
@@ -3053,7 +3060,6 @@
                 });
                 currentOutput.bodyHtml = canonicalizeBody(clone.innerHTML);
             }
-            // Diff mode is read-only; its body already lives in currentOutput.
             return currentOutput.bodyHtml || '';
         }
 
@@ -3066,13 +3072,13 @@
             // (mode switch / import). Forced paths must sync first.
             if (
                 !force
-                && editMode === 'edit'
+                && isDeviceEditableMode()
                 && previewEl.isContentEditable
                 && bodyEdited
             ) {
                 return;
             }
-            if (force && (editMode === 'edit' || editMode === 'html')) {
+            if (force && (isDeviceEditableMode() || editMode === 'html')) {
                 // Caller should have synced; belt-and-braces for HTML textarea
                 if (editMode === 'html') syncBodyFromUi();
             }
@@ -7354,8 +7360,8 @@
         // Keep outline in sync when title changes
         bookTitleInput?.addEventListener('change', () => {
             if (currentOutput) {
-                if (editMode === 'edit') syncBodyFromUi();
+                if (isDeviceEditableMode()) syncBodyFromUi();
                 refreshOutlineAndStats();
-                if (editMode === 'edit' || editMode === 'diff') renderDevicePreview();
+                if (isDeviceEditableMode()) renderDevicePreview();
             }
         });
