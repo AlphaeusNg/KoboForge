@@ -71,27 +71,19 @@
         </div>
     </nav>
 
-    <header class="mx-auto max-w-[1500px] px-6 pb-14 pt-16">
-        <div class="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-[#C9A227]">Client-side Processing</div>
-        <h1 class="heading-serif max-w-4xl text-6xl leading-none text-slate-50 md:text-7xl">KoboForge</h1>
-        <p class="mt-6 max-w-4xl text-2xl leading-relaxed text-slate-200">
-            Convert → preview on your Kobo → edit in the paginated device view → export a reflowable EPUB. Nothing is uploaded.
+    <header class="mx-auto max-w-[1500px] px-6 pb-6 pt-8 md:pt-10">
+        <div class="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#C9A227]">Client-side Processing</div>
+        <h1 class="heading-serif text-4xl leading-none text-slate-50 md:text-5xl">KoboForge</h1>
+        <p class="mt-3 max-w-2xl text-base leading-relaxed text-slate-400">
+            Drop a document, preview it on your Kobo, edit, export. Always reflowable &amp; editable. Nothing is uploaded.
         </p>
-        <div class="mt-8 flex flex-wrap gap-3 text-sm text-slate-300">
-            <div class="rounded-full border border-white/10 bg-white/5 px-4 py-1.5">Runs fully in your browser</div>
-            <div class="rounded-full border border-white/10 bg-white/5 px-4 py-1.5">DOCX + PDF + TXT + Markdown</div>
-            <div class="rounded-full border border-white/10 bg-white/5 px-4 py-1.5">Edit body before export</div>
-            <div class="rounded-full border border-white/10 bg-white/5 px-4 py-1.5">Paginated Kobo device profiles</div>
-            <div class="rounded-full border border-white/10 bg-white/5 px-4 py-1.5">Embedded images auto-optimized</div>
-            <div class="rounded-full border border-white/10 bg-white/5 px-4 py-1.5">Always reflowable &amp; editable</div>
-        </div>
     </header>
 
-    <section id="epubWorkspace" class="mx-auto grid max-w-[1500px] gap-10 px-6 pb-20 xl:grid-cols-[minmax(480px,0.9fr)_minmax(650px,1.1fr)]">
+    <section id="epubWorkspace" class="mx-auto grid max-w-[1500px] gap-6 px-6 pb-16 xl:grid-cols-[minmax(380px,0.85fr)_minmax(0,1.15fr)]">
         <div class="workspace-column space-y-6">
-            <div class="workspace-import glass-card rounded-[2rem] p-7">
-                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-[#C9A227]">1. Import</div>
-                <div id="dropzone" class="mt-5 rounded-[1.75rem] border-2 border-dashed border-white/15 bg-slate-950/30 px-6 py-10 text-center transition" data-state="idle">
+            <div class="workspace-import glass-card rounded-[1.5rem] p-5 md:p-6">
+                <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#C9A227]">1. Import</div>
+                <div id="dropzone" class="mt-4 rounded-[1.25rem] border-2 border-dashed border-white/15 bg-slate-950/30 px-5 py-8 text-center transition" data-state="idle">
                     <!-- Empty: waiting for a file -->
                     <div id="dropzoneIdle">
                         <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-[#C9A227]">
@@ -99,11 +91,11 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903 5 5 0 019.393-2.14 4.5 4.5 0 01.879 7.903M12 12v9m0 0l-3-3m3 3l3-3" />
                             </svg>
                         </div>
-                        <h2 class="mt-4 text-xl font-semibold tracking-tight">Drop a file here</h2>
-                        <p class="mt-2 text-sm leading-7 text-slate-400">
-                            Best results come from DOCX. PDFs are reconstructed client-side with intentional writing space, relative type size, font traits, paragraphs, tables, and heading guesses; images and scan-only pages stay inline automatically.
+                        <h2 class="mt-4 text-lg font-semibold tracking-tight">Drop a file here</h2>
+                        <p class="mt-2 text-sm leading-6 text-slate-400">
+                            DOCX, PDF, TXT, or Markdown. Best from DOCX. Stays in this browser.
                         </p>
-                        <button type="button" id="pickFileBtn" class="mt-6 inline-flex items-center justify-center rounded-2xl bg-[#C9A227] px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-[#d9b844]">Choose file</button>
+                        <button type="button" id="pickFileBtn" class="mt-5 inline-flex items-center justify-center rounded-xl bg-[#C9A227] px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-[#d9b844]">Choose file</button>
                     </div>
                     <!-- Loaded: confirm receipt + cancel -->
                     <div id="dropzoneReady" class="hidden" aria-live="polite">
@@ -124,17 +116,14 @@
                     <input id="fileInput" type="file" accept=".docx,.pdf,.txt,.md,.markdown" class="hidden">
                 </div>
 
-                <div id="koboPreviewSetup" class="mt-6 rounded-3xl border border-[#C9A227]/25 bg-[#C9A227]/[0.06] p-5">
-                    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div id="koboPreviewSetup" class="mt-5 rounded-2xl border border-[#C9A227]/25 bg-[#C9A227]/[0.06] p-4">
+                    <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                            <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#C9A227]">Your Kobo preview</div>
-                            <h2 class="mt-1 text-lg font-semibold text-slate-100">Choose the device you read on</h2>
+                            <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#C9A227]">Your Kobo</div>
+                            <h2 class="mt-1 text-base font-semibold text-slate-100">Preview device</h2>
                         </div>
-                        <span class="text-xs text-slate-500">Defaults to Kobo Libra Colour</span>
+                        <span class="text-xs text-slate-500">Libra Colour default</span>
                     </div>
-                    <p class="mt-2 text-xs leading-5 text-slate-400">
-                        Your converted document opens in this device view after upload. PDF layout and typography reflow to this screen; detected DOCX/PDF images are optimized for it and stay inline while you edit.
-                    </p>
 
                     <div class="mt-5 grid gap-4 sm:grid-cols-2">
                         <label class="device-control block sm:col-span-2">
@@ -178,62 +167,54 @@
                         </label>
                     </div>
                     <p class="mt-3 text-[11px] leading-5 text-slate-500">
-                        Published screen resolution, diagonal, and body proportions are used. These controls affect preview only; exact line breaks can still vary with Kobo firmware and fonts.
+                        Preview only. Line breaks can still vary with Kobo firmware.
                     </p>
                 </div>
 
-                <div class="mt-6 grid gap-4 md:grid-cols-2">
+                <details class="book-details mt-4">
+                    <summary>Book details &amp; options</summary>
+                    <div class="mt-4 grid gap-3 md:grid-cols-2">
                     <label class="block">
                         <span class="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Book title</span>
-                        <input id="bookTitle" type="text" class="w-full rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-[#C9A227]" placeholder="Defaults to filename">
+                        <input id="bookTitle" type="text" class="w-full rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-[#C9A227]" placeholder="Defaults to filename">
                     </label>
                     <label class="block">
                         <span class="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Author</span>
-                        <input id="bookAuthor" type="text" class="w-full rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-[#C9A227]" placeholder="Optional">
+                        <input id="bookAuthor" type="text" class="w-full rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-[#C9A227]" placeholder="Optional">
                     </label>
                     <label class="block">
                         <span class="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Language</span>
-                        <input id="bookLang" type="text" value="en" maxlength="8" class="w-full rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-[#C9A227]" placeholder="en">
+                        <input id="bookLang" type="text" value="en" maxlength="8" class="w-full rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-[#C9A227]" placeholder="en">
                     </label>
-                </div>
+                    </div>
 
-                <label class="mt-5 flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3">
-                    <input id="preserveTables" type="checkbox" checked class="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900 text-[#C9A227] focus:ring-[#C9A227]">
-                    <span>
-                        <span class="block text-sm font-medium text-slate-100">Preserve tables as structured HTML</span>
-                        <span class="mt-1 block text-xs leading-5 text-slate-400">PDF grids and Markdown pipe tables become real &lt;table&gt; elements for best Kobo compatibility. Uncheck to flatten tables to plain text.</span>
-                    </span>
-                </label>
+                    <label class="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2.5">
+                        <input id="preserveTables" type="checkbox" checked class="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900 text-[#C9A227] focus:ring-[#C9A227]">
+                        <span>
+                            <span class="block text-sm font-medium text-slate-100">Preserve tables as HTML</span>
+                            <span class="mt-1 block text-xs leading-5 text-slate-400">PDF grids and Markdown pipe tables stay structured. Uncheck to flatten.</span>
+                        </span>
+                    </label>
 
-                <label class="mt-3 flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3">
-                    <input id="splitChapters" type="checkbox" class="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900 text-[#C9A227] focus:ring-[#C9A227]">
-                    <span>
-                        <span class="block text-sm font-medium text-slate-100">Split into chapters by H1 only</span>
-                        <span class="mt-1 block text-xs leading-5 text-slate-400">Off by default (one continuous book — best for Kobo page-turn). When on, only H1 starts a new spine item; H2 stays inline so section titles like “Offerings…” do not cut the book in half.</span>
-                    </span>
-                </label>
-
-                <div class="mt-6 rounded-3xl border border-white/10 bg-slate-950/35 p-5">
-                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-[#C9A227]">Workflow</div>
-                    <ol class="mt-4 list-decimal space-y-2 pl-5 text-sm leading-7 text-slate-300">
-                        <li>Import a document (DOCX, PDF, TXT, or Markdown).</li>
-                        <li>Choose your Kobo; detected DOCX/PDF images are optimized for it automatically.</li>
-                        <li>Edit directly in the selected paginated Kobo view.</li>
-                        <li>Use Diff to review changes or HTML for precise source control.</li>
-                        <li>Export an editable, searchable, and resizable reflowable EPUB.</li>
-                    </ol>
-                </div>
+                    <label class="mt-2 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2.5">
+                        <input id="splitChapters" type="checkbox" class="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900 text-[#C9A227] focus:ring-[#C9A227]">
+                        <span>
+                            <span class="block text-sm font-medium text-slate-100">Split chapters by H1 only</span>
+                            <span class="mt-1 block text-xs leading-5 text-slate-400">Off by default — one continuous book. H2 stays inline.</span>
+                        </span>
+                    </label>
+                </details>
             </div>
 
         </div>
 
         <div class="workspace-column space-y-6">
-            <div class="workspace-preview glass-card self-start rounded-[2rem] p-7">
-                <div class="flex flex-col gap-4">
-                <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div class="workspace-preview glass-card self-start rounded-[1.5rem] p-5 md:p-6">
+                <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                     <div>
-                        <div class="text-xs font-semibold uppercase tracking-[0.22em] text-[#C9A227]">2. Preview &amp; edit</div>
-                        <h2 class="mt-2 text-2xl font-semibold tracking-tight">Spot-check, then export below</h2>
+                        <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#C9A227]">2. Preview &amp; edit</div>
+                        <h2 class="mt-1 text-lg font-semibold tracking-tight">Device view</h2>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <div class="flex rounded-xl border border-white/10 bg-slate-950/40 p-1" role="group" aria-label="Preview mode">
@@ -244,8 +225,7 @@
                     </div>
                 </div>
                 <p class="text-xs leading-5 text-slate-500">
-                    <strong class="font-medium text-slate-400">Edit</strong> opens after import using the Kobo selected under Import.
-                    <strong class="font-medium text-slate-400">Diff</strong> marks words, formatting, image movement/resizing, tables, and placement directly on that same paginated screen.
+                    Edit after import. Diff marks changes on the same page.
                 </p>
                 </div>
 
@@ -360,10 +340,10 @@
                 </div>
             </div>
 
-            <div class="workspace-status glass-card rounded-[2rem] p-7">
+            <div class="workspace-status glass-card rounded-[1.5rem] p-5 md:p-6">
                 <div>
-                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-[#C9A227]">3. Summary</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight">Conversion overview</h2>
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#C9A227]">3. Summary</div>
+                    <h2 class="mt-1 text-lg font-semibold tracking-tight">Conversion overview</h2>
                 </div>
                 <div id="status" class="mt-4 text-sm leading-6 text-slate-300">Waiting for a document.</div>
                 <div id="editedBadge" class="mt-2 hidden text-xs font-medium text-amber-300/90">Edits will be exported.</div>
@@ -390,28 +370,25 @@
         </div>
     </section>
 
-    <section class="mx-auto max-w-[1500px] px-6 pb-16" aria-labelledby="export-heading">
-        <div class="glass-card rounded-[2rem] p-7">
-            <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-                <div class="max-w-xl">
-                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-[#C9A227]">4. EPUB export</div>
-                    <h2 id="export-heading" class="mt-2 text-2xl font-semibold tracking-tight">Download EPUB</h2>
-                    <p class="mt-2 text-sm leading-6 text-slate-400">
-                        Download always pulls the latest Edit/HTML body first, then builds the EPUB. Switch to <strong class="font-medium text-slate-300">Diff</strong> for the in-Kobo red/green changes and jump list.
-                    </p>
+    <section class="mx-auto max-w-[1500px] px-6 pb-12" aria-labelledby="export-heading">
+        <div class="glass-card rounded-[1.5rem] p-5 md:p-6">
+            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#C9A227]">4. Export</div>
+                    <h2 id="export-heading" class="mt-1 text-lg font-semibold tracking-tight">Download EPUB</h2>
                     <p id="exportEditHint" class="mt-2 hidden text-xs font-medium text-amber-300/90"></p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 md:justify-end">
-                    <button type="button" id="clearBtn" class="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-medium text-slate-300 transition hover:border-white/30 disabled:opacity-40" disabled>Clear workspace</button>
-                    <button id="downloadBtn" class="rounded-2xl bg-[#C9A227] px-6 py-3.5 text-sm font-semibold text-slate-950 transition hover:bg-[#d9b844] disabled:cursor-not-allowed disabled:opacity-50" disabled title="Sync edits, then build and download EPUB">Download EPUB</button>
+                    <button type="button" id="clearBtn" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30 disabled:opacity-40" disabled>Clear</button>
+                    <button id="downloadBtn" class="rounded-xl bg-[#C9A227] px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-[#d9b844] disabled:cursor-not-allowed disabled:opacity-50" disabled title="Sync edits, then build and download EPUB">Download EPUB</button>
                 </div>
             </div>
         </div>
     </section>
 
-    <section class="mx-auto max-w-[1500px] px-6 pb-16" aria-labelledby="spec-source-heading">
-        <div class="rounded-3xl border border-white/10 bg-slate-950/25 px-6 py-5">
-            <h2 id="spec-source-heading" class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Device specification sources</h2>
+    <section class="mx-auto max-w-[1500px] px-6 pb-12" aria-labelledby="spec-source-heading">
+        <details class="rounded-2xl border border-white/10 bg-slate-950/25 px-5 py-3">
+            <summary id="spec-source-heading" class="cursor-pointer text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Device specification sources</summary>
             <p class="mt-3 text-xs leading-6 text-slate-500">
                 Profiles use Rakuten Kobo’s published technical specifications for
                 <a href="https://ereader.kobo.com/en-nz/products/kobo-clara-bw" target="_blank" rel="noopener noreferrer">Clara BW</a>,
@@ -421,7 +398,7 @@
                 <a href="https://ereader.kobo.com/en-nz/products/kobo-elipsa-2e" target="_blank" rel="noopener noreferrer">Elipsa 2E</a>.
                 Screen placement inside the bezel is estimated because Kobo publishes body and display dimensions, not bezel offsets.
             </p>
-        </div>
+        </details>
     </section>
 
     <footer class="border-t border-white/10 py-8 text-center text-xs text-slate-500">
