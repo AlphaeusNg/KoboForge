@@ -310,6 +310,7 @@ assert.equal(prepared.stats.sectionBreaks, 3);
 assert.equal(prepared.stats.paritySectionBreaks, 2);
 assert.equal(prepared.stats.emptyListSeparatorsRemoved ?? 0, 0);
 assert.ok(Array.isArray(prepared.listPlan));
+assert.ok(Array.isArray(prepared.spacingPlan));
 const converted = await mammoth.convertToHtml(
     { buffer: Buffer.from(prepared.arrayBuffer) },
     {
@@ -339,6 +340,127 @@ assert.match(
     docxHtml,
     /COMPLEX-SCRIPT <(strong|em)><(em|strong)>عربي<\/\2><\/\1>/,
     'bCs/iCs must format only the complex-script segment of a mixed run'
+);
+
+const decorationFixture = await convertDocxFixture({
+    body: `
+<w:p><w:r><w:rPr><w:u w:val="thick"/></w:rPr><w:t>DIRECT-UNDERLINE</w:t></w:r></w:p>
+<w:p><w:r><w:rPr><w:strike/></w:rPr><w:t>DIRECT-STRIKE</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="UnderlinedPara"/></w:pPr><w:r><w:t>INHERITED-UNDERLINE</w:t></w:r><w:r><w:rPr><w:u w:val="none"/></w:rPr><w:t>RESET-UNDERLINE</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:rPr><w:u/></w:rPr><w:t>NON-BOLD-UNDERLINE</w:t></w:r></w:p>`,
+    styles: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="${WORD_NS}">
+  <w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="Normal"/></w:style>
+  <w:style w:type="paragraph" w:styleId="UnderlinedPara"><w:name w:val="Underlined Para"/><w:rPr><w:u w:val="double"/></w:rPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:b w:val="0"/></w:rPr></w:style>
+</w:styles>`
+});
+const decorationRoot = parsedRoot(decorationFixture.html);
+normalizeCssTypography(decorationRoot, document);
+assert.match(
+    decorationRoot.innerHTML,
+    /<u>DIRECT-UNDERLINE<\/u>/,
+    'direct Word underline variants must become semantic underline'
+);
+assert.match(
+    decorationRoot.innerHTML,
+    /<s>DIRECT-STRIKE<\/s>/,
+    'direct Word strike must become semantic strike'
+);
+const inheritedUnderline = Array.from(decorationRoot.querySelectorAll('u'))
+    .find((underline) => underline.textContent === 'INHERITED-UNDERLINE');
+assert.ok(inheritedUnderline, 'paragraph-style underline must be inherited');
+assert.ok(
+    !inheritedUnderline.textContent.includes('RESET-UNDERLINE'),
+    'a direct underline none reset must stay outside the inherited underline'
+);
+const underlinedHeading = Array.from(decorationRoot.querySelectorAll('h1'))
+    .find((heading) => heading.textContent.includes('NON-BOLD-UNDERLINE'));
+assert.ok(underlinedHeading?.querySelector('u'), 'underline must survive in a heading');
+assert.ok(
+    underlinedHeading?.querySelector('.kf-not-bold'),
+    'underline and the non-bold heading reset must coexist'
+);
+
+const spacingFixture = await convertDocxFixture({
+    body: `
+<w:p><w:r><w:t>STUDY-PROMPT</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="BodyText"/></w:pPr></w:p>
+<w:p><w:pPr><w:pStyle w:val="BodyText"/></w:pPr></w:p>
+<w:p><w:pPr><w:spacing w:before="120"/></w:pPr></w:p>
+<w:p><w:r><w:t>NEXT-PROMPT</w:t></w:r></w:p>`
+});
+assert.equal(spacingFixture.prepared.spacingPlan.length, 1);
+assert.equal(spacingFixture.prepared.spacingPlan[0].emptyParagraphs, 3);
+assert.equal(spacingFixture.prepared.spacingPlan[0].lines, 4);
+const spacedRoot = parsedRoot(spacingFixture.html);
+const spacedStats = normalizeDocumentLists(spacedRoot, document, {
+    spacingPlan: spacingFixture.prepared.spacingPlan
+});
+assert.equal(spacedStats.spaces, 1);
+assert.equal(
+    spacedRoot.querySelector('.kf-note-space')?.getAttribute('data-space-lines'),
+    '4',
+    'multiple empty Word paragraphs become an explicit sized writing region'
+);
+normalizeDocumentLists(spacedRoot, document);
+assert.equal(
+    spacedRoot.querySelectorAll('.kf-note-space').length,
+    1,
+    'writing regions must survive later canonical list-normalization passes'
+);
+
+const listSpacingRoot = parsedRoot('<ol><li>Alpha</li></ol><ol><li>Beta</li></ol>');
+normalizeDocumentLists(listSpacingRoot, document, {
+    listPlan: [
+        { textKey: 'alpha', ilvl: 0, format: 'decimal' },
+        { textKey: 'beta', ilvl: 0, format: 'decimal' }
+    ],
+    spacingPlan: [{ textKey: 'alpha', lines: 3 }]
+});
+assert.equal(listSpacingRoot.querySelectorAll('ol').length, 1);
+assert.equal(listSpacingRoot.querySelectorAll('ol > li').length, 2);
+assert.equal(
+    listSpacingRoot.querySelector('ol > li:first-child > .kf-note-space')
+        ?.getAttribute('data-space-lines'),
+    '3',
+    'writing space between list items must stay inside the preceding item without splitting numbering'
+);
+
+const repeatedPromptRoot = parsedRoot(
+    '<p>Notes</p><p>First answer</p><p>Notes</p><p>Second answer</p>'
+);
+normalizeDocumentLists(repeatedPromptRoot, document, {
+    spacingPlan: [{
+        textKey: 'notes',
+        beforeText: 'Second answer',
+        beforeKey: 'second answer',
+        lines: 3
+    }]
+});
+assert.equal(
+    repeatedPromptRoot.querySelectorAll('p')[0].nextElementSibling?.classList
+        .contains('kf-note-space'),
+    false,
+    'a writing gap must not attach to an earlier duplicate prompt'
+);
+assert.equal(
+    repeatedPromptRoot.querySelectorAll('p')[2].nextElementSibling
+        ?.getAttribute('data-space-lines'),
+    '3',
+    'the following paragraph disambiguates writing space after repeated prompts'
+);
+
+const ordinaryGapFixture = await convertDocxFixture({
+    body: `
+<w:p><w:r><w:t>ORDINARY-A</w:t></w:r></w:p>
+<w:p/>
+<w:p><w:r><w:t>ORDINARY-B</w:t></w:r></w:p>`
+});
+assert.equal(
+    ordinaryGapFixture.prepared.spacingPlan.length,
+    0,
+    'one ordinary empty paragraph must not be promoted into a large writing region'
 );
 
 const defaultStyleDocx = await docxFixture({

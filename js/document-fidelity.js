@@ -3,7 +3,13 @@ const WORD_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/
 export const DOCX_FIDELITY_STYLE_MAP = Object.freeze([
     "br[type='page'] => hr.kf-page-break:fresh",
     "br[type='column'] => hr.kf-page-break:fresh",
-    "r[style-name='KoboForge Not Bold'] => span.kf-not-bold"
+    "r[style-name='KoboForge Not Bold'] => span.kf-not-bold",
+    "r[style-name='KoboForge Underline'] => span.kf-underline",
+    "r[style-name='KoboForge Strike'] => span.kf-strike",
+    "r[style-name='KoboForge Underline Strike'] => span.kf-underline.kf-strike",
+    "r[style-name='KoboForge Not Bold Underline'] => span.kf-not-bold.kf-underline",
+    "r[style-name='KoboForge Not Bold Strike'] => span.kf-not-bold.kf-strike",
+    "r[style-name='KoboForge Not Bold Underline Strike'] => span.kf-not-bold.kf-underline.kf-strike"
 ]);
 
 const HTML_TEXT_BOUNDARY_SELECTOR = [
@@ -56,7 +62,10 @@ function readOnOff(element) {
 
 function overlayTraits(base, override) {
     const output = { ...base };
-    ['bold', 'boldCs', 'italic', 'italicCs', 'pageBreakBefore'].forEach((name) => {
+    [
+        'bold', 'boldCs', 'italic', 'italicCs', 'underline', 'strike',
+        'pageBreakBefore'
+    ].forEach((name) => {
         if (override?.[name] !== undefined) output[name] = override[name];
     });
     return output;
@@ -67,7 +76,10 @@ function runTraits(properties) {
         bold: readOnOff(directWordChild(properties, 'b')),
         boldCs: readOnOff(directWordChild(properties, 'bCs')),
         italic: readOnOff(directWordChild(properties, 'i')),
-        italicCs: readOnOff(directWordChild(properties, 'iCs'))
+        italicCs: readOnOff(directWordChild(properties, 'iCs')),
+        underline: readOnOff(directWordChild(properties, 'u')),
+        strike: readOnOff(directWordChild(properties, 'strike'))
+            ?? readOnOff(directWordChild(properties, 'dstrike'))
     };
 }
 
@@ -346,18 +358,34 @@ function resolveToggle(defaultValue, levels, directValue) {
     );
 }
 
+function resolveOverride(defaultValue, levels, directValue) {
+    if (directValue !== undefined) return directValue;
+    let value = defaultValue === true;
+    levels.forEach((levelValue) => {
+        if (levelValue !== undefined) value = levelValue;
+    });
+    return value;
+}
+
 function styleDefinesTypography(traits) {
-    return ['bold', 'boldCs', 'italic', 'italicCs']
+    return ['bold', 'boldCs', 'italic', 'italicCs', 'underline', 'strike']
         .some((name) => traits?.[name] !== undefined);
 }
 
-function ensureNotBoldStyle(stylesDoc) {
-    const expectedName = 'KoboForge Not Bold';
+function ensureKoboForgeRunStyle(stylesDoc, { notBold, underline, strike }) {
+    const traits = [
+        notBold ? 'Not Bold' : '',
+        underline ? 'Underline' : '',
+        strike ? 'Strike' : ''
+    ].filter(Boolean);
+    if (!traits.length) return '';
+    const expectedName = `KoboForge ${traits.join(' ')}`;
     const existing = wordElements(stylesDoc, 'style').find((style) => (
         wordAttribute(directWordChild(style, 'name'), 'val') === expectedName
     ));
     if (existing) return wordAttribute(existing, 'styleId');
-    let id = 'KoboForgeNotBold';
+    const baseId = expectedName.replace(/[^A-Za-z0-9]/g, '');
+    let id = baseId;
     let suffix = 2;
     const ids = new Set(
         wordElements(stylesDoc, 'style')
@@ -365,7 +393,7 @@ function ensureNotBoldStyle(stylesDoc) {
             .filter(Boolean)
     );
     while (ids.has(id)) {
-        id = `KoboForgeNotBold${suffix}`;
+        id = `${baseId}${suffix}`;
         suffix += 1;
     }
     const style = stylesDoc.createElementNS(WORD_NAMESPACE, 'w:style');
@@ -640,12 +668,22 @@ export async function prepareDocxForFidelity(arrayBuffer, {
         sectionBreaks: 0,
         paritySectionBreaks: 0,
         emptyListSeparatorsRemoved: 0,
+        underlinedRuns: 0,
+        struckRuns: 0,
+        noteSpaceRegions: 0,
+        noteSpaceLines: 0,
         listPlanItems: 0
     };
-    let notBoldStyleId = '';
 
-    // Empty paragraphs between list items force mammoth to emit one <ol>/<ul>
-    // per item. Collapse those separators so list structure can be rebuilt.
+    // Capture substantial authored gaps before list cleanup removes raw empty
+    // paragraphs that would otherwise split Mammoth's list output.
+    const spacingPlan = buildDocxSpacingPlan(documentDoc);
+    stats.noteSpaceRegions = spacingPlan.length;
+    stats.noteSpaceLines = spacingPlan.reduce((total, item) => total + item.lines, 0);
+
+    // Empty paragraphs between list items force Mammoth to emit one <ol>/<ul>
+    // per item. Their visual meaning now lives in spacingPlan, so the raw
+    // separators can be collapsed before list structure is rebuilt.
     stats.emptyListSeparatorsRemoved = stripEmptyParagraphsBetweenListItems(documentDoc);
 
     wordElements(documentDoc, 'p').forEach((paragraph) => {
@@ -731,6 +769,18 @@ export async function prepareDocxForFidelity(arrayBuffer, {
                     direct.italicCs
                 )
             };
+            const decoration = {
+                underline: resolveOverride(
+                    styleModel.defaults.underline,
+                    [tableLevel.underline, paragraphLevel.underline, characterLevel.underline],
+                    direct.underline
+                ),
+                strike: resolveOverride(
+                    styleModel.defaults.strike,
+                    [tableLevel.strike, paragraphLevel.strike, characterLevel.strike],
+                    direct.strike
+                )
+            };
             const styleCarriesTypography = styleDefinesTypography(characterLevel);
 
             splitRunByScript(run, documentDoc).forEach((segment) => {
@@ -739,15 +789,23 @@ export async function prepareDocxForFidelity(arrayBuffer, {
                 let runProperties = ensureRunProperties(documentDoc, segment.run);
                 setDirectRunTrait(documentDoc, runProperties, 'b', effective.bold);
                 setDirectRunTrait(documentDoc, runProperties, 'i', effective.italic);
-                if (needsBoldReset) {
-                    if (!notBoldStyleId) notBoldStyleId = ensureNotBoldStyle(stylesDoc);
-                    setRunStyle(documentDoc, runProperties, notBoldStyleId);
+                const presentationStyleId = ensureKoboForgeRunStyle(stylesDoc, {
+                    notBold: needsBoldReset,
+                    underline: decoration.underline,
+                    strike: decoration.strike
+                });
+                if (presentationStyleId) {
+                    setRunStyle(documentDoc, runProperties, presentationStyleId);
                 } else if (styleCarriesTypography) {
                     setRunStyle(documentDoc, runProperties, '');
                 }
+                if (decoration.underline) stats.underlinedRuns += 1;
+                if (decoration.strike) stats.struckRuns += 1;
                 if (
                     effective.bold
                     || effective.italic
+                    || decoration.underline
+                    || decoration.strike
                     || styleCarriesTypography
                     || needsBoldReset
                 ) {
@@ -761,7 +819,9 @@ export async function prepareDocxForFidelity(arrayBuffer, {
         'word/document.xml',
         new XMLSerializerCtor().serializeToString(documentDoc)
     );
-    if (notBoldStyleId) {
+    if (wordElements(stylesDoc, 'style').some((style) => (
+        /^KoboForge /.test(wordAttribute(directWordChild(style, 'name'), 'val') || '')
+    ))) {
         zip.file(
             'word/styles.xml',
             new XMLSerializerCtor().serializeToString(stylesDoc)
@@ -777,7 +837,8 @@ export async function prepareDocxForFidelity(arrayBuffer, {
             compressionOptions: { level: 6 }
         }),
         stats,
-        listPlan
+        listPlan,
+        spacingPlan
     };
 }
 
@@ -1219,6 +1280,7 @@ export function normalizeCssTypography(root, doc) {
             'font-weight', 'font-style', 'text-decoration', 'text-decoration-line'
         ].forEach((property) => element.style.removeProperty(property));
         if (!element.getAttribute('style')?.trim()) element.removeAttribute('style');
+        if (!element.getAttribute('class')?.trim()) element.removeAttribute('class');
     });
 }
 
@@ -1375,6 +1437,71 @@ function paragraphHasVisualContent(paragraph) {
         || wordElements(paragraph, 'pict').length
         || wordElements(paragraph, 'object').length
     );
+}
+
+function blankParagraphLineUnits(paragraph) {
+    const properties = directWordChild(paragraph, 'pPr');
+    const spacing = directWordChild(properties, 'spacing');
+    const numberValue = (name) => {
+        const value = Number.parseFloat(wordAttribute(spacing, name) || '0');
+        return Number.isFinite(value) ? Math.max(0, value) : 0;
+    };
+    const before = numberValue('before') / 240;
+    const after = numberValue('after') / 240;
+    const line = numberValue('line');
+    const lineUnits = line ? line / 240 : 1;
+    const manualBreaks = wordElements(paragraph, 'br')
+        .filter((lineBreak) => !mappedBreakType(lineBreak))
+        .length;
+    return Math.max(1, lineUnits) + manualBreaks + before + after;
+}
+
+/**
+ * Record substantial authored DOCX gaps before empty paragraphs are removed
+ * for Mammoth list continuity. One ordinary empty paragraph is treated as
+ * layout noise; two or more blank lines become an explicit writing region.
+ */
+function buildDocxSpacingPlan(documentDoc) {
+    const paragraphs = Array.from(wordElements(documentDoc, 'p'));
+    const plan = [];
+    let index = 0;
+    while (index < paragraphs.length) {
+        const paragraph = paragraphs[index];
+        if (!paragraphHasVisualContent(paragraph)) {
+            index += 1;
+            continue;
+        }
+        const afterText = paragraphPlainText(paragraph);
+        let cursor = index + 1;
+        const blankParagraphs = [];
+        while (
+            cursor < paragraphs.length
+            && !paragraphHasVisualContent(paragraphs[cursor])
+        ) {
+            blankParagraphs.push(paragraphs[cursor]);
+            cursor += 1;
+        }
+        const estimatedLines = blankParagraphs.reduce(
+            (total, blank) => total + blankParagraphLineUnits(blank),
+            0
+        );
+        const lines = Math.max(0, Math.min(12, Math.round(estimatedLines)));
+        if (afterText && lines >= 2) {
+            const beforeText = cursor < paragraphs.length
+                ? paragraphPlainText(paragraphs[cursor])
+                : '';
+            plan.push({
+                afterText,
+                textKey: normalizeMatchKey(afterText),
+                beforeText,
+                beforeKey: normalizeMatchKey(beforeText),
+                lines: Math.max(2, lines),
+                emptyParagraphs: blankParagraphs.length
+            });
+        }
+        index = Math.max(index + 1, cursor);
+    }
+    return plan;
 }
 
 function paragraphListInfo(paragraph) {
@@ -1627,6 +1754,14 @@ function listStyleForFormat(format) {
     }
 }
 
+function createNoteSpace(doc, requestedLines) {
+    const lines = Math.max(2, Math.min(12, Math.round(Number(requestedLines) || 2)));
+    const space = doc.createElement('div');
+    space.className = `kf-note-space kf-space-${lines}`;
+    space.setAttribute('data-space-lines', String(lines));
+    return space;
+}
+
 function normalizeMatchKey(text) {
     return String(text || '')
         .replace(/\u00a0/g, ' ')
@@ -1669,7 +1804,11 @@ function flattenBlocksForLists(root, doc) {
             pushListItems(node, 0);
             return;
         }
-        if (tag === 'div' && !node.classList?.contains('kf-pdf-page')) {
+        if (
+            tag === 'div'
+            && !node.classList?.contains('kf-pdf-page')
+            && !node.classList?.contains('kf-note-space')
+        ) {
             Array.from(node.children || []).forEach((child) => {
                 const childTag = child.tagName.toLowerCase();
                 if (childTag === 'ul' || childTag === 'ol') {
@@ -1717,8 +1856,12 @@ function flattenBlocksForLists(root, doc) {
  * Rebuild list structure for sermon outlines and general docs.
  * Uses DOCX numbering plan when available; otherwise plain markers + indent.
  */
-export function normalizeDocumentLists(root, doc, { listPlan = [] } = {}) {
-    if (!root || !doc) return { items: 0, lists: 0 };
+export function normalizeDocumentLists(
+    root,
+    doc,
+    { listPlan = [], spacingPlan = [] } = {}
+) {
+    if (!root || !doc) return { items: 0, lists: 0, spaces: 0 };
 
     // Drop empty paragraphs that only separate list fragments or list items.
     Array.from(root.querySelectorAll('p')).forEach((paragraph) => {
@@ -1786,10 +1929,17 @@ export function normalizeDocumentLists(root, doc, { listPlan = [] } = {}) {
     });
 
     const linear = flattenBlocksForLists(root, doc);
-    if (!linear.length) return { items: 0, lists: 0 };
+    if (!linear.length) return { items: 0, lists: 0, spaces: 0 };
 
     const plan = Array.isArray(listPlan) ? listPlan.slice() : [];
+    const spaces = Array.isArray(spacingPlan) ? spacingPlan.slice() : [];
     let planCursor = 0;
+    let spacingCursor = 0;
+    const blockKeyCounts = linear.reduce((counts, block) => {
+        const key = normalizeMatchKey(block.text);
+        if (key) counts.set(key, (counts.get(key) || 0) + 1);
+        return counts;
+    }, new Map());
 
     const takePlan = (text) => {
         const key = normalizeMatchKey(text);
@@ -1814,8 +1964,30 @@ export function normalizeDocumentLists(root, doc, { listPlan = [] } = {}) {
         return null;
     };
 
-    const annotated = linear.map((block) => {
+    const takeSpacing = (text, nextText) => {
+        const key = normalizeMatchKey(text);
+        if (!key) return null;
+        const nextKey = normalizeMatchKey(nextText);
+        const repeatedBlock = (blockKeyCounts.get(key) || 0) > 1;
+        for (let index = spacingCursor; index < spaces.length; index += 1) {
+            const entry = spaces[index];
+            if (entry.textKey === key) {
+                const expectedNextKey = entry.beforeKey
+                    ?? normalizeMatchKey(entry.beforeText);
+                if (repeatedBlock && expectedNextKey !== nextKey) continue;
+                spacingCursor = index + 1;
+                return entry;
+            }
+        }
+        return null;
+    };
+
+    const annotated = linear.map((block, blockIndex) => {
         const meta = takePlan(block.text);
+        const spaceAfterLines = takeSpacing(
+            block.text,
+            linear[blockIndex + 1]?.text || ''
+        )?.lines || 0;
 
         if (meta && meta.format !== 'indent') {
             return {
@@ -1823,7 +1995,8 @@ export function normalizeDocumentLists(root, doc, { listPlan = [] } = {}) {
                 level: meta.ilvl,
                 format: meta.format,
                 html: block.html || '',
-                text: block.text
+                text: block.text,
+                spaceAfterLines
             };
         }
 
@@ -1833,7 +2006,8 @@ export function normalizeDocumentLists(root, doc, { listPlan = [] } = {}) {
                 level: block.level || 0,
                 format: block.format || 'decimal',
                 html: block.html || '',
-                text: block.text
+                text: block.text,
+                spaceAfterLines
             };
         }
 
@@ -1859,7 +2033,8 @@ export function normalizeDocumentLists(root, doc, { listPlan = [] } = {}) {
                 level: plain.level,
                 format: plain.format,
                 html,
-                text: plain.body
+                text: plain.body,
+                spaceAfterLines
             };
         }
 
@@ -1869,7 +2044,8 @@ export function normalizeDocumentLists(root, doc, { listPlan = [] } = {}) {
             element: block.element,
             tag: block.tag || 'p',
             html: block.html || '',
-            text: block.text
+            text: block.text,
+            spaceAfterLines
         };
     });
 
@@ -1877,6 +2053,7 @@ export function normalizeDocumentLists(root, doc, { listPlan = [] } = {}) {
     const stack = [];
     let listCount = 0;
     let itemCount = 0;
+    let spaceCount = 0;
 
     const closeTo = (level) => {
         while (stack.length && stack[stack.length - 1].level > level) stack.pop();
@@ -1921,6 +2098,10 @@ export function normalizeDocumentLists(root, doc, { listPlan = [] } = {}) {
                 node.classList.add(`kf-indent-${Math.min(3, block.indentLevel)}`);
             }
             fragment.appendChild(node);
+            if (block.spaceAfterLines) {
+                fragment.appendChild(createNoteSpace(doc, block.spaceAfterLines));
+                spaceCount += 1;
+            }
             return;
         }
         const level = Math.max(0, Math.min(8, Number(block.level) || 0));
@@ -1930,11 +2111,15 @@ export function normalizeDocumentLists(root, doc, { listPlan = [] } = {}) {
         li.setAttribute('data-kf-list-level', String(level));
         li.setAttribute('data-kf-list-format', format);
         li.innerHTML = block.html || block.text || '';
+        if (block.spaceAfterLines) {
+            li.appendChild(createNoteSpace(doc, block.spaceAfterLines));
+            spaceCount += 1;
+        }
         list.appendChild(li);
         itemCount += 1;
     });
 
     while (root.firstChild) root.removeChild(root.firstChild);
     root.appendChild(fragment);
-    return { items: itemCount, lists: listCount };
+    return { items: itemCount, lists: listCount, spaces: spaceCount };
 }

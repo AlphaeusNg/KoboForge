@@ -4447,8 +4447,15 @@
                 observation = 'Converted with a source issue to spot-check.';
             } else if (bodyEdited) {
                 observation = 'Edited version is ready to export.';
-            } else if (out.imageCount > 0) {
-                observation = `${out.imageCount} image${out.imageCount === 1 ? '' : 's'} kept inline.`;
+            } else if (out.imageCount > 0 || out.noteSpaceCount > 0) {
+                const retained = [];
+                if (out.imageCount > 0) {
+                    retained.push(`${out.imageCount} image${out.imageCount === 1 ? '' : 's'}`);
+                }
+                if (out.noteSpaceCount > 0) {
+                    retained.push(`${out.noteSpaceCount} blank writing region${out.noteSpaceCount === 1 ? '' : 's'}`);
+                }
+                observation = `${retained.join(' and ')} retained.`;
             } else if (out.formatLabel === 'PDF') {
                 observation = 'PDF structure reflowed for editing.';
             }
@@ -4467,12 +4474,14 @@
             let docxInput = arrayBuffer;
             let fidelityStats = null;
             let listPlan = [];
+            let spacingPlan = [];
             try {
                 const JSZipCtor = await loadScriptDependency(RUNTIME_DEPENDENCIES.jszip);
                 const normalized = await prepareDocxForFidelity(arrayBuffer, { JSZipCtor });
                 docxInput = normalized.arrayBuffer;
                 fidelityStats = normalized.stats;
                 listPlan = normalized.listPlan || [];
+                spacingPlan = normalized.spacingPlan || [];
             } catch (error) {
                 console.warn('[KoboForge] DOCX fidelity preprocessing', error);
                 warnings.push(
@@ -4513,7 +4522,7 @@
             // so later export/canonicalize keeps full verse prose after markers.
             normalizeBibleVerseMarkers(doc.body, doc);
             // Rebuild DOCX lists (mammoth splits on empty paras / mis-nests levels).
-            normalizeDocumentLists(doc.body, doc, { listPlan });
+            normalizeDocumentLists(doc.body, doc, { listPlan, spacingPlan });
             // Drop empty/broken img tags from oversized images so EPUB XHTML stays valid
             doc.body.querySelectorAll('img').forEach((img) => {
                 const src = img.getAttribute('src') || '';
@@ -4547,16 +4556,18 @@
                 warnings.push(`Could not optimize ${optimized.failed} DOCX image(s); their source markup was kept where possible.`);
             }
             const imgCount = optimized.imageCount;
+            const noteSpaceCount = doc.body.querySelectorAll('.kf-note-space').length;
             const target = documentImageTarget();
+            const structureParts = ['Native paragraphs'];
+            if (imgCount) structureParts.push(`${imgCount} Kobo-optimized image(s)`);
+            if (noteSpaceCount) structureParts.push(`${noteSpaceCount} writing-space region(s)`);
             return {
                 title: file.name.replace(/\.[^.]+$/, ''),
                 author: '',
                 bodyHtml: optimized.html,
                 paragraphCount,
                 formatLabel: 'DOCX',
-                structureNote: imgCount
-                    ? `Native paragraphs + ${imgCount} Kobo-optimized image(s)`
-                    : 'Native paragraphs preserved',
+                structureNote: structureParts.join(' + '),
                 status: imgCount
                     ? `DOCX parsed locally. ${imgCount} embedded image${imgCount === 1 ? '' : 's'} automatically optimized for the selected Kobo and kept inline.`
                     : 'DOCX parsed locally. Paragraph and heading structure preserved from the source document.',
@@ -4565,6 +4576,7 @@
                 imageSources: optimized.imageSources,
                 imageVariants: optimized.imageVariants,
                 imageCount: imgCount,
+                noteSpaceCount,
                 imageTarget: `${target.profile.name} · ${target.orientation}`,
                 pageCount: 0
             };
@@ -4928,7 +4940,6 @@
                                     )
                                 );
                             } else if (block.type === 'spacer') {
-                                noteSpaceCount += 1;
                                 pageParts.push(block.html);
                             } else if (block.type === 'heading') {
                                 headingCount += 1;
@@ -4942,6 +4953,9 @@
                                 );
                             }
                         }
+                        noteSpaceCount += (
+                            pageParts.join('').match(/class="kf-note-space\b/g) || []
+                        ).length;
                     }
                     const imageLayout = ['left', 'right'].includes(pageLayout.sideRail)
                         ? `inline-${pageLayout.sideRail}`
@@ -5150,9 +5164,10 @@
         }
 
         function buildPdfLines(items, { fontMetadata = {} } = {}) {
-            const normalized = (items || [])
-                .filter((item) => item && item.str && String(item.str).trim() !== '')
-                .map((item) => {
+            const sourceItems = items || [];
+            const normalized = sourceItems
+                .map((item, sourceIndex) => {
+                    if (!item || !item.str || String(item.str).trim() === '') return null;
                     // Some PDF.js items lack transform (marked content / odd fonts).
                     // Skipping them used to throw mid-document after page 1.
                     const tr = item.transform;
@@ -5174,6 +5189,11 @@
                         width,
                         height: height || 10,
                         avgCharWidth,
+                        explicitSpaceBefore: (
+                            sourceIndex > 0
+                            && /^\s+$/.test(String(sourceItems[sourceIndex - 1]?.str || ''))
+                            && Number(sourceItems[sourceIndex - 1]?.width) > 0
+                        ),
                         font
                     };
                 })
@@ -5186,7 +5206,11 @@
             const lines = [];
             for (const item of normalized) {
                 const currentLine = lines[lines.length - 1];
-                if (!currentLine || Math.abs(currentLine.y - item.y) > Math.max(2.5, item.height * 0.45)) {
+                const baselineTolerance = Math.max(
+                    2.5,
+                    Math.max(item.height, currentLine?.maxHeight || 0) * 0.45
+                );
+                if (!currentLine || Math.abs(currentLine.y - item.y) > baselineTolerance) {
                     lines.push({
                         y: item.y,
                         xStart: item.x,
@@ -5211,13 +5235,25 @@
                 let text = '';
                 const pdfRuns = [];
                 let previousEnd = null;
+                let previousPart = null;
                 let avgSpace = line.avgCharWidth || 4;
                 for (const part of sorted) {
                     let prefix = '';
                     let gapLevel = 0;
                     if (previousEnd !== null) {
                         const gap = part.x - previousEnd;
-                        if (gap > avgSpace * 0.55) {
+                        const verseNumberBoundary = (
+                            previousPart
+                            && /^\d{1,3}$/.test((previousPart.text || '').trim())
+                            && /^[A-Za-z“"'‘]/.test((part.text || '').trim())
+                            && previousPart.height <= part.height * 0.82
+                            && previousPart.y - part.y >= part.height * 0.2
+                        );
+                        if (
+                            gap > avgSpace * 0.55
+                            || part.explicitSpaceBefore
+                            || verseNumberBoundary
+                        ) {
                             const gapUnits = Math.max(1, Math.min(12, Math.round(gap / avgSpace)));
                             prefix = ' '.repeat(gapUnits);
                             if (gapUnits >= 9) gapLevel = 3;
@@ -5236,6 +5272,7 @@
                         gapLevel
                     });
                     previousEnd = part.x + part.width;
+                    previousPart = part;
                     avgSpace = (avgSpace + part.avgCharWidth) / 2;
                 }
                 const indentSpaces = Math.max(0, Math.round((line.xStart - minX) / Math.max(avgSpace, 4)));
@@ -5331,7 +5368,17 @@
             const rightRatio = Math.max(0, (width - rightEdge) / width);
             const occupiedRatio = Math.max(0, Math.min(1, (rightEdge - left) / width));
             let alignment = 'left';
-            if (occupiedRatio < 0.86 && Math.abs(leftRatio - rightRatio) <= 0.075) {
+            const lineCenters = lines.map((line) => (
+                ((Number(line.xStart) || 0) + (Number(line.xEnd) || 0)) / 2
+            ));
+            const centerSpread = Math.max(...lineCenters) - Math.min(...lineCenters);
+            const individuallyCentered = lines.length === 1
+                || centerSpread <= width * 0.045;
+            if (
+                occupiedRatio < 0.86
+                && Math.abs(leftRatio - rightRatio) <= 0.075
+                && individuallyCentered
+            ) {
                 alignment = 'center';
             } else if (lines.length >= 2) {
                 const startValues = lines.map((line) => Number(line.xStart) || 0);
@@ -5418,6 +5465,22 @@
                 const leftLines = clusterPdfBaselines(leftItems);
                 const rightLines = clusterPdfBaselines(rightItems);
                 if (leftLines.length < 7 || rightLines.length < 7) continue;
+                // A real column has a gutter: left-column text should stop before
+                // the first right-column start. Long single-column lines often
+                // begin at several indents, which used to look like two columns
+                // and caused sentence fragments to be reordered or omitted.
+                const gutterTolerance = Math.max(4, width * 0.008);
+                const crossingItems = leftItems.filter((item) => (
+                    Number(item.transform[4]) + Math.max(0, Number(item.width) || 0)
+                        > high - gutterTolerance
+                ));
+                const textWeight = (list) => list.reduce(
+                    (total, item) => total + String(item.str || '').trim().length,
+                    0
+                );
+                const crossingRatio = textWeight(crossingItems)
+                    / Math.max(textWeight(leftItems), 1);
+                if (crossingItems.length >= 3 && crossingRatio > 0.2) continue;
                 const span = (lines) => (
                     lines.length
                         ? (Math.max(...lines) - Math.min(...lines)) / height
@@ -5940,10 +6003,8 @@
                 segment.push(line);
                 const space = spaceByLine.get(index);
                 if (!space) return;
-                promotePdfListBlocks(
-                    extractPdfSegmentBlocks(segment, preserveTables, tableGeometry),
-                    { textLeft }
-                ).forEach((block) => blocks.push(block));
+                extractPdfSegmentBlocks(segment, preserveTables, tableGeometry)
+                    .forEach((block) => blocks.push(block));
                 blocks.push({
                     type: 'spacer',
                     lines: space.lines,
@@ -5952,11 +6013,9 @@
                 });
                 segment = [];
             });
-            promotePdfListBlocks(
-                extractPdfSegmentBlocks(segment, preserveTables, tableGeometry),
-                { textLeft }
-            ).forEach((block) => blocks.push(block));
-            return blocks;
+            extractPdfSegmentBlocks(segment, preserveTables, tableGeometry)
+                .forEach((block) => blocks.push(block));
+            return promotePdfListBlocks(blocks, { textLeft });
         }
 
         function extractPdfBlocks(items, {
@@ -6052,7 +6111,7 @@
 
         function pdfLineStartsStructuredBlock(line) {
             const text = (line?.plainText || '').trim();
-            return /^(?:[•●▪◦*-]|\(?\d{1,3}[\).]|[A-Z][\).])\s+\S/.test(text);
+            return /^(?:[•●▪◦*-]|\(?\d{1,3}[\).]|[A-Za-z][\).])\s+\S/.test(text);
         }
 
         function shouldBreakPdfParagraph(previousLine, line, {
@@ -6128,6 +6187,35 @@
             return 0;
         }
 
+        function stripPdfListMarkerHtml(html, markerText) {
+            const template = document.createElement('template');
+            template.innerHTML = html || '';
+            const walker = document.createTreeWalker(
+                template.content,
+                NodeFilter.SHOW_TEXT
+            );
+            const nodes = [];
+            let leadingText = '';
+            let node = walker.nextNode();
+            while (node && leadingText.length < markerText.length + 24) {
+                nodes.push(node);
+                leadingText += node.nodeValue || '';
+                node = walker.nextNode();
+            }
+            const escapedMarker = markerText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const match = leadingText.match(new RegExp(`^\\s*${escapedMarker}\\s*`));
+            if (!match) return html || '';
+            let remaining = match[0].length;
+            nodes.forEach((textNode) => {
+                if (remaining <= 0) return;
+                const value = textNode.nodeValue || '';
+                const removeCount = Math.min(remaining, value.length);
+                textNode.nodeValue = value.slice(removeCount);
+                remaining -= removeCount;
+            });
+            return template.innerHTML;
+        }
+
         function promotePdfListBlocks(blocks, { textLeft = 0 } = {}) {
             if (!blocks?.length) return blocks || [];
             const output = [];
@@ -6146,6 +6234,7 @@
                         level: item.level,
                         format: item.format,
                         html: item.html,
+                        spaceHtml: item.spaceHtml || '',
                         children: []
                     };
                     if (!stack.length) {
@@ -6181,6 +6270,7 @@
                         for (let k = index; k < j; k += 1) {
                             const node = nodes[k];
                             html += `<li data-kf-list-level="${node.level}" data-kf-list-format="${format}">${node.html}`;
+                            if (node.spaceHtml) html += node.spaceHtml;
                             if (node.children.length) html += renderNodes(node.children);
                             html += '</li>';
                         }
@@ -6200,6 +6290,10 @@
             };
 
             blocks.forEach((block) => {
+                if (block.type === 'spacer' && listRun.length) {
+                    listRun[listRun.length - 1].spaceHtml = block.html || '';
+                    return;
+                }
                 if (block.type !== 'paragraph') {
                     flushListRun();
                     output.push(block);
@@ -6220,23 +6314,16 @@
                 }
                 // Strip leading marker from HTML when present as plain text start
                 let html = block.html || escapeHtml(marker.body);
-                const plainStart = text.slice(0, (marker.marker || '').length + 1);
                 if (text.startsWith(marker.marker)) {
-                    // Rebuild simple body; keep rich html if marker wasn't in HTML runs
-                    if ((block.html || '').includes(marker.marker)) {
-                        html = (block.html || '').replace(
-                            new RegExp(`^\\s*${marker.marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`),
-                            ''
-                        );
-                    } else {
-                        html = escapeHtml(marker.body);
-                    }
+                    html = stripPdfListMarkerHtml(block.html || '', marker.marker)
+                        || escapeHtml(marker.body);
                 }
                 listRun.push({
                     level: marker.level,
                     format: marker.format,
                     html,
                     text: marker.body,
+                    spaceHtml: '',
                     sourceLines: block.sourceLines || []
                 });
             });

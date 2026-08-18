@@ -528,6 +528,22 @@ assert.ok(page.includes('.kf-font-script') && page.includes('.kf-size-175'),
     'PDF font family and relative size classes must be styled');
 assert.ok(page.includes('kf-gap-before-3') && page.includes('margin-inline-start'),
     'wide PDF item gaps must remain visually separated in the device editor');
+assert.ok(
+    page.includes('explicitSpaceBefore')
+        && page.includes('verseNumberBoundary')
+        && page.includes('currentLine?.maxHeight'),
+    'PDF run reconstruction must preserve explicit spaces, verse boundaries, and mixed-size baselines'
+);
+assert.ok(
+    page.includes('crossingItems')
+        && page.includes('crossingRatio > 0.2'),
+    'full-width PDF prose crossing a proposed gutter must not be reordered as columns'
+);
+assert.ok(
+    page.includes('stripPdfListMarkerHtml')
+        && page.includes("listRun[listRun.length - 1].spaceHtml"),
+    'PDF lists must remove duplicate source markers while retaining writing space inside list items'
+);
 assert.ok(page.includes("renderPdfParagraphHtml(current)")
     && page.includes(".join(' ')")
     && !page.includes("current.map((line) => renderPdfLineHtml(line)).join('<br>')"),
