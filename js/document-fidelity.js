@@ -6,6 +6,32 @@ export const DOCX_FIDELITY_STYLE_MAP = Object.freeze([
     "r[style-name='KoboForge Not Bold'] => span.kf-not-bold"
 ]);
 
+const HTML_TEXT_BOUNDARY_SELECTOR = [
+    'address', 'article', 'aside', 'blockquote', 'dd', 'div', 'dl', 'dt',
+    'fieldset', 'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3',
+    'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main', 'nav', 'ol', 'p', 'pre',
+    'section', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'ul'
+].join(',');
+
+/**
+ * Count rendered HTML words without gluing the end of one block to the start
+ * of the next. textContent alone turns `</h1><p>` into one token even though
+ * browsers and EPUB readers render a boundary between those elements.
+ */
+export function countHtmlWords(html, doc = globalThis.document) {
+    if (!doc?.createElement) return 0;
+    const root = doc.createElement('div');
+    root.innerHTML = String(html || '');
+    root.querySelectorAll('br').forEach((lineBreak) => {
+        lineBreak.replaceWith(doc.createTextNode(' '));
+    });
+    root.querySelectorAll(HTML_TEXT_BOUNDARY_SELECTOR).forEach((block) => {
+        block.appendChild(doc.createTextNode(' '));
+    });
+    const text = (root.textContent || '').replace(/\s+/g, ' ').trim();
+    return text ? text.split(/\s+/).length : 0;
+}
+
 function wordElements(root, localName) {
     return Array.from(root?.getElementsByTagNameNS?.(WORD_NAMESPACE, localName) || []);
 }

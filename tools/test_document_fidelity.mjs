@@ -7,6 +7,7 @@ import { JSDOM } from 'jsdom';
 import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import {
+    countHtmlWords,
     DOCX_FIDELITY_STYLE_MAP,
     detectPlainListMarker,
     normalizeBibleVerseMarkers,
@@ -36,6 +37,34 @@ function parsedRoot(html) {
     root.innerHTML = html;
     return root;
 }
+
+function compactCharacterStream(value) {
+    return String(value || '').replace(/\s+/g, '');
+}
+
+async function docxBodyText(buffer) {
+    const zip = await JSZip.loadAsync(buffer);
+    const xml = await zip.file('word/document.xml').async('string');
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    return Array.from(doc.getElementsByTagNameNS(WORD_NS, 'p'))
+        .map((paragraph) => (
+            Array.from(paragraph.getElementsByTagNameNS(WORD_NS, 't'))
+                .map((text) => text.textContent || '')
+                .join('')
+        ))
+        .join('\n');
+}
+
+assert.equal(
+    countHtmlWords(
+        '<h1>The Changing of Generations</h1>'
+            + '<p>How will you make it home? Keep Trusting</p>'
+            + '<p>Discussion Questions</p>',
+        document
+    ),
+    14,
+    'word count must keep rendered block boundaries instead of gluing adjacent words'
+);
 
 // CSS/legacy/semantic typography: traits are independent and idempotent.
 const formattingCases = [
@@ -550,6 +579,15 @@ const children33 = verse33Markers.find((marker) => {
 assert.ok(
     children33,
     'Numbers 14:33 marker must be immediately followed by "And your children…" (no blank cut-off)'
+);
+const completeNumbersRoot = numbersRoot.cloneNode(true);
+normalizeDocumentLists(completeNumbersRoot, document, {
+    listPlan: preparedNumbers.listPlan
+});
+assert.equal(
+    compactCharacterStream(completeNumbersRoot.textContent),
+    compactCharacterStream(await docxBodyText(fixtureBuffer)),
+    'the complete DOCX character stream must survive fidelity, verse, and list normalization'
 );
 
 // --- List detection / rebuild (sermon outline) -----------------------------

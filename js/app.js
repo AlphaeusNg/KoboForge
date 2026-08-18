@@ -1,4 +1,5 @@
         const {
+            countHtmlWords,
             DOCX_FIDELITY_STYLE_MAP,
             detectPlainListMarker,
             normalizeBibleVerseMarkers,
@@ -4064,11 +4065,7 @@
         }
 
         function countWords(html) {
-            const tmp = document.createElement('div');
-            tmp.innerHTML = html;
-            const text = (tmp.textContent || '').replace(/\s+/g, ' ').trim();
-            if (!text) return 0;
-            return text.split(/\s+/).filter(Boolean).length;
+            return countHtmlWords(html, document);
         }
 
         function countHeadings(html) {

@@ -106,6 +106,29 @@ test("imports DOCX fidelity, preserves verse prose, and exports an edit", async 
   );
   await expect(preview).toContainText("So Near Yet So Far");
   await expect(preview).toContainText("Discussion questions:");
+  await expect(page.locator("#statWords")).toHaveText("1,209 words");
+  const sourceBuffer = await readFile(docxFixturePath);
+  const sourceArchive = await JSZip.loadAsync(sourceBuffer);
+  const sourceXml = await sourceArchive.file("word/document.xml").async("string");
+  const sourceCharacterStream = await page.evaluate((xml) => {
+    const wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    return Array.from(doc.getElementsByTagNameNS(wordNamespace, "p"))
+      .map((paragraph) => (
+        Array.from(paragraph.getElementsByTagNameNS(wordNamespace, "t"))
+          .map((text) => text.textContent || "")
+          .join("")
+      ))
+      .join("")
+      .replace(/\s+/g, "");
+  }, sourceXml);
+  const previewCharacterStream = await preview.evaluate((element) => (
+    (element.textContent || "").replace(/\s+/g, "")
+  ));
+  expect(
+    previewCharacterStream,
+    "the browser import must retain the fixture's complete character stream",
+  ).toBe(sourceCharacterStream);
   const verse33Preserved = await preview.evaluate((element) => (
     Array.from(element.querySelectorAll('sup.kf-verse-num[data-kf-verse="33"]'))
       .some((marker) => {
