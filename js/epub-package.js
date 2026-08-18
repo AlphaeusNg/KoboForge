@@ -8,6 +8,41 @@ const EPUB_IMAGE_EXTENSIONS = new Map([
     ['image/webp', ['webp']]
 ]);
 
+function decodeHtmlAttribute(value) {
+    return String(value ?? '')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+}
+
+function chapterImageSources(html) {
+    const sources = [];
+    const pattern = /<img\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+    let match;
+    while ((match = pattern.exec(String(html || '')))) {
+        sources.push(decodeHtmlAttribute(match[1] ?? match[2] ?? match[3] ?? ''));
+    }
+    return sources;
+}
+
+function assertResolvedChapterImages(html, imageFileNames) {
+    for (const source of chapterImageSources(html)) {
+        const trimmed = source.trim();
+        if (/^(?:data|blob|file):/i.test(trimmed)) {
+            throw new Error('EPUB chapter image source must be a packaged asset.');
+        }
+        if (/^https?:/i.test(trimmed)) {
+            continue;
+        }
+        const packaged = /^images\/([A-Za-z0-9._-]+)$/.exec(trimmed);
+        if (!packaged || !imageFileNames.has(packaged[1])) {
+            throw new Error('EPUB chapter image source is unresolved.');
+        }
+    }
+}
+
 function escapeXml(value) {
     return String(value ?? '')
         .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
@@ -144,6 +179,9 @@ export function buildReflowablePublicationFiles({
         packageItemIds.add(id);
         imageFileNames.add(fileName);
         return { ...asset, fileName, id, mediaType, bytes };
+    });
+    normalizedChapters.forEach((chapter) => {
+        assertResolvedChapterImages(chapter.html, imageFileNames);
     });
 
     const files = new Map();

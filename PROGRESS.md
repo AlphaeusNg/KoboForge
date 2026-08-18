@@ -1,15 +1,15 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-11 (Cycle 143 across the projects workspace; KoboForge Cycle 58)
+Last updated: 2026-08-18 (Cycle 153 across the projects workspace; KoboForge Cycle 59)
 
 ## Current state
 
 - Branch: `main`; working tree was clean and aligned with `origin/main` at cycle start.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.11.5`.
+- Deployment version: `2026.08.18.1`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, optional local EPUBCheck, zero-vulnerability
-  audit, 31 decoded-image assertions, 61 package assertions, and recursive
+  audit, 31 decoded-image assertions, 68 package assertions, and recursive
   syntax checks.
 - Automated verification: least-privilege GitHub Actions runs cheap policy/unit
   fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
@@ -17,7 +17,54 @@ Last updated: 2026-08-11 (Cycle 143 across the projects workspace; KoboForge Cyc
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
   checksum-verified before every extraction, including cache hits.
 
-## Latest cycle: cache EPUBCheck without weakening verification
+## Latest cycle: reject unresolved chapter image sources
+
+### Why this was selected
+
+Workspace rotation returned here after the portfolio cycle. Direct package
+callers could still emit chapter HTML that pointed at a missing `images/*`
+file or left `data:` / `blob:` URLs in place even when asset metadata looked
+valid. That is a silent broken-image failure at the EPUB boundary.
+
+### Changes
+
+- Scan every chapter `img src` after assets are normalized.
+- Reject leftover `data:`, `blob:`, and `file:` sources.
+- Require non-remote sources to be exactly `images/<packaged-filename>`.
+- Leave existing remote `http(s)` references allowed so the current extractor
+  contract stays intact.
+- Added seven package-boundary assertions and bumped the site stamp to
+  `2026.08.18.1`.
+
+### Verification and scores
+
+- Test-first evidence: a packaged asset plus `images/missing.png` or a leftover
+  data URL previously produced a complete EPUB.
+- `node tools/test_epub_package.mjs`: 68 passed.
+- `npm test`: workflow, dependency, logic, fidelity, 31 image, and 68 package
+  assertions passed.
+- `npm run test:browser`: 3 passed, including TXT and DOCX export through the
+  new package check.
+- Correctness/reliability: 6/10 → 9/10 (broken local image refs cannot ship).
+- Verifiability: 7/10 → 10/10 (missing, data, blob, traversal, and mixed cases).
+- Maintainability: 8/10 → 9/10 (one package-boundary helper owns image src policy).
+- Performance: 9/10 → 9/10 (linear scan of chapter HTML).
+- Security/robustness: 7/10 → 9/10 (data/blob/file and path traversal cannot enter the archive).
+- Developer/user experience: 7/10 → 8/10 (export fails closed instead of shipping empty images).
+
+### Lessons and process improvements
+
+- Validate chapter HTML against the asset set, not just the asset set against
+  itself. Manifest completeness does not imply reference completeness.
+- Keep extractor and packager policies aligned when changing URL classes;
+  remote `http(s)` is still an extractor-owned decision.
+
+### Explicit next opportunity
+
+Rotate to Seeking Biblical Truth. On the next KoboForge cycle, decide whether
+remote chapter images should be rejected or rewritten at extract time.
+
+## Previous cycle: cache EPUBCheck without weakening verification
 
 ### Why this was selected
 
@@ -301,7 +348,8 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependency |
 |---|---|---|---|---|---|
-| 1 | Reject unresolved chapter image references at the package boundary | Correctness / robustness | Medium-high | Medium / low | Direct package callers can reference absent `images/*` assets or retain data/blob URLs despite valid asset metadata |
+| 1 | Decide whether remote chapter images should fail closed at extract time | Correctness / robustness | Medium | Small-medium / low | Package now allows existing `http(s)` refs; extractor still preserves them |
+| — | Reject unresolved chapter image references at the package boundary | Correctness / robustness | Medium-high | Medium / low | Missing `images/*`, leftover data/blob/file URLs, and traversal now fail closed | Completed in Cycle 59 |
 | — | Cache the verified EPUBCheck archive in CI | Performance / process | Low-medium | Small-medium / low | Exact platform/version/digest hits skip download; checksum and EPUBCheck remain mandatory | Completed in Cycle 58 |
 | — | Reject duplicate or missing package asset identities/bytes | Correctness / robustness | Medium | Small-medium / low | Sixty-one package assertions cover required IDs/bytes, archive filenames, and the complete package-owned ID namespace | Completed in Cycle 57 |
 | — | Enforce exact asset types/extensions at the archive boundary | Correctness / robustness | Medium | Small-medium / low | Forty-four package assertions cover five types, both JPEG suffixes, cross-type mismatches, unsupported types, separators, and basenames | Completed in Cycle 56 |
@@ -311,4 +359,5 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 ## Next cycle
 
 Rotate workspace attention to Seeking Biblical Truth. On the next KoboForge
-cycle, reject unresolved chapter image sources at the direct package boundary.
+cycle, decide whether remote chapter images should be rejected or rewritten at
+extract time.

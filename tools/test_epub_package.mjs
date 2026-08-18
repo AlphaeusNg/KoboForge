@@ -205,6 +205,77 @@ for (const id of ['bookid', 'nav', 'ncx', 'css', 'ch1', 'ch2']) {
     );
 }
 
+const packagedImageChapters = [
+    { title: 'Present image', html: '<p><img src="images/image-1.png" alt="Present"/></p>' }
+];
+const packagedImageAssets = [
+    { id: 'image-1', fileName: 'image-1.png', mediaType: 'image/png', bytes: imageBytes }
+];
+assert.doesNotThrow(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: packagedImageChapters,
+        assets: packagedImageAssets
+    }),
+    'a chapter may reference a packaged images/* asset'
+);
+assert.throws(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{ title: 'Missing image', html: '<p><img src="images/missing.png" alt="Missing"/></p>' }],
+        assets: packagedImageAssets
+    }),
+    /unresolved/,
+    'absent images/* references must fail at the package boundary'
+);
+assert.throws(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{ title: 'Data URL', html: '<p><img src="data:image/png;base64,AAAA" alt="Inline"/></p>' }],
+        assets: packagedImageAssets
+    }),
+    /packaged asset/,
+    'data URLs must not remain in packaged chapter HTML'
+);
+assert.throws(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{ title: 'Blob URL', html: '<p><img src="blob:https://alphaeusng.github.io/1" alt="Blob"/></p>' }],
+        assets: packagedImageAssets
+    }),
+    /packaged asset/,
+    'blob URLs must not remain in packaged chapter HTML'
+);
+assert.doesNotThrow(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{ title: 'Remote URL', html: '<p><img src="https://example.com/cover.png" alt="Remote"/></p>' }],
+        assets: packagedImageAssets
+    }),
+    'existing remote image references remain allowed until a later extractor cycle'
+);
+assert.throws(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{ title: 'Traversal', html: '<p><img src="images/../image-1.png" alt="Traversal"/></p>' }],
+        assets: packagedImageAssets
+    }),
+    /unresolved/,
+    'relative traversal must not satisfy a packaged image name'
+);
+assert.throws(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{
+            title: 'Mixed',
+            html: '<p><img src="images/image-1.png" alt="Ok"/><img src="images/missing.png" alt="Bad"/></p>'
+        }],
+        assets: packagedImageAssets
+    }),
+    /unresolved/,
+    'one unresolved image fails the whole package even when another reference is valid'
+);
+
 const archive = await generateEpubArchive(JSZip, files, { type: 'nodebuffer' });
 assert.equal(archive.readUInt32LE(0), 0x04034b50, 'archive starts with a local file header');
 assert.equal(archive.readUInt16LE(8), 0, 'mimetype entry is stored without compression');
@@ -274,4 +345,4 @@ if (process.env.EPUBCHECK_JAR) {
     }
 }
 
-console.log('KoboForge reflowable EPUB package tests passed (61 assertions).');
+console.log('KoboForge reflowable EPUB package tests passed (68 assertions).');
