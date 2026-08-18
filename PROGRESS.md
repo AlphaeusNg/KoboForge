@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-18 (Cycle 153 across the projects workspace; KoboForge Cycle 59)
+Last updated: 2026-08-18 (KoboForge Cycle 60)
 
 ## Current state
 
-- Branch: `main`; working tree was clean and aligned with `origin/main` at cycle start.
+- Branch: `agent/preserve-study-formatting` (includes finished study-formatting work).
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.18.1`.
+- Deployment version: `2026.08.18.4`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, optional local EPUBCheck, zero-vulnerability
   audit, 31 decoded-image assertions, 68 package assertions, and recursive
@@ -17,7 +17,22 @@ Last updated: 2026-08-18 (Cycle 153 across the projects workspace; KoboForge Cyc
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
   checksum-verified before every extraction, including cache hits.
 
-## Latest cycle: reject unresolved chapter image sources
+## Latest cycle: lead with drop, hide the brochure
+
+### Why this was selected
+
+The converter worked, but first paint was a 7xl title, six chips, and a
+workflow essay before the dropzone. The request is a clean, minimalist
+workspace.
+
+### Changes
+
+- Compact hero: one title line and a short reflowable-EPUB promise.
+- Tighter import/preview/export cards; book metadata and options sit in
+  a closed details panel; device spec sources collapse.
+- IDs and dropzone → device → title order stay intact.
+
+## Previous cycle: reject unresolved chapter image sources
 
 ### Why this was selected
 

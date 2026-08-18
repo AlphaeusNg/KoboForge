@@ -173,6 +173,15 @@ test.afterEach(async ({ page }) => {
   expect(runtimeErrors.get(page), "unexpected browser runtime errors").toEqual([]);
 });
 
+async function openBookDetails(page) {
+  const details = page.locator("details.book-details");
+  if (await details.count()) {
+    await details.evaluate((el) => {
+      el.open = true;
+    });
+  }
+}
+
 test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");
@@ -191,6 +200,7 @@ test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ 
   await expect(preview).toHaveAttribute("contenteditable", "true");
   await expect(preview).toContainText("Original browser smoke text.");
 
+  await openBookDetails(page);
   await page.locator("#bookTitle").fill("Browser Smoke Title");
   await page.locator("#bookAuthor").fill("KoboForge Test");
   await preview.evaluate((element) => {
@@ -278,6 +288,7 @@ test("imports DOCX fidelity, preserves verse prose, and exports an edit", async 
   ));
   expect(verse33Preserved).toBe(true);
 
+  await openBookDetails(page);
   await page.locator("#bookTitle").fill("DOCX Browser Fidelity");
   await preview.evaluate((element) => {
     const paragraph = Array.from(element.querySelectorAll("p")).find((candidate) => (

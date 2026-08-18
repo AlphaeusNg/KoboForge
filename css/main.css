@@ -101,6 +101,28 @@ body {
     letter-spacing: -0.03em;
 }
 
+.book-details {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    background: rgba(2, 6, 23, 0.28);
+    padding: 0.35rem 0.9rem 0.75rem;
+}
+
+.book-details summary {
+    cursor: pointer;
+    list-style: none;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.55rem 0 0.15rem;
+}
+
+.book-details summary::-webkit-details-marker {
+    display: none;
+}
+
 .glass-card {
     background: rgba(15, 23, 42, 0.76);
     border: 1px solid rgba(255, 255, 255, 0.08);
