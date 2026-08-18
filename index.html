@@ -236,6 +236,16 @@
                 </div>
                 <div id="chapterOutline" class="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/30 p-2"></div>
                 </div>
+                <div id="findInBookWrap" class="mt-3 hidden">
+                <label class="block text-[11px] uppercase tracking-[0.18em] text-slate-500" for="findInBook">Find in book
+                    <div class="mt-1 flex gap-2">
+                        <input id="findInBook" type="search" autocomplete="off" placeholder="Search the current book…" class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-100 outline-none focus:border-[#C9A227]" />
+                        <button type="button" id="findInBookPrev" class="rounded-xl border border-white/10 px-2 text-xs text-slate-300">Prev</button>
+                        <button type="button" id="findInBookNext" class="rounded-xl border border-white/10 px-2 text-xs text-slate-300">Next</button>
+                    </div>
+                </label>
+                <p id="findInBookStatus" class="mt-1 text-[11px] text-slate-500" aria-live="polite"></p>
+                </div>
 
                 <div id="previewWrap" class="mt-4 mode-edit">
                 <div id="devicePreview" class="hidden" tabindex="0" aria-label="Paginated Kobo device preview">

@@ -108,6 +108,13 @@ assert.ok(
     html.includes('Always reflowable &amp; editable'),
     'the public feature summary must state the current editable EPUB contract'
 );
+assert.ok(
+    html.includes('id="findInBookWrap"')
+        && html.includes('id="findInBook"')
+        && script.includes('runFindInBook')
+        && script.includes("findInBookWrap?.classList.remove('hidden')"),
+    'find-in-book stays available even when the chapter outline is hidden'
+);
 assert.equal(existsSync(fixedLayoutPath), false, 'removed fixed-layout module must stay deleted');
 assert.equal(existsSync(fixedFixturePath), false, 'removed fixed EPUB fixture must stay deleted');
 assert.ok(

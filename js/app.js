@@ -93,6 +93,13 @@
         const chapterOutlineWrap = document.getElementById('chapterOutlineWrap');
         const chapterOutline = document.getElementById('chapterOutline');
         const chapterOutlineHint = document.getElementById('chapterOutlineHint');
+        const findInBookWrap = document.getElementById('findInBookWrap');
+        const findInBook = document.getElementById('findInBook');
+        const findInBookPrev = document.getElementById('findInBookPrev');
+        const findInBookNext = document.getElementById('findInBookNext');
+        const findInBookStatus = document.getElementById('findInBookStatus');
+        let findHits = [];
+        let findHitIndex = -1;
         const editedBadge = document.getElementById('editedBadge');
         const statFormat = document.getElementById('statFormat');
         const statWords = document.getElementById('statWords');
@@ -454,6 +461,17 @@
         modeButtons.forEach((btn) => {
             btn.addEventListener('click', () => setEditMode(btn.dataset.mode));
         });
+        findInBook?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                runFindInBook(e.shiftKey ? -1 : 1);
+            }
+        });
+        findInBook?.addEventListener('input', () => {
+            if (!findInBook.value.trim()) clearFindHits();
+        });
+        findInBookNext?.addEventListener('click', () => runFindInBook(findHits.length ? 1 : 0));
+        findInBookPrev?.addEventListener('click', () => runFindInBook(findHits.length ? -1 : 0));
 
         function isDeviceEditableMode(mode = editMode) {
             return mode === 'edit' || mode === 'diff';
@@ -2765,6 +2783,54 @@
             devicePreview?.focus({ preventScroll: true });
         }
 
+        function clearFindHits() {
+            previewEl?.querySelectorAll('.kf-find-hit').forEach((el) => el.classList.remove('kf-find-hit'));
+            findHits = [];
+            findHitIndex = -1;
+            if (findInBookStatus) findInBookStatus.textContent = '';
+        }
+
+        function collectFindHits(query) {
+            const q = String(query || '').trim().toLowerCase();
+            clearFindHits();
+            if (!q || !previewEl) return [];
+            const nodes = previewEl.querySelectorAll('p, h1, h2, h3, h4, li, td, th, blockquote, figcaption');
+            nodes.forEach((el) => {
+                const text = (el.textContent || '').toLowerCase();
+                if (text.includes(q)) findHits.push(el);
+            });
+            return findHits;
+        }
+
+        function showFindHit(index) {
+            if (!findHits.length) {
+                if (findInBookStatus) findInBookStatus.textContent = 'No matches in this book.';
+                return;
+            }
+            findHitIndex = ((index % findHits.length) + findHits.length) % findHits.length;
+            previewEl?.querySelectorAll('.kf-find-hit').forEach((el) => el.classList.remove('kf-find-hit'));
+            const el = findHits[findHitIndex];
+            el.classList.add('kf-find-hit');
+            jumpDeviceToElement(el);
+            if (findInBookStatus) {
+                findInBookStatus.textContent = `${findHitIndex + 1} of ${findHits.length}`;
+            }
+        }
+
+        function runFindInBook(direction = 0) {
+            const q = findInBook?.value || '';
+            if (!String(q).trim()) {
+                clearFindHits();
+                return;
+            }
+            if (!findHits.length || direction === 0) collectFindHits(q);
+            if (!findHits.length) {
+                if (findInBookStatus) findInBookStatus.textContent = 'No matches in this book.';
+                return;
+            }
+            showFindHit(direction === 0 ? 0 : findHitIndex + direction);
+        }
+
         /**
          * Real-time Edit refresh: sync body ← Kobo DOM, recompute the red/green
          * change index, and repaginate without replacing the editable DOM.
@@ -4268,6 +4334,7 @@
             pageChips.classList.add('hidden');
             pageChipsInner.innerHTML = '';
             chapterOutlineWrap.classList.add('hidden');
+            findInBookWrap?.classList.add('hidden');
             chapterOutline.innerHTML = '';
             previewEl.innerHTML = '<p class="kf-empty-hint">Load a document to edit directly in its paginated Kobo layout.</p>';
             previewEl.contentEditable = 'false';
@@ -4419,6 +4486,7 @@
             diagnosticsEl.classList.add('hidden');
             pageChips.classList.add('hidden');
             chapterOutlineWrap.classList.add('hidden');
+            findInBookWrap?.classList.add('hidden');
             previewEl.innerHTML = '<p class="kf-empty-hint">Processing…</p>';
             statusEl.textContent = `Reading ${file.name} locally…`;
             if (!bookTitleInput.value.trim()) {
@@ -4531,6 +4599,7 @@
             } else {
                 chapterOutlineWrap.classList.add('hidden');
             }
+            findInBookWrap?.classList.remove('hidden');
 
             // Page chips
             const pages = currentOutput.pageCount || 0;
