@@ -37,14 +37,17 @@ before exporting a Kobo-friendly EPUB.
   as real nested `<ol>`/`<ul>` with indentation; editor list buttons use a
   custom toggle that works in the paginated preview
 - DOCX image extraction and automatic Kobo-targeted resizing/tone mapping
-- Authored DOCX page breaks, paragraph/section breaks, and inherited Word
-  bold/italic styles preserved through preview and EPUB export
+- Authored DOCX page breaks, paragraph/section breaks, inherited Word
+  bold/italic/underline/strike styles, and substantial multi-paragraph writing
+  spaces preserved through preview and EPUB export
 - PDF image extraction with inline scan-page fallback
 - Robust PDF whitespace analysis that preserves large worksheet/note regions
 - PDF source-page divisions locked to Kobo page starts, with coordinate-aware
   vertical/horizontal placement and preserved intentional writing space
-- Page-level reading-column separation that prevents left/right text interleaving
-- Sentence-aware PDF line joining that reflows visual lines into real paragraphs
+- Gutter-validated PDF reading-column separation that keeps indented, full-width
+  prose in source order instead of falsely interleaving it as columns
+- Sentence-aware PDF line joining that preserves explicit spaces, verse-number
+  boundaries, and mixed-size small-cap words while reflowing visual lines
 - Conservative PDF table detection requiring ruled-grid or distinct header evidence
 - PDF font profiling that retains relative size, family type, weight, and slant
 - Wide PDF column gaps that remain separated and wrap cleanly on narrow Kobos

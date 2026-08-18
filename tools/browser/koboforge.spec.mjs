@@ -14,6 +14,141 @@ const docxFixturePath = fileURLToPath(
 );
 const runtimeErrors = new WeakMap();
 
+async function studyFormattingDocxBuffer() {
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>`,
+  );
+  zip.folder("_rels").file(
+    ".rels",
+    `<?xml version="1.0"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`,
+  );
+  const word = zip.folder("word");
+  word.file(
+    "document.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+  <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Study worksheet</w:t></w:r></w:p>
+  <w:p><w:r><w:rPr><w:u w:val="thick"/></w:rPr><w:t>Underlined study prompt</w:t></w:r></w:p>
+  <w:p/><w:p/><w:p><w:pPr><w:spacing w:before="120"/></w:pPr></w:p>
+  <w:p><w:r><w:t>Next study prompt</w:t></w:r></w:p>
+  <w:sectPr/>
+</w:body></w:document>`,
+  );
+  word.file(
+    "styles.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="Normal"/></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/></w:style>
+</w:styles>`,
+  );
+  word.folder("_rels").file(
+    "document.xml.rels",
+    `<?xml version="1.0"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+  );
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+function pdfTextItem(str, x, y, width, {
+  height = 11,
+  fontName = "Helvetica",
+  hasEOL = false,
+} = {}) {
+  return {
+    str,
+    transform: [1, 0, 0, height, x, y],
+    width,
+    height,
+    fontName,
+    hasEOL,
+  };
+}
+
+function pdfFidelityModuleSource() {
+  const items = [
+    pdfTextItem("1", 72, 748, 3.7, { height: 6.6, fontName: "Helvetica-Bold" }),
+    pdfTextItem("And every source word remains in order.", 75.7, 744, 250, { hasEOL: true }),
+    pdfTextItem("The L", 72, 720, 28),
+    pdfTextItem("ORD", 100, 720, 17, { height: 7.7 }),
+    pdfTextItem(" ", 117, 720, 4, { height: 0 }),
+    pdfTextItem("continues without losing a word.", 121, 720, 190, { hasEOL: true }),
+  ];
+  for (let index = 0; index < 8; index += 1) {
+    const y = 690 - (index * 48);
+    items.push(pdfTextItem(
+      `Full width sentence ${index + 1} crosses the apparent gutter safely.`,
+      72,
+      y,
+      315,
+      { hasEOL: true },
+    ));
+    items.push(pdfTextItem(
+      `Indented continuation ${index + 1} stays immediately after it.`,
+      190,
+      y - 24,
+      230,
+      { hasEOL: true },
+    ));
+  }
+  const outlineItems = [
+    pdfTextItem("Study outline", 72, 760, 70, { hasEOL: true }),
+    pdfTextItem("1)", 90, 730, 10),
+    pdfTextItem(" ", 100, 730, 8, { height: 0 }),
+    pdfTextItem("The Problem", 108, 730, 68, { hasEOL: true }),
+    pdfTextItem("a)", 126, 700, 10),
+    pdfTextItem(" ", 136, 700, 8, { height: 0 }),
+    pdfTextItem("Death: first study point", 144, 700, 130, { hasEOL: true }),
+    pdfTextItem("b)", 126, 640, 10),
+    pdfTextItem(" ", 136, 640, 8, { height: 0 }),
+    pdfTextItem("Denial: second study point", 144, 640, 145, { hasEOL: true }),
+    pdfTextItem("2)", 90, 580, 10),
+    pdfTextItem(" ", 100, 580, 8, { height: 0 }),
+    pdfTextItem("The Solution", 108, 580, 68, { hasEOL: true }),
+  ];
+  const pages = [{
+    width: 596,
+    height: 842,
+    items,
+  }, {
+    width: 596,
+    height: 842,
+    items: outlineItems,
+  }];
+  return `
+export const GlobalWorkerOptions = {};
+export const OPS = {};
+const pages = ${JSON.stringify(pages)};
+export function getDocument() {
+  return {
+    promise: Promise.resolve({
+      numPages: pages.length,
+      async getPage(number) {
+        const source = pages[number - 1];
+        return {
+          commonObjs: { get() { throw new Error("font metadata unavailable"); } },
+          getViewport() { return { width: source.width, height: source.height }; },
+          async getTextContent() { return { items: source.items, styles: {} }; },
+          async getOperatorList() { return { fnArray: [], argsArray: [] }; },
+        };
+      },
+      async destroy() {},
+    }),
+  };
+}`;
+}
+
 test.beforeEach(async ({ page }) => {
   const errors = [];
   runtimeErrors.set(page, errors);
@@ -176,4 +311,96 @@ test("imports DOCX fidelity, preserves verse prose, and exports an edit", async 
   expect(chapter).toContain('class="kf-verse-num"');
   expect(chapter).toContain('data-kf-verse="33"');
   expect(packageDocument).toContain("<dc:title>DOCX Browser Fidelity</dc:title>");
+});
+
+test("retains DOCX underline and intentional writing space in EPUB", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "study-formatting.docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    buffer: await studyFormattingDocxBuffer(),
+  });
+
+  const preview = page.locator("#deviceBookContent");
+  await expect(page.locator("#status")).toHaveText(
+    "DOCX ready · editable · Kobo Libra Colour",
+  );
+  await expect(preview.locator("u")).toHaveText("Underlined study prompt");
+  await expect(preview.locator(".kf-note-space")).toHaveAttribute(
+    "data-space-lines",
+    "4",
+  );
+  await expect(page.locator("#diagnostics")).toContainText(
+    "1 blank writing region retained",
+  );
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#downloadBtn").click();
+  const download = await downloadPromise;
+  const archive = await JSZip.loadAsync(await readFile(await download.path()));
+  const chapter = await archive.file("OEBPS/chapter-1.xhtml").async("string");
+  expect(chapter).toContain("<u>Underlined study prompt</u>");
+  expect(chapter).toContain("kf-note-space kf-space-4");
+});
+
+test("keeps single-column PDF words ordered and correctly spaced in EPUB", async ({ page }) => {
+  await page.route(
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs",
+    async (route) => route.fulfill({
+      status: 200,
+      contentType: "application/javascript",
+      headers: { "access-control-allow-origin": "*" },
+      body: pdfFidelityModuleSource(),
+    }),
+  );
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "pdf-reading-order.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\n% browser fidelity stub\n"),
+  });
+
+  const preview = page.locator("#deviceBookContent");
+  await expect(page.locator("#status")).toHaveText(
+    "PDF ready · editable · Kobo Libra Colour",
+  );
+  await expect(preview).toContainText("1 And every source word remains in order.");
+  await expect(preview).toContainText("The LORD continues without losing a word.");
+  await expect(preview.locator("[data-pdf-column]")).toHaveCount(0);
+  await expect(preview.locator(".kf-pdf-block").first()).toHaveClass(/kf-align-left/);
+  const outlinePage = preview.locator('.kf-pdf-page[data-source-page="2"]');
+  await expect(outlinePage.locator(":scope > ol")).toHaveCount(1);
+  await expect(outlinePage.locator("ol ol")).toHaveCount(1);
+  await expect(outlinePage.locator(".kf-note-space")).toHaveCount(2);
+  await expect(outlinePage.locator("li").nth(1)).toContainText(
+    "Death: first study point",
+  );
+  await expect(outlinePage.locator("li").nth(1)).not.toContainText("a)");
+  await expect(page.locator("#diagnostics")).toContainText(
+    "2 blank writing regions retained",
+  );
+  const previewText = (await preview.textContent()) || "";
+  for (let index = 1; index <= 8; index += 1) {
+    expect(previewText.indexOf(`Full width sentence ${index}`)).toBeLessThan(
+      previewText.indexOf(`Indented continuation ${index}`),
+    );
+    if (index < 8) {
+      expect(previewText.indexOf(`Indented continuation ${index}`)).toBeLessThan(
+        previewText.indexOf(`Full width sentence ${index + 1}`),
+      );
+    }
+  }
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#downloadBtn").click();
+  const download = await downloadPromise;
+  const archive = await JSZip.loadAsync(await readFile(await download.path()));
+  const chapter = await archive.file("OEBPS/chapter-1.xhtml").async("string");
+  const chapterText = chapter.replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
+  expect(chapterText).toContain("1 And every source word remains in order.");
+  expect(chapterText).toContain("The LORD continues without losing a word.");
+  expect(chapter).toContain("kf-note-space kf-space-3");
+  expect(chapter).not.toContain("data-pdf-column");
 });
