@@ -306,6 +306,9 @@ export async function buildReflowableEpubArchive(
     publication,
     options = {}
 ) {
+    const { onStage, ...archiveOptions } = options;
+    if (typeof onStage === 'function') onStage('package');
     const files = buildReflowablePublicationFiles(publication);
-    return generateEpubArchive(JSZipCtor, files, options);
+    if (typeof onStage === 'function') onStage('zip');
+    return generateEpubArchive(JSZipCtor, files, archiveOptions);
 }

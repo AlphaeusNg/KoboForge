@@ -415,3 +415,109 @@ test("keeps single-column PDF words ordered and correctly spaced in EPUB", async
   expect(chapter).toContain("kf-note-space kf-space-3");
   expect(chapter).not.toContain("data-pdf-column");
 });
+
+test("restores sanitized last Kobo prefs before first preview paint", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("koboforge-device-v1", JSON.stringify({
+      device: "sage",
+      deviceOrientation: "landscape",
+      deviceFontSize: 4.2,
+      deviceMargin: 12,
+      deviceChrome: false,
+    }));
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSelect")).toHaveValue("sage");
+  await expect(page.locator("#deviceOrientation")).toHaveValue("landscape");
+  await expect(page.locator("#deviceFontSize")).toHaveValue("4.2");
+  await expect(page.locator("#deviceMargin")).toHaveValue("12");
+  await expect(page.locator("#deviceChrome")).not.toBeChecked();
+  await expect(page.locator("#devicePhysicalSpec")).toContainText("landscape");
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+});
+
+test("rejects invalid stored device prefs and keeps defaults", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("koboforge-device-v1", JSON.stringify({
+      device: "not-a-kobo",
+      deviceOrientation: "upside-down",
+      deviceFontSize: 99,
+      deviceMargin: -4,
+      deviceChrome: "yes",
+    }));
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSelect")).toHaveValue("libra-colour");
+  await expect(page.locator("#deviceOrientation")).toHaveValue("portrait");
+  await expect(page.locator("#deviceFontSize")).toHaveValue("4.8");
+  await expect(page.locator("#deviceMargin")).toHaveValue("3");
+  await expect(page.locator("#deviceChrome")).toBeChecked();
+});
+
+test("fails closed when stored device prefs cannot be parsed", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("koboforge-device-v1", "{not-json");
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSelect")).toHaveValue("libra-colour");
+  await expect(page.locator("#deviceOrientation")).toHaveValue("portrait");
+  await expect(page.locator("#deviceFontSize")).toHaveValue("3.6");
+  await expect(page.locator("#deviceMargin")).toHaveValue("8");
+  await expect(page.locator("#deviceChrome")).toBeChecked();
+});
+
+test("remembers the last Kobo after reload and names export stages", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.locator("#deviceSelect").selectOption("elipsa-2e");
+  await page.locator("#deviceOrientation").selectOption("landscape");
+  await page.locator("#deviceFontSize").evaluate((el) => {
+    el.value = "4.4";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.locator("#deviceMargin").evaluate((el) => {
+    el.value = "5";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.locator("#deviceChrome").uncheck();
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSelect")).toHaveValue("elipsa-2e");
+  await expect(page.locator("#deviceOrientation")).toHaveValue("landscape");
+  await expect(page.locator("#deviceFontSize")).toHaveValue("4.4");
+  await expect(page.locator("#deviceMargin")).toHaveValue("5");
+  await expect(page.locator("#deviceChrome")).not.toBeChecked();
+
+  await page.locator("#fileInput").setInputFiles({
+    name: "stage-progress.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Export stage progress text."),
+  });
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+
+  const seen = await page.evaluate(() => {
+    window.__kfExportStages = [];
+    const label = document.getElementById("progressLabel");
+    const status = document.getElementById("status");
+    const note = (value) => {
+      const text = String(value || "").trim();
+      if (text && window.__kfExportStages[window.__kfExportStages.length - 1] !== text) {
+        window.__kfExportStages.push(text);
+      }
+    };
+    const observer = new MutationObserver(() => {
+      note(label?.textContent);
+      note(status?.textContent);
+    });
+    if (label) observer.observe(label, { childList: true, characterData: true, subtree: true });
+    if (status) observer.observe(status, { childList: true, characterData: true, subtree: true });
+    return true;
+  });
+  expect(seen).toBe(true);
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#downloadBtn").click();
+  await downloadPromise;
+  const stages = await page.evaluate(() => window.__kfExportStages || []);
+  expect(stages).toEqual(expect.arrayContaining(["Images", "Package", "ZIP"]));
+  await expect(page.locator("#status")).toContainText(/EPUB downloaded|Reflowable EPUB ready/);
+});

@@ -330,6 +330,31 @@ assert.match(
     'the combined archive adapter keeps the chapter image reference'
 );
 
+const exportStages = [];
+const stagedArchive = await buildReflowableEpubArchive(JSZip, {
+    title: 'Adapter image test',
+    author: 'KoboForge',
+    lang: 'en',
+    identifier: 'urn:uuid:adapter-image-fixture',
+    modified: '2026-08-09T00:00:00Z',
+    chapters: [
+        { title: 'Image', html: '<h1>Image</h1><img src="images/image-1.png" alt="One image"/>' }
+    ],
+    assets: [
+        { id: 'image-1', fileName: 'image-1.png', mediaType: 'image/png', bytes: imageBytes }
+    ]
+}, {
+    type: 'nodebuffer',
+    onStage: (stage) => exportStages.push(stage)
+});
+assert.deepEqual(exportStages, ['package', 'zip'], 'archive adapter names package then ZIP');
+const stagedLoaded = await JSZip.loadAsync(stagedArchive);
+assert.deepEqual(
+    await stagedLoaded.file('OEBPS/images/image-1.png').async('uint8array'),
+    imageBytes,
+    'named export stages must not change packaged image bytes'
+);
+
 if (process.env.EPUBCHECK_JAR) {
     const fixtureRoot = mkdtempSync(join(tmpdir(), 'koboforge-reflowable-'));
     const outputPath = join(fixtureRoot, 'fixture.epub');
@@ -345,4 +370,4 @@ if (process.env.EPUBCHECK_JAR) {
     }
 }
 
-console.log('KoboForge reflowable EPUB package tests passed (68 assertions).');
+console.log('KoboForge reflowable EPUB package tests passed (70 assertions).');

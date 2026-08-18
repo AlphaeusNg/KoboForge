@@ -42,6 +42,14 @@
 
         const PREFS_KEY = 'koboforge.prefs.v3';
         const LEGACY_PREFS_KEY = 'koboforge.prefs.v2';
+        const DEVICE_PREFS_KEY = 'koboforge-device-v1';
+        const DEVICE_PREF_DEFAULTS = Object.freeze({
+            device: 'libra-colour',
+            deviceOrientation: 'portrait',
+            deviceFontSize: 3.6,
+            deviceMargin: 8,
+            deviceChrome: true
+        });
 
         const dropzone = document.getElementById('dropzone');
         const dropzoneIdle = document.getElementById('dropzoneIdle');
@@ -272,23 +280,126 @@
         document.addEventListener('scroll', hideControlTooltip, true);
 
         // —— Preferences ——
+        function selectOptionValues(selectEl, fallback) {
+            if (selectEl?.options?.length) {
+                return Array.from(selectEl.options, (option) => option.value);
+            }
+            return fallback;
+        }
+
+        function sliderBounds(rangeEl, fallbackMin, fallbackMax, fallbackStep, fallbackValue) {
+            const min = Number(rangeEl?.min);
+            const max = Number(rangeEl?.max);
+            const step = Number(rangeEl?.step);
+            const initial = Number(rangeEl?.defaultValue);
+            return {
+                min: Number.isFinite(min) ? min : fallbackMin,
+                max: Number.isFinite(max) ? max : fallbackMax,
+                step: Number.isFinite(step) && step > 0 ? step : fallbackStep,
+                fallback: Number.isFinite(initial) ? initial : fallbackValue
+            };
+        }
+
+        function sanitizeSliderValue(value, min, max, step, fallback) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric) || !(step > 0) || max < min) return fallback;
+            const clamped = Math.min(max, Math.max(min, numeric));
+            const snapped = min + (Math.round((clamped - min) / step) * step);
+            const rounded = Number(snapped.toFixed(6));
+            return Math.min(max, Math.max(min, rounded));
+        }
+
+        function sanitizeDevicePrefs(raw) {
+            const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+            const devices = selectOptionValues(
+                deviceSelect,
+                Object.keys(KOBO_DEVICE_PROFILES)
+            );
+            const orientations = selectOptionValues(
+                deviceOrientation,
+                ['portrait', 'landscape']
+            );
+            const font = sliderBounds(deviceFontSize, 2.6, 4.8, 0.2, DEVICE_PREF_DEFAULTS.deviceFontSize);
+            const margin = sliderBounds(deviceMargin, 3, 16, 1, DEVICE_PREF_DEFAULTS.deviceMargin);
+            return {
+                device: devices.includes(source.device)
+                    ? source.device
+                    : DEVICE_PREF_DEFAULTS.device,
+                deviceOrientation: orientations.includes(source.deviceOrientation)
+                    ? source.deviceOrientation
+                    : DEVICE_PREF_DEFAULTS.deviceOrientation,
+                deviceFontSize: sanitizeSliderValue(
+                    source.deviceFontSize,
+                    font.min,
+                    font.max,
+                    font.step,
+                    font.fallback
+                ),
+                deviceMargin: sanitizeSliderValue(
+                    source.deviceMargin,
+                    margin.min,
+                    margin.max,
+                    margin.step,
+                    margin.fallback
+                ),
+                deviceChrome: typeof source.deviceChrome === 'boolean'
+                    ? source.deviceChrome
+                    : DEVICE_PREF_DEFAULTS.deviceChrome
+            };
+        }
+
+        function applyDevicePrefs(prefs) {
+            const next = sanitizeDevicePrefs(prefs);
+            if (deviceSelect) deviceSelect.value = next.device;
+            if (deviceOrientation) deviceOrientation.value = next.deviceOrientation;
+            if (deviceFontSize) deviceFontSize.value = String(next.deviceFontSize);
+            if (deviceMargin) deviceMargin.value = String(next.deviceMargin);
+            if (deviceChrome) deviceChrome.checked = next.deviceChrome;
+            return next;
+        }
+
+        function readDevicePrefsFromDom() {
+            return sanitizeDevicePrefs({
+                device: deviceSelect?.value,
+                deviceOrientation: deviceOrientation?.value,
+                deviceFontSize: deviceFontSize?.value,
+                deviceMargin: deviceMargin?.value,
+                deviceChrome: !!deviceChrome?.checked
+            });
+        }
+
+        function loadDevicePrefs() {
+            try {
+                const dedicated = localStorage.getItem(DEVICE_PREFS_KEY);
+                const inherited = dedicated
+                    ? null
+                    : (localStorage.getItem(PREFS_KEY) || localStorage.getItem(LEGACY_PREFS_KEY));
+                const raw = dedicated || inherited;
+                if (!raw) return;
+                const applied = applyDevicePrefs(JSON.parse(raw));
+                localStorage.setItem(DEVICE_PREFS_KEY, JSON.stringify(applied));
+            } catch (_) { /* fail closed: keep HTML defaults */ }
+        }
+
+        function saveDevicePrefs() {
+            try {
+                localStorage.setItem(
+                    DEVICE_PREFS_KEY,
+                    JSON.stringify(readDevicePrefsFromDom())
+                );
+            } catch (_) { /* quota / private mode: keep in-memory controls */ }
+        }
+
         function loadPrefs() {
             try {
                 const currentRaw = localStorage.getItem(PREFS_KEY);
                 const raw = currentRaw || localStorage.getItem(LEGACY_PREFS_KEY);
                 if (!raw) return;
                 const p = JSON.parse(raw);
-                const fromLegacy = !currentRaw;
                 if (typeof p.preserveTables === 'boolean' && preserveTablesEl) preserveTablesEl.checked = p.preserveTables;
                 if (typeof p.splitChapters === 'boolean' && splitChaptersEl) splitChaptersEl.checked = p.splitChapters;
                 if (p.author && bookAuthorInput && !bookAuthorInput.value) bookAuthorInput.value = p.author;
                 if (p.lang && bookLangInput) bookLangInput.value = p.lang;
-                // v2 defaulted to Clara; reset legacy users to the new Libra Colour default.
-                if (!fromLegacy && p.device && KOBO_DEVICE_PROFILES[p.device] && deviceSelect) deviceSelect.value = p.device;
-                if (p.deviceOrientation && deviceOrientation) deviceOrientation.value = p.deviceOrientation;
-                if (Number.isFinite(Number(p.deviceFontSize)) && deviceFontSize) deviceFontSize.value = p.deviceFontSize;
-                if (Number.isFinite(Number(p.deviceMargin)) && deviceMargin) deviceMargin.value = p.deviceMargin;
-                if (typeof p.deviceChrome === 'boolean' && deviceChrome) deviceChrome.checked = p.deviceChrome;
             } catch (_) { /* ignore */ }
         }
 
@@ -298,17 +409,13 @@
                     preserveTables: !!preserveTablesEl?.checked,
                     splitChapters: !!splitChaptersEl?.checked,
                     author: bookAuthorInput?.value?.trim() || '',
-                    lang: bookLangInput?.value?.trim() || 'en',
-                    device: deviceSelect?.value || 'libra-colour',
-                    deviceOrientation: deviceOrientation?.value || 'portrait',
-                    deviceFontSize: Number(deviceFontSize?.value || 3.6),
-                    deviceMargin: Number(deviceMargin?.value || 8),
-                    deviceChrome: !!deviceChrome?.checked
+                    lang: bookLangInput?.value?.trim() || 'en'
                 }));
             } catch (_) { /* ignore */ }
         }
 
         loadPrefs();
+        loadDevicePrefs();
 
         bookAuthorInput?.addEventListener('change', savePrefs);
         bookLangInput?.addEventListener('change', savePrefs);
@@ -583,6 +690,7 @@
             });
             scheduleDevicePagination();
             savePrefs();
+            saveDevicePrefs();
         }
 
         function scheduleDevicePagination() {
@@ -743,6 +851,7 @@
             control?.addEventListener('change', async () => {
                 releaseEditablePageLock();
                 savePrefs();
+                saveDevicePrefs();
                 const output = currentOutput;
                 if (output) {
                     if (editMode === 'edit') syncBodyFromUi();
@@ -760,6 +869,7 @@
         deviceChrome?.addEventListener('change', () => {
             releaseEditablePageLock();
             savePrefs();
+            saveDevicePrefs();
             renderDevicePreview({ resetPage: true });
         });
         [deviceFontSize, deviceMargin].forEach((control) => {
@@ -771,6 +881,7 @@
                 renderDevicePreview({ resetPage: true });
                 scheduleDevicePagination();
                 savePrefs();
+                saveDevicePrefs();
             });
         });
         devicePagePrev?.addEventListener('click', () => {
@@ -831,6 +942,7 @@
         }
         updateDeviceControlLabels();
         applyDeviceGeometry();
+        saveDevicePrefs();
 
         function canFormatNow() {
             return editMode === 'edit' && !!currentOutput && previewEl?.isContentEditable;
@@ -4064,6 +4176,22 @@
             }
         }
 
+        function yieldForExportProgress() {
+            return new Promise((resolve) => {
+                if (typeof requestAnimationFrame === 'function') {
+                    requestAnimationFrame(() => resolve());
+                    return;
+                }
+                setTimeout(resolve, 0);
+            });
+        }
+
+        async function setExportStage(stage, pct) {
+            if (statusEl && stage) statusEl.textContent = stage;
+            setProgress(pct, stage);
+            await yieldForExportProgress();
+        }
+
         function countWords(html) {
             return countHtmlWords(html, document);
         }
@@ -4211,8 +4339,6 @@
                 const title = bookTitleInput.value.trim() || currentOutput.title;
                 const author = bookAuthorInput.value.trim() || currentOutput.author || 'Unknown';
                 const lang = (bookLangInput?.value || 'en').trim() || 'en';
-                statusEl.textContent = 'Syncing edits into EPUB body…';
-                setProgress(8, 'Syncing edits');
                 const bodyHtml = bodyHtmlForExport();
                 const stats = buildTrackChangesDocument(
                     currentOutput.originalBodyHtml || '',
@@ -4224,19 +4350,20 @@
                 const structureBit = stats.structuredChanges
                     ? `, ${stats.structuredChanges} formatting/object`
                     : '';
-                statusEl.textContent = stats.navItems.length
-                    ? `Building EPUB with your edits (+${stats.added}/−${stats.removed}${headBit}${structureBit})…`
-                    : 'Building reflowable EPUB locally…';
-                setProgress(20, 'Building EPUB');
+                await setExportStage('Images', 25);
                 const split = !!(splitChaptersEl && splitChaptersEl.checked);
                 const blob = await buildEpubBlob({
                     title,
                     author,
                     lang,
                     bodyHtml,
-                    splitChapters: split
+                    splitChapters: split,
+                    onStage: async (stage) => {
+                        if (stage === 'images') await setExportStage('Images', 30);
+                        if (stage === 'package') await setExportStage('Package', 60);
+                        if (stage === 'zip') await setExportStage('ZIP', 85);
+                    }
                 });
-                setProgress(90, 'Preparing download');
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
@@ -4247,6 +4374,7 @@
                 URL.revokeObjectURL(url);
                 setProgress(100, 'Done');
                 savePrefs();
+                saveDevicePrefs();
                 statusEl.textContent = stats.navItems.length
                     ? `EPUB downloaded with your edits (+${stats.added}/−${stats.removed}${headBit}${structureBit} vs import). Nothing left your browser.`
                     : 'Reflowable EPUB ready. Nothing left your browser.';
@@ -6902,10 +7030,21 @@
             return `<h1>${escapeXml(title)}</h1>${trimmed}`;
         }
 
-        async function buildEpubBlob({ title, author, lang = 'en', bodyHtml, splitChapters = true }) {
+        async function buildEpubBlob({
+            title,
+            author,
+            lang = 'en',
+            bodyHtml,
+            splitChapters = true,
+            onStage
+        } = {}) {
+            const reportStage = async (stage) => {
+                if (typeof onStage === 'function') await onStage(stage);
+            };
             const JSZipCtor = await loadScriptDependency(RUNTIME_DEPENDENCIES.jszip);
             // bodyHtml should already be export-clean; strip any residual chrome
             const preparedBody = canonicalizeBody(bodyHtml, { forExport: true });
+            await reportStage('images');
             const embeddedImages = extractEmbeddedImagesForEpub(preparedBody);
             const cleanBody = embeddedImages.html;
             // Default path: ONE continuous spine item so Kobo page-turn works end-to-end.
@@ -6945,6 +7084,7 @@
                 const body = ensureChapterTitle(ch.html, ch.title);
                 return { title: ch.title, html: xhtmlBodyFragment(body) };
             });
+            await reportStage('package');
             return buildReflowableEpubArchive(JSZipCtor, {
                 title,
                 author,
@@ -6953,7 +7093,10 @@
                 modified: new Date().toISOString(),
                 chapters: packagedChapters,
                 assets: embeddedImages.assets
-            }, { type: 'blob' });
+            }, {
+                type: 'blob',
+                onStage
+            });
         }
 
         function documentImageTarget() {

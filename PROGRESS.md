@@ -1,15 +1,15 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-18 (KoboForge Cycle 60)
+Last updated: 2026-08-18 (KoboForge Cycle 61)
 
 ## Current state
 
-- Branch: `agent/preserve-study-formatting` (includes finished study-formatting work).
+- Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.18.4`.
+- Deployment version: `2026.08.18.5`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, optional local EPUBCheck, zero-vulnerability
-  audit, 31 decoded-image assertions, 68 package assertions, and recursive
+  audit, 31 decoded-image assertions, 70 package assertions, and recursive
   syntax checks.
 - Automated verification: least-privilege GitHub Actions runs cheap policy/unit
   fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
@@ -17,7 +17,23 @@ Last updated: 2026-08-18 (KoboForge Cycle 60)
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
   checksum-verified before every extraction, including cache hits.
 
-## Latest cycle: lead with drop, hide the brochure
+## Latest cycle: remember the last Kobo and name export stages
+
+### Why this was selected
+
+Returning visitors had to re-pick device, orientation, font, and margin before
+the first preview was honest. Download also sat on a generic “Building EPUB”
+label while images, packaging, and ZIP actually ran.
+
+### Changes
+
+- Persist sanitized device, orientation, font, margin, and chrome in
+  `koboforge-device-v1` and restore them before the first preview paint.
+- Invalid or unreadable stored values fail closed to the Libra Colour defaults.
+- Download progress now names Images → Package → ZIP on the existing
+  `#progressLabel` / `#status` UI. EPUB bytes are unchanged.
+
+## Previous cycle: lead with drop, hide the brochure
 
 ### Why this was selected
 

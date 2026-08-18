@@ -128,6 +128,22 @@ assert.ok(
     'browser export must use the tested archive adapter without stale direct ZIP writes'
 );
 assert.ok(
+    script.indexOf('loadDevicePrefs();') >= 0
+        && script.indexOf('loadDevicePrefs();')
+            < script.indexOf('updateDeviceControlLabels();\n        applyDeviceGeometry();'),
+    'stored device prefs must restore before the first preview paint'
+);
+assert.ok(
+    script.includes('devices.includes(source.device)')
+        && script.includes('orientations.includes(source.deviceOrientation)')
+        && script.includes('function sanitizeSliderValue'),
+    'device restore must sanitize against option lists and slider ranges'
+);
+assert.ok(
+    script.includes('} catch (_) { /* fail closed: keep HTML defaults */ }'),
+    'corrupt or quota-blocked device prefs must fail closed to defaults'
+);
+assert.ok(
     script.includes('./epub-images.js?v=')
         && script.includes('const embeddedImages = extractEmbeddedImagesForEpub(preparedBody)')
         && !script.includes('function extractEmbeddedImagesForEpub'),
@@ -195,6 +211,13 @@ const features = [
     ['diagnostics', 'function renderDiagnostics'],
     ['outline', 'chapterOutline'],
     ['prefs', 'koboforge.prefs.v3'],
+    ['device prefs key', 'koboforge-device-v1'],
+    ['device pref sanitizer', 'function sanitizeDevicePrefs'],
+    ['device pref restore', 'function loadDevicePrefs'],
+    ['export stage painter', 'async function setExportStage'],
+    ['export images stage', "setExportStage('Images'"],
+    ['export package stage', "setExportStage('Package'"],
+    ['export zip stage', "setExportStage('ZIP'"],
     ['heading heuristic', 'lineLooksLikeHeading'],
     ['list markdown', 'listBlockToHtml'],
     ['confirm discard', 'Re-extracting will discard'],
@@ -225,6 +248,20 @@ const features = [
 for (const [label, needle] of features) assertIncludes(label, needle);
 
 // —— Pure helpers mirrored from page (keep in sync if algorithms change) ——
+function sanitizeSliderValue(value, min, max, step, fallback) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || !(step > 0) || max < min) return fallback;
+    const clamped = Math.min(max, Math.max(min, numeric));
+    const snapped = min + (Math.round((clamped - min) / step) * step);
+    const rounded = Number(snapped.toFixed(6));
+    return Math.min(max, Math.max(min, rounded));
+}
+assert.equal(sanitizeSliderValue(4.2, 2.6, 4.8, 0.2, 3.6), 4.2);
+assert.equal(sanitizeSliderValue(99, 2.6, 4.8, 0.2, 3.6), 4.8);
+assert.equal(sanitizeSliderValue(-4, 3, 16, 1, 8), 3);
+assert.equal(sanitizeSliderValue('nope', 3, 16, 1, 8), 8);
+assert.equal(sanitizeSliderValue(3.7, 2.6, 4.8, 0.2, 3.6), 3.8);
+
 function escapeHtml(text) {
     return String(text)
         .replace(/&/g, '&amp;')
