@@ -246,13 +246,23 @@ assert.throws(
     /packaged asset/,
     'blob URLs must not remain in packaged chapter HTML'
 );
-assert.doesNotThrow(
+assert.throws(
     () => buildReflowablePublicationFiles({
         identifier,
         chapters: [{ title: 'Remote URL', html: '<p><img src="https://example.com/cover.png" alt="Remote"/></p>' }],
         assets: packagedImageAssets
     }),
-    'existing remote image references remain allowed until a later extractor cycle'
+    /remote image source must be embedded locally/,
+    'remote image references must fail at the final package boundary'
+);
+assert.throws(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{ title: 'Protocol-relative URL', html: '<p><img src="//example.com/cover.png" alt="Remote"/></p>' }],
+        assets: packagedImageAssets
+    }),
+    /remote image source must be embedded locally/,
+    'protocol-relative image references must fail at the final package boundary'
 );
 assert.throws(
     () => buildReflowablePublicationFiles({
@@ -370,4 +380,4 @@ if (process.env.EPUBCHECK_JAR) {
     }
 }
 
-console.log('KoboForge reflowable EPUB package tests passed (70 assertions).');
+console.log('KoboForge reflowable EPUB package tests passed (71 assertions).');

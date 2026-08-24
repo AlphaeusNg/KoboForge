@@ -33,8 +33,8 @@ function assertResolvedChapterImages(html, imageFileNames) {
         if (/^(?:data|blob|file):/i.test(trimmed)) {
             throw new Error('EPUB chapter image source must be a packaged asset.');
         }
-        if (/^https?:/i.test(trimmed)) {
-            continue;
+        if (/^https?:/i.test(trimmed) || /^\/\//.test(trimmed)) {
+            throw new Error('EPUB chapter remote image source must be embedded locally.');
         }
         const packaged = /^images\/([A-Za-z0-9._-]+)$/.exec(trimmed);
         if (!packaged || !imageFileNames.has(packaged[1])) {

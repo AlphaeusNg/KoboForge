@@ -57,11 +57,12 @@ before exporting a Kobo-friendly EPUB.
   whitespace, fonts) without locking the book into a non-editable facsimile
 - Reflowable EPUB3 export with nav + NCX and packaged image manifest assets
 - Actionable download errors identify malformed, empty, unsupported, or
-  signature-mismatched PNG/JPEG/GIF/WebP/SVG images without exposing their
-  encoded contents
+  signature-mismatched PNG/JPEG/GIF/WebP/SVG images and remote image URLs
+  without exposing their encoded contents or private URL details
 - The package boundary independently restricts image manifest types and
   requires a matching PNG/JPEG/GIF/WebP/SVG filename extension, explicit unique
-  manifest IDs and filenames, and non-empty binary payloads
+  manifest IDs and filenames, non-empty binary payloads, and locally embedded
+  chapter image references
 - Fully local browser processing; documents are never uploaded
 
 ## Structure

@@ -661,3 +661,34 @@ test("remembers the last Kobo after reload and names export stages", async ({ pa
   expect(stages).toEqual(expect.arrayContaining(["Images", "Package", "ZIP"]));
   await expect(page.locator("#status")).toContainText(/EPUB downloaded|Reflowable EPUB ready/);
 });
+
+test("rejects remote chapter images without emitting a partial EPUB", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "remote-image.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("A self-contained book cannot depend on a remote image."),
+  });
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+
+  await page.locator("#deviceBookContent").evaluate((element) => {
+    const image = document.createElement("img");
+    image.src = "https://private.example.test/remote.png?token=secret";
+    image.alt = "Remote fixture";
+    element.appendChild(image);
+    element.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  });
+
+  let downloads = 0;
+  page.on("download", () => {
+    downloads += 1;
+  });
+  await page.locator("#downloadBtn").click();
+  await expect(page.locator("#status")).toHaveText(
+    "Embedded image 1 references a remote URL. Save and paste or drop the image into the book, or remove it, then download again.",
+  );
+  await expect(page.locator("#status")).not.toContainText("private.example.test");
+  await page.waitForTimeout(100);
+  expect(downloads).toBe(0);
+});

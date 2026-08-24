@@ -175,6 +175,13 @@ export function extractEmbeddedImagesForEpub(
     if (!img.className) img.removeAttribute("class");
 
     const source = img.getAttribute("src") || "";
+    const trimmedSource = source.trim();
+    if (/^https?:/i.test(trimmedSource) || /^\/\//.test(trimmedSource)) {
+      throw imageError(
+        index + 1,
+        "references a remote URL. Save and paste or drop the image into the book, or remove it, then download again.",
+      );
+    }
     if (!/^data:/i.test(source)) return;
     let asset = bySource.get(source);
     if (!asset) {

@@ -1,15 +1,15 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-25 (KoboForge Cycle 68)
+Last updated: 2026-08-25 (KoboForge Cycle 69)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.25.4`.
+- Deployment version: `2026.08.25.5`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
-  EPUBCheck, zero-vulnerability audit, 31 decoded-image assertions, 70 package
+  EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 71 package
   assertions, and recursive syntax checks.
 - Automated verification: least-privilege GitHub Actions runs cheap policy/unit
   fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
@@ -17,7 +17,60 @@ Last updated: 2026-08-25 (KoboForge Cycle 68)
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
   checksum-verified before every extraction, including cache hits.
 
-## Latest cycle: strip transient Diff markers independent of bookkeeping
+## Latest cycle: reject remote chapter images before EPUB download
+
+### Why this was selected
+
+The extractor preserved `http(s)` image references and the final package
+boundary explicitly allowed them. A downloaded EPUB could therefore appear
+complete while depending on a third-party server, leaking reader requests and
+breaking when offline or after the URL changed. The refreshed backlog contained
+this exact unresolved decision, and the earlier Find/Diff rotation requirement
+had been satisfied across multiple other repositories.
+
+### Changes
+
+- Reject HTTP(S) and protocol-relative chapter images during embedded-image
+  extraction with URL-redacted guidance to save and paste/drop the image locally.
+- Independently reject the same remote forms at the browser-neutral package
+  boundary so direct callers cannot bypass the self-contained-book contract.
+- Treat this expected content validation as a warning rather than an application
+  runtime error while keeping the actionable message in the visible status.
+- Add direct extractor and package fixtures plus a real Chromium Download
+  journey proving no partial EPUB is emitted and no private URL reaches the UI.
+- Document the local-only chapter-image contract and bump the deployment stamp
+  to `2026.08.25.5`.
+
+### Verification and scores
+
+- Test-first: both new fixtures failed because extraction and packaging allowed
+  the remote image unchanged.
+- The first browser run exposed an initialization race in the fixture itself;
+  waiting for the device profile before upload fixed the test without changing
+  production behavior. The focused real Download journey then passed.
+- Embedded-image coverage: 32 assertions; package coverage: 71 assertions.
+- Correctness/reliability: 4/10 → 10/10 (export can no longer create a
+  network-dependent EPUB); verifiability: 5/10 → 10/10 (both module boundaries
+  and the visible no-download outcome execute); maintainability: 8/10 → 9/10;
+  performance: 8/10 → 10/10 (remote references fail before ZIP work);
+  security/privacy: 4/10 → 10/10 (reader requests and private URL disclosure
+  are prevented); user experience: 5/10 → 9/10 (repair guidance is specific).
+
+### Lessons and process improvements
+
+- “Fully local processing” also requires fully local output; a remote reference
+  does not upload during conversion but can still leak later when the book opens.
+- Enforce self-containment both where sources are rewritten and where the final
+  publication is assembled. A direct package caller must not bypass the rule.
+- Browser fixtures must wait for module initialization before firing file-input
+  events; `DOMContentLoaded` alone does not prove deferred imports are bound.
+
+### Explicit next opportunity
+
+No higher-impact unblocked local item is currently recorded. Rotate
+repositories and return when new document-fidelity evidence appears.
+
+## Previous cycle: strip transient Diff markers independent of bookkeeping
 
 ### Why this was selected
 
@@ -570,7 +623,7 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependency |
 |---|---|---|---|---|---|
-| 1 | Decide whether remote chapter images should fail closed at extract time | Correctness / robustness | Medium | Small-medium / low | Package now allows existing `http(s)` refs; extractor still preserves them |
+| — | Reject remote chapter images at extraction and package boundaries | Correctness / privacy | Medium-high | Small-medium / low | HTTP(S) and protocol-relative fixtures plus real no-download UI journey | Completed in Cycle 69 |
 | — | Reject unresolved chapter image references at the package boundary | Correctness / robustness | Medium-high | Medium / low | Missing `images/*`, leftover data/blob/file URLs, and traversal now fail closed | Completed in Cycle 59 |
 | — | Cache the verified EPUBCheck archive in CI | Performance / process | Low-medium | Small-medium / low | Exact platform/version/digest hits skip download; checksum and EPUBCheck remain mandatory | Completed in Cycle 58 |
 | — | Reject duplicate or missing package asset identities/bytes | Correctness / robustness | Medium | Small-medium / low | Sixty-one package assertions cover required IDs/bytes, archive filenames, and the complete package-owned ID namespace | Completed in Cycle 57 |
@@ -580,6 +633,5 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 ## Next cycle
 
-Rotate workspace attention to Seeking Biblical Truth. On the next KoboForge
-cycle, decide whether remote chapter images should be rejected or rewritten at
-extract time.
+No higher-impact unblocked KoboForge item is currently recorded. Rotate
+workspace attention and return when new document-fidelity evidence appears.

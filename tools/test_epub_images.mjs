@@ -31,7 +31,6 @@ const extracted = extractEmbeddedImagesForEpub(
   [
     `<p><img class="hero kf-inline-image" data-kf-width="42" src="${dataSource}" alt="First"/></p>`,
     `<p><img data-kf-tone="bw" src="${dataSource}" alt="Duplicate"/></p>`,
-    '<p><img src="https://example.test/remote.png" alt="Remote"/></p>',
   ].join(""),
   extractionOptions,
 );
@@ -59,11 +58,23 @@ assert.equal(
 assert.doesNotMatch(extracted.html, /data-kf-/, "editor-only image attributes should be removed");
 assert.doesNotMatch(extracted.html, /kf-inline-image/, "the editor-only image class should be removed");
 assert.match(extracted.html, /class="hero"/, "unrelated author classes should remain");
-assert.match(
-  extracted.html,
-  /src="https:\/\/example\.test\/remote\.png"/,
-  "external image references should remain unchanged",
-);
+for (const remoteSource of [
+  "https://private.example.test/remote.png?token=secret",
+  "//private.example.test/remote.png?token=secret",
+]) {
+  assert.throws(
+    () => extractEmbeddedImagesForEpub(
+      `<p><img src="${remoteSource}" alt="Remote"/></p>`,
+      extractionOptions,
+    ),
+    (error) => error instanceof EmbeddedImageError
+      && error.imageNumber === 1
+      && error.message === "Embedded image 1 references a remote URL. Save and paste or drop the image into the book, or remove it, then download again."
+      && !error.message.includes("private.example.test")
+      && !error.message.includes("secret"),
+    "remote images should fail with repair guidance without exposing their URL",
+  );
+}
 
 const supportedSignatures = [
   {
@@ -160,7 +171,7 @@ assert.throws(
 
 assert.throws(
   () => extractEmbeddedImagesForEpub(
-    '<img src="https://example.test/valid.png"><img src="data:image/png;base64,%%%%">',
+    `<img src="${dataSource}"><img src="data:image/png;base64,%%%%">`,
     extractionOptions,
   ),
   (error) => error instanceof EmbeddedImageError
@@ -266,4 +277,4 @@ assert.deepEqual(
   "the archive should preserve the extracted bytes",
 );
 
-console.log("KoboForge EPUB image tests passed (31 assertions).");
+console.log("KoboForge EPUB image tests passed (32 assertions).");
