@@ -1,24 +1,82 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-25 (KoboForge Cycle 70)
+Last updated: 2026-08-25 (KoboForge Cycle 71)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.25.6`.
+- Deployment version: `2026.08.25.7`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
-  EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 76 package
+  EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 97 package
   assertions, and recursive syntax checks.
 - Automated verification: least-privilege GitHub Actions runs cheap policy/unit
   fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
   browser-to-downloaded-EPUB flows, and recursive syntax checks on Node 24. The
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
-  checksum-verified before every extraction, including cache hits. Twelve
-  offline real-Chromium journeys include fail-closed image and CSS exports.
+  checksum-verified before every extraction, including cache hits. Thirteen
+  offline real-Chromium journeys include fail-closed image, CSS, and active-HTML
+  handling.
 
-## Latest cycle: reject non-image network resources from EPUB chapters
+## Latest cycle: keep active chapter content inert and out of EPUBs
+
+### Why this was selected
+
+After CSS and SVG image references were closed, the final package boundary still
+accepted frames, media, scripts, objects, responsive source sets, and external
+SVG reuse. The advanced HTML-source editor could also render those elements
+before Download, initiating a request while the unsafe markup should still have
+been inert text.
+
+### Changes
+
+- Reject unsupported media, frames, objects, scripts, imported metadata, forms,
+  image `srcset`, event handlers, link pings, and `javascript:` URL attributes.
+- Validate SVG `<use>` / `<feImage>` resources while preserving internal SVG
+  fragment reuse.
+- Decode named URL/control entities and normalize embedded tabs/newlines before
+  scheme classification so entity-obfuscated active URLs fail closed.
+- Export a reusable preview-safety validator and run it before HTML Apply, mode
+  transitions, split changes, and HTML-source Download; external resources never
+  leave the inert textarea for the live Kobo DOM.
+- Make Cancel restore the last accepted model body before returning to Edit,
+  document the active-content policy, and bump the site to `2026.08.25.7`.
+
+### Verification and scores
+
+- Direct reproduction showed frames, media, scripts, objects, `srcset`, refresh
+  metadata, and external SVG reuse all retained the private host. The test-first
+  package loop failed immediately on the previously accepted `<audio>` fixture.
+- `npm test`: all workflow, dependency, runtime, logic, fidelity, 32 image, and
+  97 package assertions pass.
+- `npm run test:browser`: 13/13 offline Chromium journeys pass. The HTML-source
+  journey observes zero private-host requests, zero downloads, exact redacted
+  guidance, and successful discard back to the original chapter.
+- Checksum-verified EPUBCheck 5.3.0 accepts the generated fixture; recursive
+  syntax, diff whitespace, and the high-severity npm audit pass with zero
+  vulnerabilities.
+- Correctness/reliability: 4/10 → 10/10; verifiability: 5/10 → 10/10;
+  maintainability: 7/10 → 9/10; performance: 9/10 → 9/10; user experience:
+  5/10 → 9/10; security/privacy: 3/10 → 10/10.
+
+### Lessons and process improvements
+
+- Export-time rejection is too late when advanced source markup can first enter
+  a live preview; validate at the inert-text transition as well as packaging.
+- An HTML Cancel action must restore accepted model state before mode switching,
+  otherwise generic synchronization silently turns Cancel into Apply.
+- URL checks need entity and control-character normalization, and rejection
+  suites need positive fixtures for comments, CSS strings, links, data resources,
+  and internal SVG fragments to avoid an over-broad policy.
+
+### Explicit next opportunity
+
+Rotate to another repository after three consecutive KoboForge resource-boundary
+cycles; revisit this parser only with new document-fidelity or real EPUB-reader
+evidence.
+
+## Previous cycle: reject non-image network resources from EPUB chapters
 
 ### Why this was selected
 
@@ -681,7 +739,7 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependency |
 |---|---|---|---|---|---|
-| 1 | Reject unsupported automatic chapter resource elements | Correctness / privacy | Medium-high | Small-medium / low | Direct package fixtures for media, frames, scripts, objects, and stylesheets plus one browser no-download journey | Next Cycle 71 |
+| — | Reject unsupported automatic chapter resource elements | Correctness / privacy | Medium-high | Small-medium / low | Twenty-one additional package assertions plus an inert HTML-source Chromium journey | Completed in Cycle 71 |
 | — | Reject CSS/SVG remote chapter resources | Correctness / privacy | Medium-high | Small-medium / low | Five package assertions, numeric-entity coverage, and a real no-download Chromium journey | Completed in Cycle 70 |
 | — | Reject remote chapter images at extraction and package boundaries | Correctness / privacy | Medium-high | Small-medium / low | HTTP(S) and protocol-relative fixtures plus real no-download UI journey | Completed in Cycle 69 |
 | — | Reject unresolved chapter image references at the package boundary | Correctness / robustness | Medium-high | Medium / low | Missing `images/*`, leftover data/blob/file URLs, and traversal now fail closed | Completed in Cycle 59 |
@@ -693,5 +751,5 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 ## Next cycle
 
-Reject unsupported automatic resource-loading elements at the final package
-boundary while keeping ordinary anchor hyperlinks intact.
+Rotate workspace attention after three consecutive self-containment cycles and
+return only when new fidelity or reader evidence identifies another Kobo gap.
