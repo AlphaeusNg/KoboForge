@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-25 (KoboForge Cycle 67)
+Last updated: 2026-08-25 (KoboForge Cycle 68)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.25.3`.
+- Deployment version: `2026.08.25.4`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, zero-vulnerability audit, 31 decoded-image assertions, 70 package
@@ -17,7 +17,53 @@ Last updated: 2026-08-25 (KoboForge Cycle 67)
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
   checksum-verified before every extraction, including cache hits.
 
-## Latest cycle: expose current search state without exporting it
+## Latest cycle: strip transient Diff markers independent of bookkeeping
+
+### Why this was selected
+
+The export-canonicalizer audit found that Diff jump highlights were safe only
+while their element retained a `kf-change-*` ID or `data-diff` attribute. The
+supported text-match fallback can target a plain edited block, where
+`kf-edit-jump` and `kf-tc-block` then survived synchronization and appeared in
+the EPUB chapter. Preview-only state must not depend on separate bookkeeping
+remaining attached.
+
+### Changes
+
+- Clean every cloned editable descendant by the owned `kf-tc-*` namespace plus
+  `kf-edit-jump` / `is-flash`, independently of IDs or data attributes.
+- Continue removing change IDs and `data-diff`, and drop empty class attributes
+  after transient class removal.
+- Extend the real TXT edit/export journey through a visible Diff jump, remove
+  its bookkeeping to exercise fallback shape, and inspect the EPUB chapter for
+  both leaked classes.
+- Bumped the deployment version to `2026.08.25.4`.
+
+### Verification and scores
+
+- Test-first: the downloaded XHTML contained `<p class="kf-tc-block
+  kf-edit-jump">` after the highlighted element lost its bookkeeping.
+- Both focused exports and the complete 10-test offline Chromium suite pass
+  after cleanup. Workflow, dependency, runtime, logic, document-fidelity,
+  31-image, and 70-package assertions, recursive JavaScript syntax, diff
+  whitespace, and the high-severity npm audit all pass.
+- Correctness/reliability: 5/10 → 10/10; verifiability: 6/10 → 10/10;
+  maintainability: 6/10 → 9/10; performance: 9/10 → 9/10; user experience:
+  8/10 → 9/10; security/robustness: 9/10 → 9/10.
+
+### Lessons and process improvements
+
+- Transient-state cleanup should key off the state itself, not a second marker
+  that DOM editing may remove first.
+- Export tests should deliberately detach bookkeeping before serialization to
+  prove cleanup survives the fallback shapes production code advertises.
+
+### Explicit next opportunity
+
+Rotate repositories after three consecutive Find/Diff export cycles to avoid
+diminishing returns; revisit only when new document-fidelity evidence appears.
+
+## Previous cycle: expose current search state without exporting it
 
 ### Why this was selected
 

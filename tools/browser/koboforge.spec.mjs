@@ -229,6 +229,8 @@ test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ 
 
   expect(mimetype).toBe("application/epub+zip");
   expect(chapter).toContain("Edited inside the paginated Kobo preview.");
+  expect(chapter).not.toContain("kf-edit-jump");
+  expect(chapter).not.toContain("kf-tc-block");
   expect(chapter).not.toContain("Original browser smoke text.");
   expect(packageDocument).toContain("<dc:title>Browser Smoke Title</dc:title>");
   expect(packageDocument).toContain("<dc:creator>KoboForge Test</dc:creator>");
@@ -353,6 +355,14 @@ test("keeps Diff editable and exports the Diff-mode revision", async ({ page }) 
     }));
   });
   await expect(page.locator("#editedBadge")).toBeVisible();
+  const diffChange = page.locator("#diffBody .diff-hunk").first();
+  await expect(diffChange).toBeVisible();
+  await diffChange.click();
+  await expect(preview.locator(".kf-edit-jump")).toBeVisible();
+  await preview.locator(".kf-edit-jump").evaluate((highlighted) => {
+    highlighted.removeAttribute("id");
+    highlighted.removeAttribute("data-diff");
+  });
 
   const downloadPromise = page.waitForEvent("download");
   await page.locator("#downloadBtn").click();
@@ -362,6 +372,8 @@ test("keeps Diff editable and exports the Diff-mode revision", async ({ page }) 
   const chapter = await archive.file("OEBPS/chapter-1.xhtml").async("string");
   expect(chapter).toContain("Edited inside Diff mode.");
   expect(chapter).not.toContain("kf-tc-del");
+  expect(chapter).not.toContain("kf-tc-block");
+  expect(chapter).not.toContain("kf-edit-jump");
   expect(chapter).not.toContain("Original browser smoke text.");
 });
 

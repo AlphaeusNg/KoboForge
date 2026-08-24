@@ -3149,10 +3149,15 @@
                     while (el.firstChild) parent.insertBefore(el.firstChild, el);
                     parent.removeChild(el);
                 });
-                clone.querySelectorAll('[id^="kf-change-"], [data-diff]').forEach((el) => {
-                    el.removeAttribute('id');
+                clone.querySelectorAll('*').forEach((el) => {
+                    if (el.id?.startsWith('kf-change-')) el.removeAttribute('id');
                     el.removeAttribute('data-diff');
-                    el.classList.remove('kf-tc-block', 'is-flash');
+                    Array.from(el.classList).forEach((name) => {
+                        if (name.startsWith('kf-tc-') || name === 'kf-edit-jump' || name === 'is-flash') {
+                            el.classList.remove(name);
+                        }
+                    });
+                    if (!el.className) el.removeAttribute('class');
                 });
                 currentOutput.bodyHtml = canonicalizeBody(clone.innerHTML);
             }
