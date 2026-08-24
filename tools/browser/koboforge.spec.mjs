@@ -237,6 +237,29 @@ test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ 
   );
 });
 
+test("rebuilds Find-in-book results when a non-empty query changes", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "find-query.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Alpha first.\n\nBeta only.\n\nAlpha last."),
+  });
+  await expect(page.locator("#status")).toHaveText(
+    "TXT ready · editable · Kobo Libra Colour",
+  );
+
+  await page.locator("#findInBook").fill("alpha");
+  await page.locator("#findInBookNext").click();
+  await expect(page.locator("#findInBookStatus")).toHaveText("1 of 2");
+  await expect(page.locator(".kf-find-hit")).toContainText("Alpha first");
+
+  await page.locator("#findInBook").fill("beta");
+  await page.locator("#findInBookNext").click();
+  await expect(page.locator("#findInBookStatus")).toHaveText("1 of 1");
+  await expect(page.locator(".kf-find-hit")).toContainText("Beta only");
+});
+
 test("keeps Diff editable and exports the Diff-mode revision", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");

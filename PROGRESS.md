@@ -1,23 +1,62 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-18 (KoboForge Cycle 62)
+Last updated: 2026-08-25 (KoboForge Cycle 65)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.18.6`.
+- Deployment version: `2026.08.25.1`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
-  and DOCX import/edit/export flows, optional local EPUBCheck, zero-vulnerability
-  audit, 31 decoded-image assertions, 70 package assertions, and recursive
-  syntax checks.
+  and DOCX import/edit/export flows, Find-in-book query changes, optional local
+  EPUBCheck, zero-vulnerability audit, 31 decoded-image assertions, 70 package
+  assertions, and recursive syntax checks.
 - Automated verification: least-privilege GitHub Actions runs cheap policy/unit
   fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
   browser-to-downloaded-EPUB flows, and recursive syntax checks on Node 24. The
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
   checksum-verified before every extraction, including cache hits.
 
-## Latest cycle: keep Diff editable
+## Latest cycle: invalidate stale Find-in-book results
+
+### Why this was selected
+
+The new Find-in-book feature cached its matched elements. Editing one non-empty
+query into another left that cache intact, so Next and Enter navigated the old
+term and reported its old result count.
+
+### Changes
+
+- Clear the hit cache and active highlight on every query edit, including
+  non-empty-to-non-empty changes.
+- Add a real Chromium TXT journey that changes `alpha` to `beta` and requires
+  both the result count and highlighted paragraph to follow the new query.
+
+### Verification and scores
+
+- Test-first evidence: the new journey received `2 of 2` from the stale Alpha
+  results instead of Beta's `1 of 1`.
+- The focused journey and complete 10-test offline Chromium suite pass after
+  the one-line invalidation. Workflow/dependency/runtime policies, logic,
+  document fidelity, 31 image assertions, 70 EPUB package assertions,
+  recursive JavaScript syntax, diff whitespace, and the high-severity npm
+  audit all pass; hosted CI retains mandatory checksum-pinned EPUBCheck 5.3.0.
+- Correctness/reliability: 7/10 → 10/10; verifiability: 6/10 → 10/10;
+  maintainability: 8/10 → 9/10; performance: 9/10 → 9/10; user experience:
+  6/10 → 10/10; security/robustness: 9/10 → 9/10.
+
+### Lessons and process improvements
+
+- Search caches need invalidation on query identity, not just on empty state.
+- New interaction features should ship with a query-change journey, not only a
+  source marker in the logic suite.
+
+### Explicit next opportunity
+
+Make Find-in-book refresh safely after the editable document changes so a
+previous result cannot point at a detached node.
+
+## Previous cycle: keep Diff editable
 
 ### Why this was selected
 

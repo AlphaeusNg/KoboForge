@@ -468,7 +468,7 @@
             }
         });
         findInBook?.addEventListener('input', () => {
-            if (!findInBook.value.trim()) clearFindHits();
+            clearFindHits();
         });
         findInBookNext?.addEventListener('click', () => runFindInBook(findHits.length ? 1 : 0));
         findInBookPrev?.addEventListener('click', () => runFindInBook(findHits.length ? -1 : 0));
