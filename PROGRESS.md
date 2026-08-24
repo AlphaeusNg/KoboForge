@@ -56,6 +56,9 @@ been inert text.
 - Checksum-verified EPUBCheck 5.3.0 accepts the generated fixture; recursive
   syntax, diff whitespace, and the high-severity npm audit pass with zero
   vulnerabilities.
+- Hosted CI run `32779460665` passed every gate in 59s, Pages run
+  `32779460109` succeeded, and production serves `2026.08.25.7` with the active
+  markup and preview-safety validators.
 - Correctness/reliability: 4/10 → 10/10; verifiability: 5/10 → 10/10;
   maintainability: 7/10 → 9/10; performance: 9/10 → 9/10; user experience:
   5/10 → 9/10; security/privacy: 3/10 → 10/10.
