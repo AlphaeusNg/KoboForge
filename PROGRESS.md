@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-25 (KoboForge Cycle 66)
+Last updated: 2026-08-25 (KoboForge Cycle 67)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.25.2`.
+- Deployment version: `2026.08.25.3`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, zero-vulnerability audit, 31 decoded-image assertions, 70 package
@@ -17,7 +17,55 @@ Last updated: 2026-08-25 (KoboForge Cycle 66)
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
   checksum-verified before every extraction, including cache hits.
 
-## Latest cycle: invalidate Find-in-book results when the document changes
+## Latest cycle: expose current search state without exporting it
+
+### Why this was selected
+
+Find-in-book identified its active match only through a visual highlight and a
+numeric live status, so assistive technology could not identify the current
+result in the book. Inspection also found that the visual class lived inside
+the editable document DOM and could therefore leak into a downloaded EPUB.
+The accessibility improvement needed an explicit transient-state boundary so
+it would not worsen document fidelity.
+
+### Changes
+
+- Mark the active result with `aria-current="location"`, link the search input
+  to its polite live status, and identify the preview controlled by Prev/Next.
+- Preserve and restore an author-supplied `aria-current` value as the active
+  result moves or search state clears.
+- Temporarily remove the active highlight and ARIA marker before cloning the
+  editable DOM for synchronization, then restore the live preview state.
+- Extend the existing real-browser journey through current-result navigation,
+  author-ARIA restoration, and inspection of the downloaded EPUB chapter.
+- Bumped the deployment version to `2026.08.25.3`.
+
+### Verification and scores
+
+- Test-first evidence: the highlighted paragraph had no `aria-current` state.
+- The focused Chromium journey passes with accessible navigation and proves
+  the EPUB contains no `kf-find-hit`, transient ARIA, or restoration markers.
+- The complete 10-test offline Chromium suite passes. Workflow, dependency,
+  runtime, logic, document-fidelity, 31-image, and 70-package assertions,
+  recursive JavaScript syntax, diff whitespace, and the high-severity npm audit
+  all pass; hosted CI retains checksum-pinned EPUBCheck 5.3.0.
+- Correctness/reliability: 7/10 → 10/10; verifiability: 7/10 → 10/10;
+  maintainability: 7/10 → 9/10; performance: 9/10 → 9/10; user experience:
+  5/10 → 10/10; security/robustness: 9/10 → 9/10.
+
+### Lessons and process improvements
+
+- Accessibility state added inside editable content is also export state unless
+  synchronization explicitly treats it as transient.
+- Temporary semantics must restore pre-existing author attributes, not merely
+  remove the value the application wrote.
+
+### Explicit next opportunity
+
+Audit the export canonicalizer for other preview-only classes or attributes
+that could leak into EPUB content after an interactive edit session.
+
+## Previous cycle: invalidate Find-in-book results when the document changes
 
 ### Why this was selected
 

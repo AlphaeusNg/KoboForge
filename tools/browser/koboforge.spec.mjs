@@ -237,7 +237,7 @@ test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ 
   );
 });
 
-test("rebuilds Find-in-book results when a non-empty query changes", async ({ page }) => {
+test("keeps Find-in-book current state accessible, fresh, and out of exports", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");
   await page.locator("#fileInput").setInputFiles({
@@ -248,11 +248,24 @@ test("rebuilds Find-in-book results when a non-empty query changes", async ({ pa
   await expect(page.locator("#status")).toHaveText(
     "TXT ready · editable · Kobo Libra Colour",
   );
+  await expect(page.locator("#findInBook")).toHaveAttribute(
+    "aria-describedby",
+    "findInBookStatus",
+  );
+  await page.locator("#deviceBookContent p").first().evaluate((paragraph) => {
+    paragraph.setAttribute("aria-current", "page");
+  });
 
   await page.locator("#findInBook").fill("alpha");
   await page.locator("#findInBookNext").click();
   await expect(page.locator("#findInBookStatus")).toHaveText("1 of 2");
   await expect(page.locator(".kf-find-hit")).toContainText("Alpha first");
+  await expect(page.locator(".kf-find-hit")).toHaveAttribute("aria-current", "location");
+
+  await page.locator("#findInBookNext").click();
+  await expect(page.locator("#findInBookStatus")).toHaveText("2 of 2");
+  await expect(page.locator(".kf-find-hit")).toContainText("Alpha last");
+  await expect(page.locator("#deviceBookContent p").first()).toHaveAttribute("aria-current", "page");
 
   await page.locator("#findInBook").fill("beta");
   await page.locator("#findInBookNext").click();
@@ -286,6 +299,18 @@ test("rebuilds Find-in-book results when a non-empty query changes", async ({ pa
   await page.locator("#findInBookNext").click();
   await expect(page.locator("#findInBookStatus")).toHaveText("No matches in this book.");
   await expect(page.locator(".kf-find-hit")).toHaveCount(0);
+
+  await page.locator("#findInBook").fill("gamma");
+  await page.locator("#findInBookNext").click();
+  await expect(page.locator(".kf-find-hit")).toHaveAttribute("aria-current", "location");
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#downloadBtn").click();
+  const download = await downloadPromise;
+  const archive = await JSZip.loadAsync(await readFile(await download.path()));
+  const chapter = await archive.file("OEBPS/chapter-1.xhtml").async("string");
+  expect(chapter).not.toContain("kf-find-hit");
+  expect(chapter).not.toContain('aria-current="location"');
+  expect(chapter).not.toContain("data-kf-find-original-current");
 });
 
 test("keeps Diff editable and exports the Diff-mode revision", async ({ page }) => {

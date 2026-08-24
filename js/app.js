@@ -100,6 +100,7 @@
         const findInBookStatus = document.getElementById('findInBookStatus');
         let findHits = [];
         let findHitIndex = -1;
+        const findHitOriginalCurrent = new WeakMap();
         const editedBadge = document.getElementById('editedBadge');
         const statFormat = document.getElementById('statFormat');
         const statWords = document.getElementById('statWords');
@@ -2786,10 +2787,33 @@
         }
 
         function clearFindHits() {
-            previewEl?.querySelectorAll('.kf-find-hit').forEach((el) => el.classList.remove('kf-find-hit'));
+            previewEl?.querySelectorAll('.kf-find-hit').forEach(clearFindHitState);
             findHits = [];
             findHitIndex = -1;
             if (findInBookStatus) findInBookStatus.textContent = '';
+        }
+
+        function clearFindHitState(el) {
+            if (!el) return;
+            el.classList.remove('kf-find-hit');
+            const original = findHitOriginalCurrent.get(el);
+            if (original) {
+                if (original.present) el.setAttribute('aria-current', original.value);
+                else el.removeAttribute('aria-current');
+                findHitOriginalCurrent.delete(el);
+            }
+        }
+
+        function setFindHitState(el) {
+            if (!el) return;
+            if (!findHitOriginalCurrent.has(el)) {
+                findHitOriginalCurrent.set(el, {
+                    present: el.hasAttribute('aria-current'),
+                    value: el.getAttribute('aria-current') || ''
+                });
+            }
+            el.classList.add('kf-find-hit');
+            el.setAttribute('aria-current', 'location');
         }
 
         function collectFindHits(query) {
@@ -2810,9 +2834,9 @@
                 return;
             }
             findHitIndex = ((index % findHits.length) + findHits.length) % findHits.length;
-            previewEl?.querySelectorAll('.kf-find-hit').forEach((el) => el.classList.remove('kf-find-hit'));
+            previewEl?.querySelectorAll('.kf-find-hit').forEach(clearFindHitState);
             const el = findHits[findHitIndex];
-            el.classList.add('kf-find-hit');
+            setFindHitState(el);
             jumpDeviceToElement(el);
             if (findInBookStatus) {
                 findInBookStatus.textContent = `${findHitIndex + 1} of ${findHits.length}`;
@@ -3113,7 +3137,11 @@
                 && previewEl
                 && previewEl.isContentEditable
             ) {
+                const activeFindHit = findHits[findHitIndex];
+                const hadActiveFindHit = !!activeFindHit?.classList.contains('kf-find-hit');
+                if (hadActiveFindHit) clearFindHitState(activeFindHit);
                 const clone = previewEl.cloneNode(true);
+                if (hadActiveFindHit && activeFindHit.isConnected) setFindHitState(activeFindHit);
                 clone.querySelectorAll('.kf-tc-del, del').forEach((el) => el.remove());
                 clone.querySelectorAll('.kf-tc-ins, ins').forEach((el) => {
                     const parent = el.parentNode;
