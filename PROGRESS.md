@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-25 (KoboForge Cycle 65)
+Last updated: 2026-08-25 (KoboForge Cycle 66)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.25.1`.
+- Deployment version: `2026.08.25.2`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, zero-vulnerability audit, 31 decoded-image assertions, 70 package
@@ -17,7 +17,50 @@ Last updated: 2026-08-25 (KoboForge Cycle 65)
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
   checksum-verified before every extraction, including cache hits.
 
-## Latest cycle: invalidate stale Find-in-book results
+## Latest cycle: invalidate Find-in-book results when the document changes
+
+### Why this was selected
+
+Cycle 65 fixed query edits, but cached hit elements still survived direct book
+edits and whole-file replacement. Next/Enter could report a stale count or
+navigate an element detached from the current Kobo preview.
+
+### Changes
+
+- Clear search hits whenever editable preview content changes.
+- Clear hits before any preview DOM replacement, file processing, or workspace
+  reset; a full reset also clears the query.
+- Extend the real Chromium search journey through direct paragraph editing and
+  confirmed file replacement, preserving its prior query-change assertions.
+
+### Verification and scores
+
+- Test-first evidence: editing one of two Alpha paragraphs still reported `2
+  of 2`; after that boundary was fixed, the replacement-book step exposed the
+  test's real discard confirmation and proved the new document has no stale hit.
+- The focused journey and complete 10-test offline Chromium suite pass after
+  both production boundaries are covered. Workflow/dependency/runtime policy,
+  logic, document fidelity, 31 image assertions, 70 EPUB package assertions,
+  recursive JavaScript syntax, diff whitespace, and the high-severity npm
+  audit all pass; hosted CI retains checksum-pinned EPUBCheck 5.3.0.
+- Correctness/reliability: 6/10 → 10/10; verifiability: 7/10 → 10/10;
+  maintainability: 8/10 → 9/10; performance: 9/10 → 9/10; user experience:
+  5/10 → 10/10; security/robustness: 9/10 → 9/10.
+
+### Lessons and process improvements
+
+- DOM caches depend on both the query and the document generation; invalidate
+  them whenever either identity changes.
+- Browser replacement tests must explicitly exercise the product's unsaved-edit
+  confirmation instead of relying on automation's default dialog dismissal.
+
+### Explicit next opportunity
+
+Add accessible current-match semantics (`aria-current` or equivalent) so
+assistive technology can identify the active Find-in-book result, not only its
+numeric live status.
+
+## Previous cycle: invalidate stale Find-in-book results
 
 ### Why this was selected
 

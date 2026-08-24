@@ -679,6 +679,7 @@
             }
             if (deviceReaderTitle) deviceReaderTitle.textContent = title;
             deviceBookContent.lang = lang;
+            clearFindHits();
             deviceBookContent.innerHTML = renderedBody || '<p>(Empty document)</p>';
             selectedEditableImage = null;
             draggedEditableImage = null;
@@ -2484,6 +2485,7 @@
         });
         previewEl.addEventListener('input', () => {
             if (!isDeviceEditableMode() || !currentOutput) return;
+            clearFindHits();
             beginEditablePageLock();
             markEdited();
             clearTimeout(commitTimer);
@@ -4306,6 +4308,8 @@
 
         function clearWorkspace() {
             releaseEditablePageLock();
+            clearFindHits();
+            if (findInBook) findInBook.value = '';
             documentImageConversionToken += 1;
             currentFile = null;
             currentOutput = null;
@@ -4469,6 +4473,7 @@
                 }
             }
             documentImageConversionToken += 1;
+            clearFindHits();
             currentFile = file;
             currentOutput = null;
             selectedEditableImage = null;

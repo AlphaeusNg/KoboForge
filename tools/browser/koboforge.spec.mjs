@@ -258,6 +258,34 @@ test("rebuilds Find-in-book results when a non-empty query changes", async ({ pa
   await page.locator("#findInBookNext").click();
   await expect(page.locator("#findInBookStatus")).toHaveText("1 of 1");
   await expect(page.locator(".kf-find-hit")).toContainText("Beta only");
+
+  await page.locator("#findInBook").fill("alpha");
+  await page.locator("#findInBookNext").click();
+  await expect(page.locator("#findInBookStatus")).toHaveText("1 of 2");
+  await page.locator("#deviceBookContent p").first().evaluate((paragraph) => {
+    paragraph.textContent = "Gamma first.";
+    paragraph.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      inputType: "insertText",
+      data: "Gamma first.",
+    }));
+  });
+  await page.locator("#findInBookNext").click();
+  await expect(page.locator("#findInBookStatus")).toHaveText("1 of 1");
+  await expect(page.locator(".kf-find-hit")).toContainText("Alpha last");
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#fileInput").setInputFiles({
+    name: "replacement.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Gamma replacement only."),
+  });
+  await expect(page.locator("#status")).toHaveText(
+    "TXT ready · editable · Kobo Libra Colour",
+  );
+  await page.locator("#findInBookNext").click();
+  await expect(page.locator("#findInBookStatus")).toHaveText("No matches in this book.");
+  await expect(page.locator(".kf-find-hit")).toHaveCount(0);
 });
 
 test("keeps Diff editable and exports the Diff-mode revision", async ({ page }) => {
