@@ -1,23 +1,78 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-25 (KoboForge Cycle 69)
+Last updated: 2026-08-25 (KoboForge Cycle 70)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.25.5`.
+- Deployment version: `2026.08.25.6`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
-  EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 71 package
+  EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 76 package
   assertions, and recursive syntax checks.
 - Automated verification: least-privilege GitHub Actions runs cheap policy/unit
   fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
   browser-to-downloaded-EPUB flows, and recursive syntax checks on Node 24. The
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
-  checksum-verified before every extraction, including cache hits.
+  checksum-verified before every extraction, including cache hits. Twelve
+  offline real-Chromium journeys include fail-closed image and CSS exports.
 
-## Latest cycle: reject remote chapter images before EPUB download
+## Latest cycle: reject non-image network resources from EPUB chapters
+
+### Why this was selected
+
+The previous cycle closed ordinary `<img>` URLs, but the same private host could
+still survive in inline CSS, imported stylesheets, or SVG `<image>` references.
+Those forms produced an apparently local EPUB that fetched from the network when
+read, so they violated the same reliability and privacy contract through a less
+obvious package path.
+
+### Changes
+
+- Scan chapter style attributes and `<style>` blocks for `url(...)` resources;
+  require each one to be either an internal fragment or a declared local image.
+- Reject stylesheet imports and validate SVG `<image href>` / `xlink:href`
+  against the same packaged-image set.
+- Decode numeric HTML entities before scheme checks so `https&#58;` cannot hide
+  a remote image URL.
+- Add a typed expected-validation error so the UI gives URL-redacted repair
+  guidance without reporting a false runtime fault.
+- Preserve intentional reader hyperlinks and declared local CSS images, add a
+  real no-download Chromium journey, document the contract, and bump the site
+  stamp to `2026.08.25.6`.
+
+### Verification and scores
+
+- Test-first: inline CSS, `@import`, and SVG-image fixtures all retained the
+  private host in generated chapter XHTML before the boundary change.
+- `npm test`: all workflow, dependency, runtime, logic, fidelity, 32 image, and
+  76 package assertions pass.
+- `npm run test:browser`: 12/12 offline Chromium journeys pass, including exact
+  redacted status and proof that no partial download fires.
+- Checksum-pinned EPUBCheck 5.3.0 accepted the generated reflowable fixture;
+  recursive syntax, diff whitespace, and high-severity npm audit also pass with
+  zero vulnerabilities.
+- Correctness/reliability: 5/10 → 10/10; verifiability: 6/10 → 10/10;
+  maintainability: 7/10 → 9/10; performance: 9/10 → 9/10 (linear pre-ZIP
+  checks); user experience: 7/10 → 9/10; security/privacy: 4/10 → 10/10.
+
+### Lessons and process improvements
+
+- A self-contained package contract must classify every resource-loading
+  context, not just the most common element.
+- Negative package tests should also prove valid local resources and ordinary
+  outbound links remain available; broad URL bans would be a regression.
+- Entity decoding belongs before URL classification at a reusable raw-markup
+  boundary.
+
+### Explicit next opportunity
+
+Audit other automatic resource elements (`audio`, `video`, `source`, `iframe`,
+`object`, `embed`, `script`, and `link`) at the package boundary; they can still
+load remote content even though CSS, SVG images, and ordinary images are closed.
+
+## Previous cycle: reject remote chapter images before EPUB download
 
 ### Why this was selected
 
@@ -623,6 +678,8 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 | Priority | Opportunity | Category | Impact | Effort / risk | Evidence / dependency |
 |---|---|---|---|---|---|
+| 1 | Reject unsupported automatic chapter resource elements | Correctness / privacy | Medium-high | Small-medium / low | Direct package fixtures for media, frames, scripts, objects, and stylesheets plus one browser no-download journey | Next Cycle 71 |
+| — | Reject CSS/SVG remote chapter resources | Correctness / privacy | Medium-high | Small-medium / low | Five package assertions, numeric-entity coverage, and a real no-download Chromium journey | Completed in Cycle 70 |
 | — | Reject remote chapter images at extraction and package boundaries | Correctness / privacy | Medium-high | Small-medium / low | HTTP(S) and protocol-relative fixtures plus real no-download UI journey | Completed in Cycle 69 |
 | — | Reject unresolved chapter image references at the package boundary | Correctness / robustness | Medium-high | Medium / low | Missing `images/*`, leftover data/blob/file URLs, and traversal now fail closed | Completed in Cycle 59 |
 | — | Cache the verified EPUBCheck archive in CI | Performance / process | Low-medium | Small-medium / low | Exact platform/version/digest hits skip download; checksum and EPUBCheck remain mandatory | Completed in Cycle 58 |
@@ -633,5 +690,5 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 ## Next cycle
 
-No higher-impact unblocked KoboForge item is currently recorded. Rotate
-workspace attention and return when new document-fidelity evidence appears.
+Reject unsupported automatic resource-loading elements at the final package
+boundary while keeping ordinary anchor hyperlinks intact.
