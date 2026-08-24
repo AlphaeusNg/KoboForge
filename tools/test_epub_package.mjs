@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import JSZip from 'jszip';
 import {
+    assertChapterMarkupCanRenderLocally,
     buildReflowableEpubArchive,
     buildReflowablePublicationFiles,
     generateEpubArchive
@@ -273,6 +274,15 @@ assert.throws(
     /remote image source must be embedded locally/,
     'numeric HTML entities must not hide a remote image scheme'
 );
+assert.throws(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{ title: 'Named URL', html: '<p><img src="https&colon;&sol;&sol;example.com/cover.png" alt="Remote"/></p>' }],
+        assets: packagedImageAssets
+    }),
+    /remote image source must be embedded locally/,
+    'named HTML entities must not hide a remote image scheme'
+);
 for (const fixture of [
     {
         label: 'inline CSS background',
@@ -311,6 +321,100 @@ assert.doesNotThrow(
         assets: packagedImageAssets
     }),
     'declared local CSS images and ordinary reader hyperlinks remain supported'
+);
+for (const fixture of [
+    ['audio', '<audio src="https://private.example.test/audio.mp3"></audio>'],
+    ['video', '<video poster="https://private.example.test/poster.png"></video>'],
+    ['responsive source', '<picture><source srcset="https://private.example.test/cover.webp"><img src="images/image-1.png"/></picture>'],
+    ['frame', '<iframe src="https://private.example.test/frame"></iframe>'],
+    ['object', '<object data="https://private.example.test/object.pdf"></object>'],
+    ['embed', '<embed src="https://private.example.test/embed.pdf">'],
+    ['script', '<script src="https://private.example.test/book.js"></script>'],
+    ['event handler', '<p onload="fetch(\'https://private.example.test/event\')">Event</p>'],
+    ['javascript link', '<a href="javascript:fetch(\'https://private.example.test/link\')">Unsafe</a>'],
+    ['entity-hidden javascript link', '<a href="java&Tab;script&colon;alert(1)">Unsafe</a>'],
+    ['form', '<form action="https://private.example.test/submit"><button>Send</button></form>'],
+    ['stylesheet link', '<link rel="stylesheet" href="https://private.example.test/book.css">'],
+    ['base URL', '<base href="https://private.example.test/">'],
+    ['refresh metadata', '<meta http-equiv="refresh" content="0;url=https://private.example.test/next">']
+]) {
+    assert.throws(
+        () => buildReflowablePublicationFiles({
+            identifier,
+            chapters: [{ title: 'Active content', html: fixture[1] }],
+            assets: packagedImageAssets
+        }),
+        (error) => (
+            error.name === 'ChapterResourceError'
+            && /unsupported active content/i.test(error.message)
+            && !error.message.includes('private.example.test')
+        ),
+        `${fixture[0]} elements must not survive into a chapter`
+    );
+}
+assert.throws(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{
+            title: 'Image source set',
+            html: '<img src="images/image-1.png" srcset="https://private.example.test/large.png 2x">'
+        }],
+        assets: packagedImageAssets
+    }),
+    (error) => (
+        error.name === 'ChapterResourceError'
+        && /image source sets are unsupported/i.test(error.message)
+        && !error.message.includes('private.example.test')
+    ),
+    'an image srcset must not bypass the validated src attribute'
+);
+assert.throws(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{
+            title: 'External SVG use',
+            html: '<svg xmlns="http://www.w3.org/2000/svg"><use href="https://private.example.test/icons.svg#one"/></svg>'
+        }],
+        assets: packagedImageAssets
+    }),
+    (error) => (
+        error.name === 'ChapterResourceError'
+        && /remote resource/i.test(error.message)
+        && !error.message.includes('private.example.test')
+    ),
+    'an external SVG use must not bypass SVG image validation'
+);
+assert.doesNotThrow(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{
+            title: 'Internal SVG use',
+            html: '<svg xmlns="http://www.w3.org/2000/svg"><defs><path id="mark" d="M0 0h1v1z"/></defs><use href="#mark"/></svg>'
+        }],
+        assets: packagedImageAssets
+    }),
+    'an internal SVG fragment reference remains self-contained'
+);
+assert.throws(
+    () => assertChapterMarkupCanRenderLocally('<img src="/same-origin-private.png">'),
+    /external resource/,
+    'preview validation must reject same-origin relative loads as well as remote schemes'
+);
+assert.doesNotThrow(
+    () => assertChapterMarkupCanRenderLocally(
+        '<p style="background-image:url(data:image/png;base64,AAAA)"><a href="https://example.com/notes">Notes</a></p>'
+    ),
+    'local data resources and intentional reader hyperlinks are inert enough to preview'
+);
+assert.doesNotThrow(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{
+            title: 'Inert source text',
+            html: '<!-- <iframe src="https://example.com/frame"></iframe> --><style>.label::after{content:"<script>"}</style><p>Safe</p>'
+        }]
+    }),
+    'comments and CSS strings that name active tags must not cause false rejections'
 );
 assert.throws(
     () => buildReflowablePublicationFiles({
@@ -428,4 +532,4 @@ if (process.env.EPUBCHECK_JAR) {
     }
 }
 
-console.log('KoboForge reflowable EPUB package tests passed (76 assertions).');
+console.log('KoboForge reflowable EPUB package tests passed (97 assertions).');

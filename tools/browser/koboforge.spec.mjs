@@ -721,3 +721,43 @@ test("rejects remote CSS resources without emitting a partial EPUB", async ({ pa
   await page.waitForTimeout(100);
   expect(downloads).toBe(0);
 });
+
+test("keeps active HTML source inert and discardable", async ({ page }) => {
+  const privateRequests = [];
+  page.on("request", (request) => {
+    if (request.url().includes("private.example.test")) privateRequests.push(request.url());
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "active-html.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Original local-only chapter."),
+  });
+  await page.locator('[data-mode="html"]').click();
+  await page.locator("#bodyHtmlSource").fill(
+    '<p>Unsafe draft.</p><iframe src="https://private.example.test/frame?token=secret"></iframe>',
+  );
+
+  await page.locator("#applyHtmlBtn").click();
+  await expect(page.locator("#status")).toHaveText(
+    "EPUB chapter contains unsupported active content. Remove media, frames, scripts, objects, or imported resources, then download again.",
+  );
+  await expect(page.locator("#bodyHtmlSource")).toBeVisible();
+  expect(privateRequests).toEqual([]);
+
+  let downloads = 0;
+  page.on("download", () => {
+    downloads += 1;
+  });
+  await page.locator("#downloadBtn").click();
+  await expect(page.locator("#status")).toContainText("unsupported active content");
+  await page.waitForTimeout(100);
+  expect(downloads).toBe(0);
+  expect(privateRequests).toEqual([]);
+
+  await page.locator("#cancelHtmlBtn").click();
+  await expect(page.locator("#deviceBookContent")).toContainText("Original local-only chapter.");
+  await expect(page.locator("#deviceBookContent iframe")).toHaveCount(0);
+  expect(privateRequests).toEqual([]);
+});

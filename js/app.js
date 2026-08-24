@@ -11,6 +11,7 @@
             `./document-fidelity.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
         const {
+            assertChapterMarkupCanRenderLocally,
             buildReflowableEpubArchive,
             ChapterResourceError
         } = await import(
@@ -446,6 +447,7 @@
         splitChaptersEl?.addEventListener('change', () => {
             savePrefs();
             if (currentOutput) {
+                if (editMode === 'html' && unsafeHtmlSourceStopsTransition()) return;
                 syncBodyFromUi();
                 refreshOutlineAndStats();
                 paintPreview({ force: true });
@@ -480,10 +482,25 @@
             return mode === 'edit' || mode === 'diff';
         }
 
+        function unsafeHtmlSourceStopsTransition() {
+            try {
+                assertChapterMarkupCanRenderLocally(bodyHtmlSource?.value || '');
+                return false;
+            } catch (error) {
+                if (!(error instanceof ChapterResourceError)) throw error;
+                console.warn('[KoboForge] HTML resource validation stopped rendering', error.message);
+                statusEl.textContent = error.message;
+                return true;
+            }
+        }
+
         function setEditMode(mode) {
             if (!['edit', 'diff', 'html'].includes(mode)) mode = 'edit';
             if (!currentOutput) {
                 statusEl.textContent = 'Load a document first.';
+                return;
+            }
+            if (editMode === 'html' && unsafeHtmlSourceStopsTransition()) {
                 return;
             }
             // Always flush UI → model before leaving a surface that can hold edits
@@ -2506,6 +2523,7 @@
 
         applyHtmlBtn?.addEventListener('click', () => {
             if (!currentOutput) return;
+            if (unsafeHtmlSourceStopsTransition()) return;
             const cleaned = canonicalizeBody(bodyHtmlSource.value);
             currentOutput.bodyHtml = cleaned;
             markEdited();
@@ -2514,7 +2532,12 @@
             statusEl.textContent = 'HTML applied and saved to the body that Download will use.';
         });
 
-        cancelHtmlBtn?.addEventListener('click', () => setEditMode('edit'));
+        cancelHtmlBtn?.addEventListener('click', () => {
+            if (!currentOutput) return;
+            bodyHtmlSource.value = prettyPrintHtml(currentOutput.bodyHtml || '');
+            setEditMode('edit');
+            statusEl.textContent = 'HTML source changes discarded.';
+        });
 
         function markEdited() {
             bodyEdited = true;
@@ -4254,6 +4277,9 @@
 
         function bodyHtmlForExport() {
             clearTimeout(commitTimer);
+            if (editMode === 'html' && bodyHtmlSource && !bodyHtmlSource.classList.contains('hidden')) {
+                assertChapterMarkupCanRenderLocally(bodyHtmlSource.value);
+            }
             // Hard guarantee: whatever is on screen in Edit/HTML is what the EPUB gets
             syncBodyFromUi();
             refreshOutlineAndStats();

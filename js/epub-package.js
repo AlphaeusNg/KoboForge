@@ -17,6 +17,10 @@ function decodeHtmlAttribute(value) {
             }
             return String.fromCodePoint(codePoint);
         })
+        .replace(/&colon;/gi, ':')
+        .replace(/&sol;/gi, '/')
+        .replace(/&tab;/gi, '\t')
+        .replace(/&newline;/gi, '\n')
         .replace(/&amp;/g, '&')
         .replace(/&quot;/g, '"')
         .replace(/&apos;/g, "'")
@@ -112,6 +116,75 @@ function chapterSvgImageSources(html) {
     return sources;
 }
 
+function assertNoUnsupportedChapterElements(html) {
+    const markup = String(html || '')
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '<style></style>');
+    const unsupported = /<(audio|video|source|track|iframe|object|embed|script|link|base|meta|form)\b/i.exec(markup);
+    const openingTagPattern = /<[A-Za-z][^>]*>/g;
+    let openingTag;
+    let activeAttribute = false;
+    while (!activeAttribute && (openingTag = openingTagPattern.exec(markup))) {
+        activeAttribute = /\s+on[A-Za-z0-9_-]+\s*=/i.test(openingTag[0])
+            || htmlAttributeValues(openingTag[0], ['ping']).some((value) => value.trim())
+            || htmlAttributeValues(
+                openingTag[0],
+                ['href', 'src', 'action', 'formaction']
+            ).some((value) => (
+                /^javascript\s*:/i.test(value.trim().replace(/[\t\n\r]/g, ''))
+            ));
+    }
+    if (unsupported || activeAttribute) {
+        throw new ChapterResourceError(
+            'EPUB chapter contains unsupported active content. Remove media, frames, scripts, objects, or imported resources, then download again.'
+        );
+    }
+}
+
+function assertNoChapterImageSourceSets(html) {
+    const pattern = /<img\b[^>]*>/gi;
+    let match;
+    while ((match = pattern.exec(String(html || '')))) {
+        if (htmlAttributeValues(match[0], ['srcset']).some((value) => value.trim())) {
+            throw new ChapterResourceError(
+                'EPUB chapter image source sets are unsupported. Keep one locally embedded image source, then download again.'
+            );
+        }
+    }
+}
+
+function chapterSvgLinkedResourceSources(html) {
+    const sources = [];
+    const pattern = /<(?:use|feimage)\b[^>]*>/gi;
+    let match;
+    while ((match = pattern.exec(String(html || '')))) {
+        sources.push(...htmlAttributeValues(match[0], ['href', 'xlink:href']));
+    }
+    return sources;
+}
+
+function assertPreviewLocalResource(source, { allowFragment = false } = {}) {
+    const trimmed = decodeHtmlAttribute(source).trim();
+    if (!trimmed || /^(?:data|blob):/i.test(trimmed)) return;
+    if (allowFragment && /^#[A-Za-z_][A-Za-z0-9_.:-]*$/.test(trimmed)) return;
+    throw new ChapterResourceError(
+        'HTML source references an external resource. Paste or drop the resource locally, or remove it, before applying or downloading.'
+    );
+}
+
+export function assertChapterMarkupCanRenderLocally(html) {
+    assertNoUnsupportedChapterElements(html);
+    assertNoChapterImageSourceSets(html);
+    chapterImageSources(html).forEach((source) => assertPreviewLocalResource(source));
+    chapterCssSources(html).forEach((source) => {
+        assertPreviewLocalResource(source, { allowFragment: true });
+    });
+    chapterSvgImageSources(html).forEach((source) => assertPreviewLocalResource(source));
+    chapterSvgLinkedResourceSources(html).forEach((source) => {
+        assertPreviewLocalResource(source, { allowFragment: true });
+    });
+}
+
 function assertPackagedChapterResource(source, imageFileNames, { allowFragment = false } = {}) {
     const trimmed = decodeHtmlAttribute(source).trim();
     if (allowFragment && /^#[A-Za-z_][A-Za-z0-9_.:-]*$/.test(trimmed)) return;
@@ -130,11 +203,16 @@ function assertPackagedChapterResource(source, imageFileNames, { allowFragment =
 }
 
 function assertResolvedChapterResources(html, imageFileNames) {
+    assertNoUnsupportedChapterElements(html);
+    assertNoChapterImageSourceSets(html);
     chapterCssSources(html).forEach((source) => {
         assertPackagedChapterResource(source, imageFileNames, { allowFragment: true });
     });
     chapterSvgImageSources(html).forEach((source) => {
         assertPackagedChapterResource(source, imageFileNames);
+    });
+    chapterSvgLinkedResourceSources(html).forEach((source) => {
+        assertPackagedChapterResource(source, imageFileNames, { allowFragment: true });
     });
 }
 

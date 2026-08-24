@@ -63,7 +63,9 @@ before exporting a Kobo-friendly EPUB.
   requires a matching PNG/JPEG/GIF/WebP/SVG filename extension, explicit unique
   manifest IDs and filenames, non-empty binary payloads, and locally embedded
   chapter image references. CSS and SVG resource loads must likewise resolve to
-  declared local image assets; ordinary reader hyperlinks remain supported.
+  declared local image assets; active media, frames, scripts, objects, source
+  sets, event handlers, and forms are rejected while ordinary reader hyperlinks
+  remain supported. HTML-source validation runs before markup reaches Preview.
 - Fully local browser processing; documents are never uploaded
 
 ## Structure
