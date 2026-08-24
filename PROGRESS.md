@@ -53,6 +53,9 @@ obvious package path.
 - Checksum-pinned EPUBCheck 5.3.0 accepted the generated reflowable fixture;
   recursive syntax, diff whitespace, and high-severity npm audit also pass with
   zero vulnerabilities.
+- Hosted CI run `32778691179` passed the complete gate in 1m06s, Pages run
+  `32778689714` succeeded, and the live site serves both `2026.08.25.6` and the
+  new resource-boundary code.
 - Correctness/reliability: 5/10 → 10/10; verifiability: 6/10 → 10/10;
   maintainability: 7/10 → 9/10; performance: 9/10 → 9/10 (linear pre-ZIP
   checks); user experience: 7/10 → 9/10; security/privacy: 4/10 → 10/10.
