@@ -62,7 +62,8 @@ before exporting a Kobo-friendly EPUB.
 - The package boundary independently restricts image manifest types and
   requires a matching PNG/JPEG/GIF/WebP/SVG filename extension, explicit unique
   manifest IDs and filenames, non-empty binary payloads, and locally embedded
-  chapter image references
+  chapter image references. CSS and SVG resource loads must likewise resolve to
+  declared local image assets; ordinary reader hyperlinks remain supported.
 - Fully local browser processing; documents are never uploaded
 
 ## Structure

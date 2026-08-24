@@ -10,11 +10,25 @@ const EPUB_IMAGE_EXTENSIONS = new Map([
 
 function decodeHtmlAttribute(value) {
     return String(value ?? '')
+        .replace(/&#(?:x([0-9a-f]+)|(\d+));?/gi, (match, hex, decimal) => {
+            const codePoint = Number.parseInt(hex || decimal, hex ? 16 : 10);
+            if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10FFFF) {
+                return match;
+            }
+            return String.fromCodePoint(codePoint);
+        })
         .replace(/&amp;/g, '&')
         .replace(/&quot;/g, '"')
         .replace(/&apos;/g, "'")
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>');
+}
+
+export class ChapterResourceError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ChapterResourceError';
+    }
 }
 
 function chapterImageSources(html) {
@@ -41,6 +55,87 @@ function assertResolvedChapterImages(html, imageFileNames) {
             throw new Error('EPUB chapter image source is unresolved.');
         }
     }
+}
+
+function htmlAttributeValues(source, attributeNames) {
+    const values = [];
+    const names = attributeNames
+        .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('|');
+    const pattern = new RegExp(
+        `\\b(?:${names})\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+        'gi'
+    );
+    let match;
+    while ((match = pattern.exec(String(source || '')))) {
+        values.push(decodeHtmlAttribute(match[1] ?? match[2] ?? match[3] ?? ''));
+    }
+    return values;
+}
+
+function chapterCssSources(html) {
+    const cssBlocks = [];
+    const openingTagPattern = /<[A-Za-z][^>]*>/g;
+    let tag;
+    while ((tag = openingTagPattern.exec(String(html || '')))) {
+        cssBlocks.push(...htmlAttributeValues(tag[0], ['style']));
+    }
+    const styleElementPattern = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi;
+    let styleElement;
+    while ((styleElement = styleElementPattern.exec(String(html || '')))) {
+        cssBlocks.push(decodeHtmlAttribute(styleElement[1] || ''));
+    }
+
+    const sources = [];
+    for (const css of cssBlocks) {
+        const urlPattern = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)/gi;
+        let url;
+        while ((url = urlPattern.exec(css))) {
+            sources.push(url[1] ?? url[2] ?? url[3] ?? '');
+        }
+        if (/@import\b/i.test(css)) {
+            throw new ChapterResourceError(
+                'EPUB chapter stylesheet imports are unsupported. Include the formatting inline, then download again.'
+            );
+        }
+    }
+    return sources;
+}
+
+function chapterSvgImageSources(html) {
+    const sources = [];
+    const pattern = /<image\b[^>]*>/gi;
+    let match;
+    while ((match = pattern.exec(String(html || '')))) {
+        sources.push(...htmlAttributeValues(match[0], ['href', 'xlink:href']));
+    }
+    return sources;
+}
+
+function assertPackagedChapterResource(source, imageFileNames, { allowFragment = false } = {}) {
+    const trimmed = decodeHtmlAttribute(source).trim();
+    if (allowFragment && /^#[A-Za-z_][A-Za-z0-9_.:-]*$/.test(trimmed)) return;
+    if (/^https?:/i.test(trimmed) || /^\/\//.test(trimmed)) {
+        throw new ChapterResourceError(
+            'EPUB chapter references a remote resource. Save and paste or drop it into the book, or remove it, then download again.'
+        );
+    }
+    if (/^(?:data|blob|file):/i.test(trimmed)) {
+        throw new ChapterResourceError('EPUB chapter resource must be a packaged asset.');
+    }
+    const packaged = /^images\/([A-Za-z0-9._-]+)$/.exec(trimmed);
+    if (!packaged || !imageFileNames.has(packaged[1])) {
+        throw new ChapterResourceError('EPUB chapter resource is unresolved.');
+    }
+}
+
+function assertResolvedChapterResources(html, imageFileNames) {
+    chapterCssSources(html).forEach((source) => {
+        assertPackagedChapterResource(source, imageFileNames, { allowFragment: true });
+    });
+    chapterSvgImageSources(html).forEach((source) => {
+        assertPackagedChapterResource(source, imageFileNames);
+    });
 }
 
 function escapeXml(value) {
@@ -182,6 +277,7 @@ export function buildReflowablePublicationFiles({
     });
     normalizedChapters.forEach((chapter) => {
         assertResolvedChapterImages(chapter.html, imageFileNames);
+        assertResolvedChapterResources(chapter.html, imageFileNames);
     });
 
     const files = new Map();

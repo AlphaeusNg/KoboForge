@@ -692,3 +692,32 @@ test("rejects remote chapter images without emitting a partial EPUB", async ({ p
   await page.waitForTimeout(100);
   expect(downloads).toBe(0);
 });
+
+test("rejects remote CSS resources without emitting a partial EPUB", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "remote-background.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("A CSS resource can make an EPUB network-dependent."),
+  });
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+
+  await page.locator("#deviceBookContent p").first().evaluate((paragraph) => {
+    paragraph.style.backgroundImage = "url('https://private.example.test/background.png?token=secret')";
+    paragraph.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  });
+
+  let downloads = 0;
+  page.on("download", () => {
+    downloads += 1;
+  });
+  await page.locator("#downloadBtn").click();
+  await expect(page.locator("#status")).toHaveText(
+    "EPUB chapter references a remote resource. Save and paste or drop it into the book, or remove it, then download again.",
+  );
+  await expect(page.locator("#status")).not.toContainText("private.example.test");
+  await expect(page.locator("#status")).not.toContainText("secret");
+  await page.waitForTimeout(100);
+  expect(downloads).toBe(0);
+});

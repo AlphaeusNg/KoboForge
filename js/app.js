@@ -11,7 +11,8 @@
             `./document-fidelity.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
         const {
-            buildReflowableEpubArchive
+            buildReflowableEpubArchive,
+            ChapterResourceError
         } = await import(
             `./epub-package.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
@@ -4491,8 +4492,8 @@
                     : 'Reflowable EPUB ready. Nothing left your browser.';
                 if (editMode === 'diff') renderDiffPanel();
             } catch (error) {
-                if (error instanceof EmbeddedImageError) {
-                    console.warn('[KoboForge] EPUB image validation stopped export', error.message);
+                if (error instanceof EmbeddedImageError || error instanceof ChapterResourceError) {
+                    console.warn('[KoboForge] EPUB resource validation stopped export', error.message);
                 } else {
                     console.error('[KoboForge]', error);
                 }

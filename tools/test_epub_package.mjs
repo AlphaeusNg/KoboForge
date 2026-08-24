@@ -267,6 +267,54 @@ assert.throws(
 assert.throws(
     () => buildReflowablePublicationFiles({
         identifier,
+        chapters: [{ title: 'Encoded URL', html: '<p><img src="https&#58;//example.com/cover.png" alt="Remote"/></p>' }],
+        assets: packagedImageAssets
+    }),
+    /remote image source must be embedded locally/,
+    'numeric HTML entities must not hide a remote image scheme'
+);
+for (const fixture of [
+    {
+        label: 'inline CSS background',
+        html: '<p style="background-image:url(https://private.example.test/background.png?token=secret)">Remote background</p>'
+    },
+    {
+        label: 'imported stylesheet',
+        html: '<style>@import url(//private.example.test/book.css);</style><p>Remote styles</p>'
+    },
+    {
+        label: 'SVG image',
+        html: '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://private.example.test/panel.png?token=secret"/></svg>'
+    }
+]) {
+    assert.throws(
+        () => buildReflowablePublicationFiles({
+            identifier,
+            chapters: [{ title: 'Remote resource', html: fixture.html }],
+            assets: packagedImageAssets
+        }),
+        (error) => (
+            /(?:remote resource|stylesheet imports)/i.test(error.message)
+            && !error.message.includes('private.example.test')
+            && !error.message.includes('secret')
+        ),
+        `${fixture.label} references must fail without disclosing their URL`
+    );
+}
+assert.doesNotThrow(
+    () => buildReflowablePublicationFiles({
+        identifier,
+        chapters: [{
+            title: 'Local and linked resources',
+            html: '<style>.cover{background-image:url(images/image-1.png)}</style><p class="cover"><a href="https://example.com/notes">Notes</a></p>'
+        }],
+        assets: packagedImageAssets
+    }),
+    'declared local CSS images and ordinary reader hyperlinks remain supported'
+);
+assert.throws(
+    () => buildReflowablePublicationFiles({
+        identifier,
         chapters: [{ title: 'Traversal', html: '<p><img src="images/../image-1.png" alt="Traversal"/></p>' }],
         assets: packagedImageAssets
     }),
@@ -380,4 +428,4 @@ if (process.env.EPUBCHECK_JAR) {
     }
 }
 
-console.log('KoboForge reflowable EPUB package tests passed (71 assertions).');
+console.log('KoboForge reflowable EPUB package tests passed (76 assertions).');
