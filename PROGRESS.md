@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-25 (KoboForge Cycle 71)
+Last updated: 2026-08-25 (KoboForge Cycle 72)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.25.7`.
+- Deployment version: `2026.08.25.8`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 97 package
@@ -19,7 +19,21 @@ Last updated: 2026-08-25 (KoboForge Cycle 71)
   offline real-Chromium journeys include fail-closed image, CSS, and active-HTML
   handling.
 
-## Latest cycle: keep active chapter content inert and out of EPUBs
+## Latest cycle: show reading time and Kobo pages
+
+### Why this was selected
+
+After import, summary only named words and sections. Visitors converting a
+sermon or chapter could not tell how long it would take or how many Kobo
+pages the preview actually paginated.
+
+### Changes
+
+- Conversion overview adds reading time at 200 wpm and the live paginated
+  Kobo page count.
+- Version `2026.08.25.8`.
+
+## Previous cycle: keep active chapter content inert and out of EPUBs
 
 ### Why this was selected
 

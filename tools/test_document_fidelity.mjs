@@ -8,6 +8,7 @@ import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import {
     countHtmlWords,
+    formatReadingTime,
     DOCX_FIDELITY_STYLE_MAP,
     detectPlainListMarker,
     normalizeBibleVerseMarkers,
@@ -65,6 +66,9 @@ assert.equal(
     14,
     'word count must keep rendered block boundaries instead of gluing adjacent words'
 );
+assert.equal(formatReadingTime(0), '< 1 min read', 'empty books stay under one minute');
+assert.equal(formatReadingTime(200), '1 min read', 'one minute is singular');
+assert.equal(formatReadingTime(1209), '6 min read', '1,209 words round to six minutes at 200 wpm');
 
 // CSS/legacy/semantic typography: traits are independent and idempotent.
 const formattingCases = [

@@ -194,8 +194,15 @@ assert.ok(
         && !html.includes('id="statStructure"')
         && html.includes('id="statFormat"')
         && html.includes('id="statWords"')
-        && html.includes('id="statChapters"'),
-    'summary keeps only the essential format, word, and page/section facts'
+        && html.includes('id="statRead"')
+        && html.includes('id="statChapters"')
+        && html.includes('id="statPages"'),
+    'summary keeps format, word, reading-time, and page/section facts'
+);
+assert.ok(
+    script.includes('formatReadingTime')
+        && script.includes('Kobo page'),
+    'summary reports reading time and paginated Kobo pages'
 );
 assert.ok(
     script.includes("diagnosticsEl.textContent = observation")

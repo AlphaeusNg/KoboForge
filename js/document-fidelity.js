@@ -38,6 +38,18 @@ export function countHtmlWords(html, doc = globalThis.document) {
     return text ? text.split(/\s+/).length : 0;
 }
 
+const DEFAULT_WORDS_PER_MINUTE = 200;
+
+export function formatReadingTime(wordCount, wordsPerMinute = DEFAULT_WORDS_PER_MINUTE) {
+    const words = Number(wordCount);
+    const rate = Number(wordsPerMinute);
+    if (!Number.isFinite(words) || words <= 0 || !Number.isFinite(rate) || rate <= 0) {
+        return '< 1 min read';
+    }
+    const minutes = Math.max(1, Math.round(words / rate));
+    return minutes === 1 ? '1 min read' : `${minutes} min read`;
+}
+
 function wordElements(root, localName) {
     return Array.from(root?.getElementsByTagNameNS?.(WORD_NAMESPACE, localName) || []);
 }

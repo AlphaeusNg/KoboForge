@@ -1,5 +1,6 @@
         const {
             countHtmlWords,
+            formatReadingTime,
             DOCX_FIDELITY_STYLE_MAP,
             detectPlainListMarker,
             normalizeBibleVerseMarkers,
@@ -107,7 +108,9 @@
         const editedBadge = document.getElementById('editedBadge');
         const statFormat = document.getElementById('statFormat');
         const statWords = document.getElementById('statWords');
+        const statRead = document.getElementById('statRead');
         const statChapters = document.getElementById('statChapters');
+        const statPages = document.getElementById('statPages');
         const bookTitleInput = document.getElementById('bookTitle');
         const bookAuthorInput = document.getElementById('bookAuthor');
         const bookLangInput = document.getElementById('bookLang');
@@ -891,6 +894,9 @@
             if (deviceReaderFooter) deviceReaderFooter.textContent = label;
             if (devicePagePrev) devicePagePrev.disabled = devicePageIndex <= 0;
             if (devicePageNext) devicePageNext.disabled = devicePageIndex >= devicePageCount - 1;
+            if (statPages && currentOutput) {
+                statPages.textContent = `${devicePageCount} Kobo page${devicePageCount === 1 ? '' : 's'}`;
+            }
         }
 
         [deviceSelect, deviceOrientation].forEach((control) => {
@@ -4623,9 +4629,13 @@
                 const count = String(words).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
                 statWords.textContent = `${count} words`;
             }
+            if (statRead) statRead.textContent = formatReadingTime(words);
             if (statChapters) {
                 const count = chapters.length;
                 statChapters.textContent = `${count} section${count === 1 ? '' : 's'}`;
+            }
+            if (statPages) {
+                statPages.textContent = `${devicePageCount} Kobo page${devicePageCount === 1 ? '' : 's'}`;
             }
             statsEl.classList.remove('hidden');
 

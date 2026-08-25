@@ -392,6 +392,8 @@ test("imports DOCX fidelity, preserves verse prose, and exports an edit", async 
   await expect(preview).toContainText("So Near Yet So Far");
   await expect(preview).toContainText("Discussion questions:");
   await expect(page.locator("#statWords")).toHaveText("1,209 words");
+  await expect(page.locator("#statRead")).toHaveText("6 min read");
+  await expect(page.locator("#statPages")).toHaveText(/^\d+ Kobo pages?$/);
   const sourceBuffer = await readFile(docxFixturePath);
   const sourceArchive = await JSZip.loadAsync(sourceBuffer);
   const sourceXml = await sourceArchive.file("word/document.xml").async("string");
