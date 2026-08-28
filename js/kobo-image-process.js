@@ -204,10 +204,24 @@ function parseSourceSize(img, fallbackW, fallbackH) {
   return { width: fallbackW, height: fallbackH };
 }
 
+function ensureNoteElement() {
+  if (typeof document === 'undefined') return null;
+  let noteEl = document.getElementById('imageConvertNote');
+  if (noteEl) return noteEl;
+  const anchor = document.getElementById('diagnostics') || document.getElementById('status');
+  if (!anchor?.parentNode) return null;
+  noteEl = document.createElement('p');
+  noteEl.id = 'imageConvertNote';
+  noteEl.className = 'mt-2 hidden text-xs leading-5 text-slate-400';
+  noteEl.hidden = true;
+  anchor.parentNode.insertBefore(noteEl, anchor.nextSibling);
+  return noteEl;
+}
+
 function showConversionNotes(notes) {
   if (!notes.length || typeof document === 'undefined') return;
   const text = notes.join('; ');
-  const noteEl = document.getElementById('imageConvertNote');
+  const noteEl = ensureNoteElement() || document.getElementById('imageConvertNote');
   if (noteEl) {
     noteEl.textContent = text;
     noteEl.hidden = false;
@@ -221,13 +235,7 @@ function showConversionNotes(notes) {
   fallback.removeAttribute('hidden');
   fallback.classList.remove('hidden');
   const existing = (fallback.textContent || '').trim();
-  if (!existing) {
-    fallback.textContent = text;
-    return;
-  }
-  if (!existing.includes(text)) {
-    fallback.textContent = `${existing} ${text}`;
-  }
+  fallback.textContent = existing && !existing.includes(text) ? `${existing} ${text}` : (existing || text);
 }
 
 async function convertDomImage(img, target) {
@@ -293,6 +301,7 @@ export function bindKoboImageProcessing() {
   if (typeof document === 'undefined') return;
   if (bound) return;
   bound = true;
+  ensureNoteElement();
 
   const schedule = () => {
     if (applying) return;
