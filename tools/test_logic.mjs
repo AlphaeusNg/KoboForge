@@ -15,6 +15,7 @@ const bootPath = join(__dirname, '../js/boot.js');
 const epubPackagePath = join(__dirname, '../js/epub-package.js');
 const epubImagesPath = join(__dirname, '../js/epub-images.js');
 const runtimeDependenciesPath = join(__dirname, '../js/runtime-dependencies.js');
+const imageSizeHoldPath = join(__dirname, '../js/image-size-hold.js');
 const packagePath = join(__dirname, '../package.json');
 const fixedLayoutPath = join(__dirname, '../js/fixed-layout.js');
 const fixedFixturePath = join(__dirname, './test_fixed_epub.mjs');
@@ -26,6 +27,7 @@ const bootScript = readFileSync(bootPath, 'utf8');
 const epubPackageScript = readFileSync(epubPackagePath, 'utf8');
 const epubImagesScript = readFileSync(epubImagesPath, 'utf8');
 const runtimeDependenciesScript = readFileSync(runtimeDependenciesPath, 'utf8');
+const imageSizeHoldScript = readFileSync(imageSizeHoldPath, 'utf8');
 const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
 const page = [
     html,
@@ -33,6 +35,7 @@ const page = [
     epubPackageScript,
     epubImagesScript,
     runtimeDependenciesScript,
+    imageSizeHoldScript,
     styles
 ].join('\n');
 
@@ -55,6 +58,7 @@ assert.ok(
     versionScript.includes('asset: function (path)')
         && html.includes("window.SITE_VERSION.asset('css/main.css')")
         && bootScript.includes('new URL("app.js", import.meta.url).href')
+        && bootScript.includes('new URL("image-size-hold.js", import.meta.url).href')
         && script.includes('window.SITE_VERSION?.id')
         && script.includes('./epub-package.js?v='),
     'one deployment constant must cache-bust CSS and application modules'
@@ -821,11 +825,12 @@ assert.ok(
     styles.includes('.image-size-control {')
         && styles.includes('touch-action: none')
         && styles.includes('html.kf-slider-held')
-        && script.includes('function rangeValueFromClientX')
-        && script.includes('function bindHeldImageSizeSlider')
-        && script.includes('setPointerCapture')
-        && script.includes("classList.add('kf-slider-held')")
-        && script.includes('{ passive: false }'),
+        && imageSizeHoldScript.includes('function rangeValueFromClientX')
+        && imageSizeHoldScript.includes('function bindHeldImageSizeSlider')
+        && imageSizeHoldScript.includes('setPointerCapture')
+        && imageSizeHoldScript.includes("classList.add('kf-slider-held')")
+        && imageSizeHoldScript.includes('{ passive: false }')
+        && imageSizeHoldScript.includes("new Event('input'"),
     'held image-size slider tracks the pointer without scrolling the page'
 );
 assert.ok(
