@@ -6,7 +6,7 @@ Last updated: 2026-08-28 (KoboForge Cycle 74)
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.28.2`.
+- Deployment version: `2026.08.28.3`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 97 package
@@ -35,7 +35,9 @@ swing.
 - Slider hold now captures on the control, locks toolbar/page overscroll, and
   defers pagination until pointerup so the preview width updates without
   swinging.
-- Version `2026.08.28.2`.
+- A real 390px Chromium journey now drags the control while asserting that the
+  toolbar, Kobo screen, and document retain their scroll positions.
+- Version `2026.08.28.3`.
 
 ## Previous cycle: hold image-size slider without scrolling the page
 

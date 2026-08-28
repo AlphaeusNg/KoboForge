@@ -261,6 +261,60 @@ test("processes an imported image for the selected Kobo", async ({ page }) => {
   await expect(image).toHaveAttribute("src", /^data:image\//);
 });
 
+test("holds the image-size slider steady in a phone viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "phone-slider.png",
+    mimeType: "image/png",
+    buffer: PNG_1x1,
+  });
+
+  const image = page.locator("#deviceBookContent img");
+  await expect(image).toHaveCount(1);
+  await image.click();
+  const control = page.locator("#imageSizeControl");
+  const range = page.locator("#imageSizeRange");
+  await expect(control).toBeVisible();
+  await control.evaluate((element) => element.scrollIntoView({ block: "nearest", inline: "center" }));
+
+  const initialScroll = await page.evaluate(() => {
+    const lane = document.querySelector("#imageSizeControl")?.closest(".tb-lane");
+    const screen = document.querySelector("#deviceScreen");
+    if (screen) screen.scrollTop = Math.min(20, screen.scrollHeight - screen.clientHeight);
+    return {
+      pageY: window.scrollY,
+      laneX: lane?.scrollLeft || 0,
+      screenY: screen?.scrollTop || 0,
+    };
+  });
+  const box = await range.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box.x + box.width * 0.85, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(page.locator("html")).toHaveClass(/kf-slider-held/);
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height / 2, { steps: 4 });
+
+  const resizedWidth = Number(await range.inputValue());
+  expect(resizedWidth).toBeGreaterThanOrEqual(25);
+  expect(resizedWidth).toBeLessThan(85);
+  await expect(image).toHaveAttribute("data-kf-width", String(resizedWidth));
+  expect(await page.evaluate(() => {
+    const lane = document.querySelector("#imageSizeControl")?.closest(".tb-lane");
+    const screen = document.querySelector("#deviceScreen");
+    return {
+      pageY: window.scrollY,
+      laneX: lane?.scrollLeft || 0,
+      screenY: screen?.scrollTop || 0,
+    };
+  })).toEqual(initialScroll);
+
+  await page.mouse.up();
+  await expect(page.locator("html")).not.toHaveClass(/kf-slider-held/);
+  await expect(page.locator("#status")).toContainText("Image width set to");
+});
+
 test("keeps Find-in-book current state accessible, fresh, and out of exports", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");
