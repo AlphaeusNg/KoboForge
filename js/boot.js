@@ -34,10 +34,14 @@ const appUrl = window.SITE_VERSION.asset(
 const imageSizeHoldUrl = window.SITE_VERSION.asset(
   new URL("image-size-hold.js", import.meta.url).href,
 );
+const koboImageProcessUrl = window.SITE_VERSION.asset(
+  new URL("kobo-image-process.js", import.meta.url).href,
+);
 
 try {
   await import(appUrl);
   await import(imageSizeHoldUrl);
+  await import(koboImageProcessUrl);
 } catch (error) {
   console.error("[KoboForge] Application startup failed", error);
   if (statusElement) {
