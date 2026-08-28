@@ -900,6 +900,8 @@ body {
     border-radius: 0.55rem;
     background: rgba(255, 255, 255, 0.05);
     color: #cbd5e1;
+    touch-action: none;
+    overscroll-behavior: none;
 }
 
 #imageEditControls.hidden,
@@ -917,6 +919,7 @@ body {
     width: 4rem;
     min-width: 0;
     accent-color: #C9A227;
+    touch-action: none;
 }
 
 .image-size-control output {
@@ -925,6 +928,12 @@ body {
     font-size: 0.62rem;
     font-variant-numeric: tabular-nums;
     text-align: right;
+}
+
+html.kf-slider-held,
+html.kf-slider-held body {
+    touch-action: none;
+    overscroll-behavior: none;
 }
 
 .image-drop-hint {
