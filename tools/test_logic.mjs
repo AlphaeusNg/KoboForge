@@ -276,6 +276,47 @@ assert.equal(sanitizeSliderValue(-4, 3, 16, 1, 8), 3);
 assert.equal(sanitizeSliderValue('nope', 3, 16, 1, 8), 8);
 assert.equal(sanitizeSliderValue(3.7, 2.6, 4.8, 0.2, 3.6), 3.8);
 
+function rangeValueFromClientX(rangeEl, clientX) {
+    const min = Number(rangeEl?.min);
+    const max = Number(rangeEl?.max);
+    const step = Number(rangeEl?.step);
+    const box = rangeEl?.getBoundingClientRect?.();
+    const width = Number(box?.width);
+    const left = Number(box?.left);
+    if (
+        !Number.isFinite(min)
+        || !Number.isFinite(max)
+        || max <= min
+        || !Number.isFinite(step)
+        || !(step > 0)
+        || !Number.isFinite(width)
+        || !(width > 0)
+        || !Number.isFinite(left)
+    ) {
+        const current = Number(rangeEl?.value);
+        return Number.isFinite(current) ? current : min;
+    }
+    const ratio = Math.max(0, Math.min(1, (clientX - left) / width));
+    const raw = min + ratio * (max - min);
+    const snapped = min + Math.round((raw - min) / step) * step;
+    return Math.min(max, Math.max(min, Number(snapped.toFixed(6))));
+}
+const fakeRange = {
+    min: '25',
+    max: '100',
+    step: '5',
+    value: '100',
+    getBoundingClientRect() {
+        return { left: 0, width: 100 };
+    }
+};
+assert.equal(rangeValueFromClientX(fakeRange, 0), 25);
+assert.equal(rangeValueFromClientX(fakeRange, 50), 65);
+assert.equal(rangeValueFromClientX(fakeRange, 100), 100);
+assert.equal(rangeValueFromClientX(fakeRange, -20), 25);
+assert.equal(rangeValueFromClientX(fakeRange, 140), 100);
+
+
 function escapeHtml(text) {
     return String(text)
         .replace(/&/g, '&amp;')
@@ -775,6 +816,17 @@ assert.ok(
         && styles.includes('img.kf-image-selected')
         && styles.includes('cursor: grab'),
     'images can be selected, resized, positioned, and freely dragged within the Kobo page'
+);
+assert.ok(
+    styles.includes('.image-size-control {')
+        && styles.includes('touch-action: none')
+        && styles.includes('html.kf-slider-held')
+        && script.includes('function rangeValueFromClientX')
+        && script.includes('function bindHeldImageSizeSlider')
+        && script.includes('setPointerCapture')
+        && script.includes("classList.add('kf-slider-held')")
+        && script.includes('{ passive: false }'),
+    'held image-size slider tracks the pointer without scrolling the page'
 );
 assert.ok(
     page.includes('function imageWidthForPageFit')
