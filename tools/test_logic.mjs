@@ -15,6 +15,7 @@ const bootPath = join(__dirname, '../js/boot.js');
 const epubPackagePath = join(__dirname, '../js/epub-package.js');
 const epubImagesPath = join(__dirname, '../js/epub-images.js');
 const runtimeDependenciesPath = join(__dirname, '../js/runtime-dependencies.js');
+const imageSizeHoldPath = join(__dirname, '../js/image-size-hold.js');
 const packagePath = join(__dirname, '../package.json');
 const fixedLayoutPath = join(__dirname, '../js/fixed-layout.js');
 const fixedFixturePath = join(__dirname, './test_fixed_epub.mjs');
@@ -26,6 +27,7 @@ const bootScript = readFileSync(bootPath, 'utf8');
 const epubPackageScript = readFileSync(epubPackagePath, 'utf8');
 const epubImagesScript = readFileSync(epubImagesPath, 'utf8');
 const runtimeDependenciesScript = readFileSync(runtimeDependenciesPath, 'utf8');
+const imageSizeHoldScript = readFileSync(imageSizeHoldPath, 'utf8');
 const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
 const page = [
     html,
@@ -33,6 +35,7 @@ const page = [
     epubPackageScript,
     epubImagesScript,
     runtimeDependenciesScript,
+    imageSizeHoldScript,
     styles
 ].join('\n');
 
@@ -55,6 +58,7 @@ assert.ok(
     versionScript.includes('asset: function (path)')
         && html.includes("window.SITE_VERSION.asset('css/main.css')")
         && bootScript.includes('new URL("app.js", import.meta.url).href')
+        && bootScript.includes('new URL("image-size-hold.js", import.meta.url).href')
         && script.includes('window.SITE_VERSION?.id')
         && script.includes('./epub-package.js?v='),
     'one deployment constant must cache-bust CSS and application modules'
@@ -275,6 +279,47 @@ assert.equal(sanitizeSliderValue(99, 2.6, 4.8, 0.2, 3.6), 4.8);
 assert.equal(sanitizeSliderValue(-4, 3, 16, 1, 8), 3);
 assert.equal(sanitizeSliderValue('nope', 3, 16, 1, 8), 8);
 assert.equal(sanitizeSliderValue(3.7, 2.6, 4.8, 0.2, 3.6), 3.8);
+
+function rangeValueFromClientX(rangeEl, clientX) {
+    const min = Number(rangeEl?.min);
+    const max = Number(rangeEl?.max);
+    const step = Number(rangeEl?.step);
+    const box = rangeEl?.getBoundingClientRect?.();
+    const width = Number(box?.width);
+    const left = Number(box?.left);
+    if (
+        !Number.isFinite(min)
+        || !Number.isFinite(max)
+        || max <= min
+        || !Number.isFinite(step)
+        || !(step > 0)
+        || !Number.isFinite(width)
+        || !(width > 0)
+        || !Number.isFinite(left)
+    ) {
+        const current = Number(rangeEl?.value);
+        return Number.isFinite(current) ? current : min;
+    }
+    const ratio = Math.max(0, Math.min(1, (clientX - left) / width));
+    const raw = min + ratio * (max - min);
+    const snapped = min + Math.round((raw - min) / step) * step;
+    return Math.min(max, Math.max(min, Number(snapped.toFixed(6))));
+}
+const fakeRange = {
+    min: '25',
+    max: '100',
+    step: '5',
+    value: '100',
+    getBoundingClientRect() {
+        return { left: 0, width: 100 };
+    }
+};
+assert.equal(rangeValueFromClientX(fakeRange, 0), 25);
+assert.equal(rangeValueFromClientX(fakeRange, 50), 65);
+assert.equal(rangeValueFromClientX(fakeRange, 100), 100);
+assert.equal(rangeValueFromClientX(fakeRange, -20), 25);
+assert.equal(rangeValueFromClientX(fakeRange, 140), 100);
+
 
 function escapeHtml(text) {
     return String(text)
@@ -775,6 +820,18 @@ assert.ok(
         && styles.includes('img.kf-image-selected')
         && styles.includes('cursor: grab'),
     'images can be selected, resized, positioned, and freely dragged within the Kobo page'
+);
+assert.ok(
+    styles.includes('.image-size-control {')
+        && styles.includes('touch-action: none')
+        && styles.includes('html.kf-slider-held')
+        && imageSizeHoldScript.includes('function rangeValueFromClientX')
+        && imageSizeHoldScript.includes('function bindHeldImageSizeSlider')
+        && imageSizeHoldScript.includes('setPointerCapture')
+        && imageSizeHoldScript.includes("classList.add('kf-slider-held')")
+        && imageSizeHoldScript.includes('{ passive: false }')
+        && imageSizeHoldScript.includes("new Event('input'"),
+    'held image-size slider tracks the pointer without scrolling the page'
 );
 assert.ok(
     page.includes('function imageWidthForPageFit')

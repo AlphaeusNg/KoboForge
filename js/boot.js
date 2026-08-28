@@ -31,9 +31,13 @@ bindAutoHideHeader();
 const appUrl = window.SITE_VERSION.asset(
   new URL("app.js", import.meta.url).href,
 );
+const imageSizeHoldUrl = window.SITE_VERSION.asset(
+  new URL("image-size-hold.js", import.meta.url).href,
+);
 
 try {
   await import(appUrl);
+  await import(imageSizeHoldUrl);
 } catch (error) {
   console.error("[KoboForge] Application startup failed", error);
   if (statusElement) {
