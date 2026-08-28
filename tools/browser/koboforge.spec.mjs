@@ -239,6 +239,28 @@ test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ 
   );
 });
 
+const PNG_1x1 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+test("processes an imported image for the selected Kobo", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "phone-photo.png",
+    mimeType: "image/png",
+    buffer: PNG_1x1,
+  });
+
+  const image = page.locator("#deviceBookContent img");
+  await expect(image).toHaveCount(1);
+  await expect(page.locator("#status")).toContainText(/image/i);
+  await expect(page.locator("#status")).not.toContainText("Unsupported file type");
+  await expect(image).toHaveAttribute("data-kf-image-id", /kf-image-/);
+  await expect(image).toHaveAttribute("src", /^data:image\//);
+});
+
 test("keeps Find-in-book current state accessible, fresh, and out of exports", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");

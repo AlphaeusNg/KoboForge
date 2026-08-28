@@ -247,6 +247,8 @@ const features = [
     ['automatic document image optimizer', 'function optimizeDocumentImages'],
     ['Kobo image paste', 'function optimizeAndInsertPastedImages'],
     ['Kobo image drop', 'function handleImageDrop'],
+    ['Kobo image file import', 'function parseImageFiles'],
+    ['image file detector', 'function isImageFile'],
     ['PDF image extraction', 'function extractPdfPageImages'],
     ['PDF intentional whitespace detector', 'function detectPdfWhitespace'],
     ['PDF embedded font metadata', 'function collectPdfFontMetadata'],
@@ -825,13 +827,30 @@ assert.ok(
     styles.includes('.image-size-control {')
         && styles.includes('touch-action: none')
         && styles.includes('html.kf-slider-held')
+        && styles.includes('overflow: hidden')
+        && styles.includes('kf-slider-held-lane')
+        && styles.includes('kf-slider-held-screen')
         && imageSizeHoldScript.includes('function rangeValueFromClientX')
         && imageSizeHoldScript.includes('function bindHeldImageSizeSlider')
         && imageSizeHoldScript.includes('setPointerCapture')
-        && imageSizeHoldScript.includes("classList.add('kf-slider-held')")
+        && imageSizeHoldScript.includes('setHeld(true)')
         && imageSizeHoldScript.includes('{ passive: false }')
-        && imageSizeHoldScript.includes("new Event('input'"),
-    'held image-size slider tracks the pointer without scrolling the page'
+        && imageSizeHoldScript.includes('{ capture: true }')
+        && imageSizeHoldScript.includes("new Event('input'")
+        && imageSizeHoldScript.includes("new Event('change'")
+        && script.includes('paginate: paginate ?? !holding')
+        && script.includes("classList.contains('kf-slider-held')"),
+    'held image-size slider tracks the pointer without scrolling or reflowing the Kobo page'
+);
+assert.ok(
+    html.includes('image/png')
+        && html.includes('image/jpeg')
+        && html.includes('multiple')
+        && script.includes('function parseImageFiles')
+        && script.includes('function isImageFile')
+        && script.includes("Use DOCX, PDF, TXT, Markdown, or an image")
+        && page.includes('PNG, JPEG, GIF, WebP'),
+    'dropzone and file picker accept images and process them for the selected Kobo'
 );
 assert.ok(
     page.includes('function imageWidthForPageFit')

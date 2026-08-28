@@ -932,8 +932,18 @@ body {
 
 html.kf-slider-held,
 html.kf-slider-held body {
+    overflow: hidden;
     touch-action: none;
     overscroll-behavior: none;
+}
+
+#editToolbar .tb-lane.kf-slider-held-lane {
+    overflow: hidden;
+    touch-action: none;
+}
+
+#deviceScreen.kf-slider-held-screen {
+    touch-action: none;
 }
 
 .image-drop-hint {

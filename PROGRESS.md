@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-28 (KoboForge Cycle 73)
+Last updated: 2026-08-28 (KoboForge Cycle 74)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.28.1`.
+- Deployment version: `2026.08.28.2`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 97 package
@@ -19,7 +19,25 @@ Last updated: 2026-08-28 (KoboForge Cycle 73)
   offline real-Chromium journeys include fail-closed image, CSS, and active-HTML
   handling.
 
-## Latest cycle: hold image-size slider without scrolling the page
+## Latest cycle: process images and keep the size slider still
+
+### Why this was selected
+
+The dropzone could show an image as received, then reject it as an unsupported
+document type, so no Kobo processing ran. Holding the image-size slider still
+reflowed the paginated preview on some phones, which made the device screen
+swing.
+
+### Changes
+
+- Import accepts PNG, JPEG, GIF, and WebP (including multi-file drops) and runs
+  the same Kobo optimizer used for DOCX/PDF/paste.
+- Slider hold now captures on the control, locks toolbar/page overscroll, and
+  defers pagination until pointerup so the preview width updates without
+  swinging.
+- Version `2026.08.28.2`.
+
+## Previous cycle: hold image-size slider without scrolling the page
 
 ### Why this was selected
 

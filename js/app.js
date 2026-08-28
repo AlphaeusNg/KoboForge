@@ -1202,18 +1202,18 @@
             updateImageEditControls();
         }
 
-        function finishImageEdit(message) {
+        function finishImageEdit(message, { paginate = true } = {}) {
             if (!currentOutput || !previewEl) return;
             currentOutput.imageCount = previewEl.querySelectorAll('img[data-kf-image-id]').length;
             beginEditablePageLock();
             markEdited();
             clearTimeout(commitTimer);
             commitTimer = setTimeout(refreshDiffLive, 80);
-            scheduleDevicePagination();
+            if (paginate) scheduleDevicePagination();
             if (message) statusEl.textContent = message;
         }
 
-        function resizeSelectedImage(width) {
+        function resizeSelectedImage(width, { paginate } = {}) {
             if (!selectedEditableImage || !previewEl?.contains(selectedEditableImage)) return;
             const maximum = normalizedImageLayout(selectedEditableImage) === 'block' ? 100 : 60;
             const normalized = Math.max(
@@ -1225,7 +1225,10 @@
             applyImageLayoutPresentation(selectedEditableImage);
             if (imageSizeRange) imageSizeRange.value = String(normalized);
             if (imageSizeValue) imageSizeValue.textContent = `${normalized}%`;
-            finishImageEdit(`Image width set to ${normalized}%.`);
+            const holding = document.documentElement.classList.contains('kf-slider-held');
+            finishImageEdit(`Image width set to ${normalized}%.`, {
+                paginate: paginate ?? !holding
+            });
         }
 
         function setSelectedImageLayout(layout) {
@@ -1394,6 +1397,15 @@
                 `${sourceImages.length} image${sourceImages.length === 1 ? '' : 's'} added and sized for this Kobo.`
             );
             return sourceImages.length;
+        }
+
+        const IMAGE_IMPORT_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']);
+
+        function isImageFile(file) {
+            const ext = String(file?.name || '').split('.').pop().toLowerCase();
+            if (IMAGE_IMPORT_EXTS.has(ext)) return true;
+            const type = String(file?.type || '').toLowerCase();
+            return type.startsWith('image/') && type !== 'image/svg+xml';
         }
 
         function blobAsDataUrl(blob) {
@@ -2396,6 +2408,10 @@
         imageDeleteBtn?.addEventListener('click', () => removeSelectedImage());
         imageSizeRange?.addEventListener('input', () => {
             resizeSelectedImage(imageSizeRange.value);
+        });
+        imageSizeRange?.addEventListener('change', () => {
+            if (document.documentElement.classList.contains('kf-slider-held')) return;
+            resizeSelectedImage(imageSizeRange.value, { paginate: true });
         });
 
         previewEl.addEventListener('pointerdown', (event) => {
@@ -4454,8 +4470,13 @@
             openFilePicker();
         });
         fileInput.addEventListener('change', (event) => {
-            const file = event.target.files?.[0];
-            if (file) processFile(file);
+            const files = Array.from(event.target.files || []);
+            if (!files.length) return;
+            if (files.length > 1 && files.every(isImageFile)) {
+                processFile(files[0], files.slice(1));
+                return;
+            }
+            processFile(files[0]);
         });
 
         ['dragenter', 'dragover'].forEach((eventName) => {
@@ -4473,8 +4494,13 @@
         });
 
         dropzone.addEventListener('drop', (event) => {
-            const file = event.dataTransfer?.files?.[0];
-            if (file) processFile(file);
+            const files = Array.from(event.dataTransfer?.files || []);
+            if (!files.length) return;
+            if (files.length > 1 && files.every(isImageFile)) {
+                processFile(files[0], files.slice(1));
+                return;
+            }
+            processFile(files[0]);
         });
 
         downloadBtn.addEventListener('click', async () => {
@@ -4534,7 +4560,7 @@
             }
         });
 
-        async function processFile(file) {
+        async function processFile(file, extraImageFiles = []) {
             releaseEditablePageLock();
             if (bodyEdited && currentOutput) {
                 const ok = confirm('Loading a new file will discard your body edits. Continue?');
@@ -4581,8 +4607,12 @@
                 } else if (ext === 'txt' || ext === 'md' || ext === 'markdown') {
                     setProgress(40, 'Parsing text');
                     output = await parsePlainText(file, ext);
+                } else if (isImageFile(file)) {
+                    const images = [file, ...extraImageFiles].filter(isImageFile);
+                    setProgress(40, images.length > 1 ? `Processing ${images.length} images` : 'Processing image');
+                    output = await parseImageFiles(images);
                 } else {
-                    throw new Error('Unsupported file type. Use DOCX, PDF, TXT, or Markdown.');
+                    throw new Error('Unsupported file type. Use DOCX, PDF, TXT, Markdown, or an image (PNG, JPEG, GIF, WebP).');
                 }
 
                 setProgress(90, 'Rendering preview');
@@ -4868,6 +4898,39 @@
         function preserveTablesEnabled() {
             const el = document.getElementById('preserveTables');
             return !el || el.checked;
+        }
+
+        async function parseImageFiles(files) {
+            const sources = [];
+            for (const file of files) {
+                sources.push(await blobAsDataUrl(file));
+            }
+            const markup = imageMarkupFromDataUrls(sources);
+            if (!markup) {
+                throw new Error('Could not read those images. Use PNG, JPEG, GIF, or WebP.');
+            }
+            setProgress(70, 'Optimizing images for this Kobo');
+            const optimized = await optimizeDocumentImages(markup);
+            if (!optimized.imageCount) {
+                throw new Error('Could not process those images for the selected Kobo. Try PNG or JPEG.');
+            }
+            const count = optimized.imageCount;
+            return {
+                title: files[0].name.replace(/\.[^.]+$/, ''),
+                author: '',
+                bodyHtml: optimized.html,
+                paragraphCount: count,
+                formatLabel: count === 1 ? 'Image' : 'Images',
+                structureNote: `${count} Kobo-optimized image${count === 1 ? '' : 's'}`,
+                status: `${count} image${count === 1 ? '' : 's'} processed and sized for the selected Kobo.`,
+                warnings: optimized.failed
+                    ? [`Could not optimize ${optimized.failed} image(s); they were skipped.`]
+                    : [],
+                imageSources: optimized.imageSources,
+                imageVariants: optimized.imageVariants,
+                imageCount: count,
+                pageCount: 0
+            };
         }
 
         async function parsePlainText(file, ext) {

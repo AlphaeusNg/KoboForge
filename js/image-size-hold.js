@@ -2,7 +2,8 @@
  * Phone-safe hold-to-adjust for the selected-image width slider.
  * Lives outside app.js so a finger-hold can capture the pointer without
  * the toolbar's pan-x scroller moving the page. Dispatches `input` so the
- * existing resizeSelectedImage listener still applies the width.
+ * existing resizeSelectedImage listener still applies the width. Pagination
+ * stays deferred until pointerup so the Kobo preview does not reflow/swing.
  */
 export function rangeValueFromClientX(rangeEl, clientX) {
     const min = Number(rangeEl?.min);
@@ -37,34 +38,55 @@ export function bindHeldImageSizeSlider(
     if (!control || !range) return;
     let activePointerId = null;
 
+    function toolbarLane() {
+        return control.closest('.tb-lane');
+    }
+
+    function setHeld(on) {
+        document.documentElement.classList.toggle('kf-slider-held', on);
+        document.body?.classList.toggle('kf-slider-held', on);
+        toolbarLane()?.classList.toggle('kf-slider-held-lane', on);
+        document.getElementById('deviceScreen')?.classList.toggle('kf-slider-held-screen', on);
+    }
+
     function applyHeldPointer(event) {
         const next = rangeValueFromClientX(range, event.clientX);
         range.value = String(next);
         range.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
+    function commitHeldPointer() {
+        range.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
     function stopHeldPointer(event) {
-        if (activePointerId === null || event.pointerId !== activePointerId) return;
+        if (activePointerId === null) return;
+        if (event && event.pointerId !== activePointerId) return;
+        const pointerId = activePointerId;
         activePointerId = null;
-        document.documentElement.classList.remove('kf-slider-held');
-        if (control.hasPointerCapture?.(event.pointerId)) {
-            control.releasePointerCapture(event.pointerId);
+        setHeld(false);
+        if (pointerId != null && control.hasPointerCapture?.(pointerId)) {
+            try {
+                control.releasePointerCapture(pointerId);
+            } catch (_) { /* already released */ }
         }
+        commitHeldPointer();
     }
 
     control.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return;
         if (control.classList.contains('hidden')) return;
         event.preventDefault();
+        event.stopPropagation();
         activePointerId = event.pointerId;
-        document.documentElement.classList.add('kf-slider-held');
+        setHeld(true);
         try {
             control.setPointerCapture(event.pointerId);
-        } catch (error) {
+        } catch (_) {
             // Capture can fail if the pointer already ended.
         }
         applyHeldPointer(event);
-    });
+    }, { capture: true });
     control.addEventListener('pointermove', (event) => {
         if (activePointerId === null || event.pointerId !== activePointerId) return;
         event.preventDefault();
@@ -74,9 +96,12 @@ export function bindHeldImageSizeSlider(
     control.addEventListener('pointercancel', stopHeldPointer);
     control.addEventListener('lostpointercapture', (event) => {
         if (event.pointerId !== activePointerId) return;
-        activePointerId = null;
-        document.documentElement.classList.remove('kf-slider-held');
+        stopHeldPointer(event);
     });
+    control.addEventListener('touchstart', (event) => {
+        if (control.classList.contains('hidden')) return;
+        event.preventDefault();
+    }, { passive: false });
     control.addEventListener('touchmove', (event) => {
         if (activePointerId === null) return;
         event.preventDefault();
