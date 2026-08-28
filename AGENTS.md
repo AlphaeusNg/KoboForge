@@ -32,7 +32,8 @@ tools/test_runtime_dependencies.mjs
 tools/test_workflow.mjs
 tools/browser/koboforge.spec.mjs
 playwright.config.mjs
-tools/fixtures/       # slim DOCX fixtures (e.g. Numbers 13–15 outline)
+tools/fixtures/       # focused synthetic/slim conversion fixtures
+tools/fixtures/real-documents/ # auto-discovered real conversion corpus
 ```
 
 Runtime conversion libraries load from CDNs only when their workflow needs them; failed loads show a retryable connection error rather than disabling other formats.
@@ -79,7 +80,7 @@ python3 -m http.server 8000
 # Optional: EPUBCHECK_JAR=/path/to/epubcheck.jar node tools/test_epub_package.mjs
 ```
 
-Hosted CI validates the package fixture with pinned EPUBCheck `5.3.0` on Java 21; the ZIP is checksummed before execution. The browser suite injects locked JSZip and Mammoth bundles, blocks network dependencies, and verifies TXT plus the slim sermon DOCX through downloaded EPUB contents.
+Hosted CI validates the package fixture with pinned EPUBCheck `5.3.0` on Java 21; the ZIP is checksummed before execution. The browser suite injects locked JSZip and Mammoth bundles, serves the production-pinned PDF.js bundle locally, blocks network dependencies, and verifies TXT, the slim sermon DOCX, and every supported file in `tools/fixtures/real-documents/` through downloaded EPUB contents. Add stable content thresholds in that folder's `expectations.json` when a fixture should guard more than successful import/export.
 
 Check desktop and mobile rendering, browser console errors, DOCX/PDF inline images, device retargeting, direct edits, and EPUB ZIP contents.
 

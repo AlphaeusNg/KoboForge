@@ -1,25 +1,48 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-28 (KoboForge Cycle 74)
+Last updated: 2026-08-28 (KoboForge Cycle 75)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.28.3`.
+- Deployment version: `2026.08.28.4`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 97 package
   assertions, and recursive syntax checks.
 - Automated verification: least-privilege GitHub Actions runs cheap policy/unit
-  fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, both offline
-  browser-to-downloaded-EPUB flows, and recursive syntax checks on Node 24. The
+  fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, offline
+  browser-to-downloaded-EPUB flows (including every real-document corpus file),
+  and recursive syntax checks on Node 24. The
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
-  checksum-verified before every extraction, including cache hits. Thirteen
-  offline real-Chromium journeys include fail-closed image, CSS, and active-HTML
-  handling.
+  checksum-verified before every extraction, including cache hits. Eighteen
+  offline real-Chromium journeys include real DOCX/PDF conversion and
+  fail-closed image, CSS, and active-HTML handling.
 
-## Latest cycle: process images and keep the size slider still
+## Latest cycle: protect real document conversions
+
+### Why this was selected
+
+The user's sermon outline DOCX and PDF were loose root files, and the test suite
+could only prove a slim DOCX plus a simulated PDF parser. A parser or packaging
+change could therefore pass while damaging documents used in practice.
+
+### Changes
+
+- Moved both Numbers 20–21 sermon files into a documented, public-safe
+  `tools/fixtures/real-documents/` corpus.
+- The browser suite auto-discovers supported DOCX, PDF, text, Markdown, and image
+  files placed there, then exercises actual UI import, editable preview, and
+  downloaded EPUB inspection for each one.
+- Content expectations guard minimum word/page recovery and stable phrases in
+  both preview and EPUB output; unknown extensions fail loudly instead of being
+  skipped.
+- Pinned production and test PDF.js to `6.2.108`, with the real browser test
+  serving the exact production module and worker locally so CI remains offline.
+- Version `2026.08.28.4`.
+
+## Previous cycle: process images and keep the size slider still
 
 ### Why this was selected
 

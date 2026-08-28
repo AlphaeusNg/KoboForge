@@ -1,0 +1,19 @@
+{
+  "Numbers 20-21 Sermon Outline.docx": {
+    "minWords": 1200,
+    "contains": [
+      "Miriam died there and was buried there",
+      "The Changing of Generations",
+      "Discussion Questions"
+    ]
+  },
+  "Numbers 20-21 Sermon Outline.pdf": {
+    "minWords": 1200,
+    "sourcePages": 4,
+    "contains": [
+      "Miriam died there and was buried there",
+      "The Changing of Generations",
+      "Discussion Questions"
+    ]
+  }
+}

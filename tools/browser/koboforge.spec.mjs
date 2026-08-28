@@ -1,7 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
+import { extname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
+import { RUNTIME_DEPENDENCIES } from "../../js/runtime-dependencies.js";
+
+const PDFJS_MODULE_URL = RUNTIME_DEPENDENCIES.pdfjs.url;
+const PDFJS_WORKER_URL = RUNTIME_DEPENDENCIES.pdfjs.workerUrl;
 
 const jsZipBrowserPath = fileURLToPath(
   new URL("../../node_modules/jszip/dist/jszip.min.js", import.meta.url),
@@ -9,9 +14,54 @@ const jsZipBrowserPath = fileURLToPath(
 const mammothBrowserPath = fileURLToPath(
   new URL("../../node_modules/mammoth/mammoth.browser.min.js", import.meta.url),
 );
+const pdfJsBrowserPath = fileURLToPath(
+  new URL("../../node_modules/pdfjs-dist/build/pdf.min.mjs", import.meta.url),
+);
+const pdfJsWorkerPath = fileURLToPath(
+  new URL("../../node_modules/pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url),
+);
 const docxFixturePath = fileURLToPath(
   new URL("../fixtures/numbers-13-15-outline-slim.docx", import.meta.url),
 );
+const realDocumentsDir = fileURLToPath(
+  new URL("../fixtures/real-documents/", import.meta.url),
+);
+const realDocumentExpectations = JSON.parse(await readFile(
+  join(realDocumentsDir, "expectations.json"),
+  "utf8",
+));
+const supportedRealDocumentFormats = Object.freeze({
+  ".docx": { formatLabel: "DOCX", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+  ".pdf": { formatLabel: "PDF", mimeType: "application/pdf" },
+  ".txt": { formatLabel: "TXT", mimeType: "text/plain" },
+  ".md": { formatLabel: "Markdown", mimeType: "text/markdown" },
+  ".markdown": { formatLabel: "Markdown", mimeType: "text/markdown" },
+  ".png": { formatLabel: "Image", mimeType: "image/png", image: true },
+  ".jpg": { formatLabel: "Image", mimeType: "image/jpeg", image: true },
+  ".jpeg": { formatLabel: "Image", mimeType: "image/jpeg", image: true },
+  ".gif": { formatLabel: "Image", mimeType: "image/gif", image: true },
+  ".webp": { formatLabel: "Image", mimeType: "image/webp", image: true },
+});
+const realDocumentControlFiles = new Set(["README.md", "expectations.json"]);
+const realDocumentNames = (await readdir(realDocumentsDir, { withFileTypes: true }))
+  .filter((entry) => entry.isFile())
+  .map((entry) => entry.name)
+  .filter((name) => !name.startsWith(".") && !realDocumentControlFiles.has(name))
+  .sort((left, right) => left.localeCompare(right));
+const unsupportedRealDocumentNames = realDocumentNames.filter((name) => (
+  !supportedRealDocumentFormats[extname(name).toLowerCase()]
+));
+const staleRealDocumentExpectations = Object.keys(realDocumentExpectations).filter((name) => (
+  !realDocumentNames.includes(name)
+));
+const realDocumentFixtures = realDocumentNames
+  .filter((name) => supportedRealDocumentFormats[extname(name).toLowerCase()])
+  .map((name) => ({
+    name,
+    path: join(realDocumentsDir, name),
+    ...supportedRealDocumentFormats[extname(name).toLowerCase()],
+    ...(realDocumentExpectations[name] || {}),
+  }));
 const runtimeErrors = new WeakMap();
 
 async function studyFormattingDocxBuffer() {
@@ -180,6 +230,169 @@ async function openBookDetails(page) {
       el.open = true;
     });
   }
+}
+
+async function routeLocalPdfJs(page) {
+  const [moduleBody, workerBody] = await Promise.all([
+    readFile(pdfJsBrowserPath),
+    readFile(pdfJsWorkerPath),
+  ]);
+  const response = (body) => ({
+    status: 200,
+    contentType: "application/javascript",
+    headers: { "access-control-allow-origin": "*" },
+    body,
+  });
+  await page.route(PDFJS_MODULE_URL, async (route) => route.fulfill(response(moduleBody)));
+  await page.route(PDFJS_WORKER_URL, async (route) => route.fulfill(response(workerBody)));
+}
+
+function normalizeDocumentText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+test("real-document corpus contains supported conversion inputs", () => {
+  expect(realDocumentFixtures.length, "add at least one real conversion document").toBeGreaterThan(0);
+  expect(
+    unsupportedRealDocumentNames,
+    "move unsupported files out of the corpus or add an intentional KoboForge format mapping",
+  ).toEqual([]);
+  expect(
+    staleRealDocumentExpectations,
+    "each expectations.json key should name a discovered corpus file",
+  ).toEqual([]);
+  for (const [name, expectation] of Object.entries(realDocumentExpectations)) {
+    const isObject = !!expectation && typeof expectation === "object" && !Array.isArray(expectation);
+    expect(isObject, `${name} expectations should be an object`).toBe(true);
+    if (!isObject) continue;
+    if (expectation.minWords !== undefined) {
+      expect(
+        Number.isInteger(expectation.minWords) && expectation.minWords > 0,
+        `${name} minWords should be a positive integer`,
+      ).toBe(true);
+    }
+    if (expectation.sourcePages !== undefined) {
+      expect(
+        Number.isInteger(expectation.sourcePages) && expectation.sourcePages > 0,
+        `${name} sourcePages should be a positive integer`,
+      ).toBe(true);
+    }
+    if (expectation.contains !== undefined) {
+      expect(
+        Array.isArray(expectation.contains)
+          && expectation.contains.every((phrase) => typeof phrase === "string" && phrase.length > 0),
+        `${name} contains should be an array of non-empty strings`,
+      ).toBe(true);
+    }
+  }
+});
+
+for (const fixture of realDocumentFixtures) {
+  test(`converts real document and exports EPUB: ${fixture.name}`, async ({ page }, testInfo) => {
+    testInfo.setTimeout(60_000);
+    if (fixture.formatLabel === "PDF") await routeLocalPdfJs(page);
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+    await page.locator("#fileInput").setInputFiles({
+      name: fixture.name,
+      mimeType: fixture.mimeType,
+      buffer: await readFile(fixture.path),
+    });
+
+    const preview = page.locator("#deviceBookContent");
+    await expect(page.locator("#status")).toHaveText(
+      `${fixture.formatLabel} ready · editable · Kobo Libra Colour`,
+      { timeout: 30_000 },
+    );
+    await expect(page.locator("#downloadBtn")).toBeEnabled();
+    await expect(preview).toHaveAttribute("contenteditable", "true");
+
+    if (fixture.image) {
+      await expect(preview.locator("img")).toHaveCount(1);
+    } else {
+      const minimumWords = fixture.minWords || 1;
+      const displayedWords = Number(
+        ((await page.locator("#statWords").textContent()) || "0").replace(/\D/g, ""),
+      );
+      expect(displayedWords, "preview word count should not collapse").toBeGreaterThanOrEqual(minimumWords);
+      const previewText = normalizeDocumentText(await preview.textContent());
+      for (const phrase of fixture.contains || []) {
+        expect(previewText, `preview should retain: ${phrase}`).toContain(phrase);
+      }
+    }
+    if (fixture.sourcePages) {
+      const sourcePages = preview.locator(".kf-pdf-page");
+      await expect(sourcePages).toHaveCount(fixture.sourcePages);
+      expect(await sourcePages.evaluateAll((pages) => (
+        pages.map((page) => page.getAttribute("data-source-page"))
+      ))).toEqual(
+        Array.from({ length: fixture.sourcePages }, (_, index) => String(index + 1)),
+      );
+    }
+
+    const downloadPromise = page.waitForEvent("download");
+    await page.locator("#downloadBtn").click();
+    const download = await downloadPromise;
+    const downloadPath = await download.path();
+    expect(downloadPath).toBeTruthy();
+
+    const archive = await JSZip.loadAsync(await readFile(downloadPath));
+    expect(await archive.file("mimetype").async("string")).toBe("application/epub+zip");
+    const chapterNames = Object.keys(archive.files)
+      .filter((name) => /^OEBPS\/chapter-\d+\.xhtml$/.test(name))
+      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+    expect(chapterNames.length, "export should contain at least one EPUB chapter").toBeGreaterThan(0);
+    const chapterHtml = await Promise.all(
+      chapterNames.map((name) => archive.file(name).async("string")),
+    );
+    const joinedChapterHtml = chapterHtml.join("\n");
+    expect(joinedChapterHtml).not.toContain("data:image/");
+    expect(joinedChapterHtml).not.toMatch(/<(?:script|iframe|object|embed|form)\b/i);
+
+    if (fixture.image) {
+      expect(joinedChapterHtml).toMatch(/<img\b/i);
+      const imageReferences = await page.evaluate((chapters) => (
+        chapters.flatMap((html) => {
+          const doc = new DOMParser().parseFromString(html, "application/xhtml+xml");
+          return Array.from(doc.querySelectorAll("img[src]"), (image) => image.getAttribute("src"));
+        })
+      ), chapterHtml);
+      expect(imageReferences.length, "image fixture should retain an EPUB image reference").toBeGreaterThan(0);
+      for (const reference of imageReferences) {
+        const archivePath = posix.normalize(posix.join("OEBPS", reference));
+        expect(archive.file(archivePath), `EPUB image should resolve: ${reference}`).not.toBeNull();
+      }
+    } else {
+      const epubText = await page.evaluate((chapters) => (
+        chapters.map((html) => {
+          const doc = new DOMParser().parseFromString(html, "application/xhtml+xml");
+          return doc.documentElement?.textContent || "";
+        }).join(" ").replace(/\s+/g, " ").trim()
+      ), chapterHtml);
+      const epubWords = epubText ? epubText.split(/\s+/).length : 0;
+      expect(epubWords, "downloaded EPUB word count should not collapse").toBeGreaterThanOrEqual(
+        fixture.minWords || 1,
+      );
+      for (const phrase of fixture.contains || []) {
+        expect(epubText, `downloaded EPUB should retain: ${phrase}`).toContain(phrase);
+      }
+      if (fixture.sourcePages) {
+        const epubSourcePages = await page.evaluate((chapters) => (
+          chapters.flatMap((html) => {
+            const doc = new DOMParser().parseFromString(html, "application/xhtml+xml");
+            return Array.from(
+              doc.querySelectorAll(".kf-pdf-page[data-source-page]"),
+              (element) => element.getAttribute("data-source-page"),
+            );
+          })
+        ), chapterHtml);
+        expect(epubSourcePages).toEqual(
+          Array.from({ length: fixture.sourcePages }, (_, index) => String(index + 1)),
+        );
+      }
+    }
+  });
 }
 
 test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ page }) => {
@@ -575,7 +788,7 @@ test("retains DOCX underline and intentional writing space in EPUB", async ({ pa
 
 test("keeps single-column PDF words ordered and correctly spaced in EPUB", async ({ page }) => {
   await page.route(
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs",
+    PDFJS_MODULE_URL,
     async (route) => route.fulfill({
       status: 200,
       contentType: "application/javascript",

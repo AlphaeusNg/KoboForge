@@ -12,8 +12,8 @@ export const RUNTIME_DEPENDENCIES = Object.freeze({
   pdfjs: Object.freeze({
     key: "pdfjs",
     label: "PDF converter",
-    url: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs",
-    workerUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs",
+    url: "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.min.mjs",
+    workerUrl: "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.worker.min.mjs",
   }),
 });
 
