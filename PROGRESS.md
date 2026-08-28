@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-25 (KoboForge Cycle 72)
+Last updated: 2026-08-28 (KoboForge Cycle 73)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.25.8`.
+- Deployment version: `2026.08.28.1`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 97 package
@@ -19,7 +19,24 @@ Last updated: 2026-08-25 (KoboForge Cycle 72)
   offline real-Chromium journeys include fail-closed image, CSS, and active-HTML
   handling.
 
-## Latest cycle: show reading time and Kobo pages
+## Latest cycle: hold image-size slider without scrolling the page
+
+### Why this was selected
+
+On a phone, the selected-image width slider lives in a horizontally scrolling
+toolbar. Holding it sometimes panned the page or the toolbar instead of moving
+the thumb, so resize was inconsistent.
+
+### Changes
+
+- The image-size control uses `touch-action: none` so a hold does not inherit
+  the toolbar's `pan-x` scrolling.
+- Pointer capture maps finger position onto the range value, so the thumb
+  tracks the hold even if native range dragging fights the parent scroller.
+- `html.kf-slider-held` disables page overscroll for the duration of the hold.
+- Version `2026.08.28.1`.
+
+## Previous cycle: show reading time and Kobo pages
 
 ### Why this was selected
 
