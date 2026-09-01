@@ -395,6 +395,53 @@ for (const fixture of realDocumentFixtures) {
   });
 }
 
+test("replaces an automatic book title when a new document is imported", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+
+  await page.locator("#fileInput").setInputFiles({
+    name: "first-sermon.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("The first sermon body."),
+  });
+  await expect(page.locator("#status")).toHaveText(
+    "TXT ready · editable · Kobo Libra Colour",
+  );
+  await expect(page.locator("#bookTitle")).toHaveValue("first-sermon");
+
+  await page.locator("#fileInput").setInputFiles({
+    name: "second-sermon.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("The replacement sermon body."),
+  });
+  await expect(page.locator("#status")).toHaveText(
+    "TXT ready · editable · Kobo Libra Colour",
+  );
+  await expect(page.locator("#deviceBookContent")).toContainText("The replacement sermon body.");
+  await expect(page.locator("#bookTitle")).toHaveValue("second-sermon");
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#downloadBtn").click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("second-sermon.epub");
+  const archive = await JSZip.loadAsync(await readFile(await download.path()));
+  const packageDocument = await archive.file("OEBPS/content.opf").async("string");
+  expect(packageDocument).toContain("<dc:title>second-sermon</dc:title>");
+  expect(packageDocument).not.toContain("<dc:title>first-sermon</dc:title>");
+
+  await openBookDetails(page);
+  await page.locator("#bookTitle").fill("Combined sermon notes");
+  await page.locator("#fileInput").setInputFiles({
+    name: "third-sermon.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("A third source under a deliberate book title."),
+  });
+  await expect(page.locator("#status")).toHaveText(
+    "TXT ready · editable · Kobo Libra Colour",
+  );
+  await expect(page.locator("#bookTitle")).toHaveValue("Combined sermon notes");
+});
+
 test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");

@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-08-28 (KoboForge Cycle 75)
+Last updated: 2026-09-01 (KoboForge Cycle 76)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.08.28.4`.
+- Deployment version: `2026.09.01.1`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 97 package
@@ -16,11 +16,54 @@ Last updated: 2026-08-28 (KoboForge Cycle 75)
   browser-to-downloaded-EPUB flows (including every real-document corpus file),
   and recursive syntax checks on Node 24. The
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
-  checksum-verified before every extraction, including cache hits. Eighteen
+  checksum-verified before every extraction, including cache hits. Nineteen
   offline real-Chromium journeys include real DOCX/PDF conversion and
   fail-closed image, CSS, and active-HTML handling.
 
-## Latest cycle: protect real document conversions
+## Latest cycle: replace stale automatic book titles
+
+### Why this was selected
+
+After importing one document, replacing it with another changed the editable
+body but retained the first filename-derived book title. Download then named
+the EPUB after the old document and wrote that stale title into package
+metadata.
+
+### Changes
+
+- Track whether the current title is KoboForge's automatic filename default.
+- Refresh that automatic title after a successful replacement while preserving
+  a deliberate title entered by the user for a combined or renamed book.
+- Add a Chromium import-replace-export journey that checks the preview, EPUB
+  filename, package metadata, and custom-title preservation.
+- Bump deployment version to `2026.09.01.1`.
+
+### Verification and scores
+
+- Test-first: after the second import, the new preview was ready but
+  `#bookTitle` remained `first-sermon` for the full eight-second assertion.
+- The focused Chromium replacement journey passes after the fix in 1.5
+  seconds, including downloaded EPUB filename and OPF metadata inspection.
+- `npm test` passes workflow, dependency 10, runtime dependency 13, logic,
+  document-fidelity, image 32, and package 97 assertions; recursive JavaScript
+  syntax, diff checks, and the zero-vulnerability npm audit also pass.
+- The real-document corpus passes 3/3 in 2.4 seconds, converting and opening
+  EPUBs from both the Numbers 20–21 sermon DOCX and the real four-page PDF.
+- `CI=1 npm run test:browser`: 19/19 offline Chromium journeys pass in 14.7
+  seconds, up from 18.
+- Correctness/reliability: 5/10 -> 10/10 (body and package identity now change
+  together on replacement).
+- Verifiability: 4/10 -> 10/10 (the real download name and OPF title are both
+  inspected after sequential imports).
+- User experience: 4/10 -> 10/10 (automatic metadata stays truthful without
+  overwriting a deliberate multi-file title).
+
+### Explicit next opportunity
+
+No higher-impact unblocked KoboForge item is currently recorded. Rotate
+repositories and return when new import, reader, or corpus evidence appears.
+
+## Previous cycle: protect real document conversions
 
 ### Why this was selected
 

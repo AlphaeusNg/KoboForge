@@ -221,6 +221,7 @@
 
         let currentOutput = null;
         let currentFile = null;
+        let automaticBookTitle = '';
         let bodyEdited = false;
         let editMode = 'edit'; // edit | diff | html
         let commitTimer = null;
@@ -4396,6 +4397,7 @@
             documentImageConversionToken += 1;
             currentFile = null;
             currentOutput = null;
+            automaticBookTitle = '';
             selectedEditableImage = null;
             draggedEditableImage = null;
             imageClipboardHtml = '';
@@ -4591,9 +4593,6 @@
             findInBookWrap?.classList.add('hidden');
             previewEl.innerHTML = '<p class="kf-empty-hint">Processing…</p>';
             statusEl.textContent = `Reading ${file.name} locally…`;
-            if (!bookTitleInput.value.trim()) {
-                bookTitleInput.value = file.name.replace(/\.[^.]+$/, '');
-            }
             setProgress(5, 'Reading file');
 
             try {
@@ -4616,6 +4615,15 @@
                 }
 
                 setProgress(90, 'Rendering preview');
+                const nextDefaultTitle = output.title || file.name.replace(/\.[^.]+$/, '');
+                const enteredTitle = bookTitleInput.value.trim();
+                if (!enteredTitle || enteredTitle === automaticBookTitle) {
+                    bookTitleInput.value = nextDefaultTitle;
+                    automaticBookTitle = nextDefaultTitle;
+                } else {
+                    // A deliberate title can describe a multi-file book and should survive replacement.
+                    automaticBookTitle = '';
+                }
                 currentOutput = output;
                 const canonical = canonicalizeBody(output.bodyHtml);
                 // Snapshot for git-like diff; export always uses bodyHtml after sync

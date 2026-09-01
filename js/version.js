@@ -6,7 +6,7 @@
   "use strict";
 
   global.SITE_VERSION = {
-      id: "2026.08.28.4",
+      id: "2026.09.01.1",
     repo: "KoboForge",
     label: "Kobo EPUB converter",
     asset: function (path) {
