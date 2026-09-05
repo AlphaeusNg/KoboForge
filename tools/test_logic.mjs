@@ -584,6 +584,11 @@ assert.ok(
 );
 assert.ok(page.includes('MAX_SOURCE_IMAGE_B64') && page.includes('optimizeDocumentImages(doc.body.innerHTML)'),
     'DOCX images accepted then optimized for the selected Kobo');
+assert.ok(
+    page.includes('convertInput.arrayBuffer = null')
+        && page.includes('docxInput = null'),
+    'DOCX input buffers are released before DOM and image post-processing'
+);
 assert.ok(page.includes('extractPdfPageImages(page') && page.includes('renderPdfPageAsImage(page)'),
     'PDF embedded images and scanned pages are preserved inline');
 assert.ok(page.includes('retargetCurrentDocumentImages') && page.includes('data-kf-image-id'),

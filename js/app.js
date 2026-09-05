@@ -4830,7 +4830,15 @@
                     })
                 );
             }
-            const result = await mammoth.convertToHtml(convertInput, convertOptions);
+            let result;
+            try {
+                result = await mammoth.convertToHtml(convertInput, convertOptions);
+            } finally {
+                // Mammoth has finished reading the archive. Do not retain its
+                // full normalized DOCX buffer through DOM and image processing.
+                convertInput.arrayBuffer = null;
+                docxInput = null;
+            }
             const doc = new DOMParser().parseFromString(
                 stripInvalidXmlChars(result.value || ''),
                 'text/html'
