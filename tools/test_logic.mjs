@@ -571,8 +571,17 @@ assert.ok(page.includes('insertUnorderedList') && page.includes('insertOrderedLi
 assert.ok(page.includes('stripInvalidXmlChars'), 'XML control-char strip for Kobo');
 assert.ok(!script.includes("if (/\\//.test(match.slice(0, -1)))"),
     'EPUB void-tag detection must not mistake image path slashes for self-closing XHTML');
-assert.ok(page.includes('arrayBuffer.slice(0)'), 'PDF buffer copy before getDocument');
+assert.ok(
+    page.includes('new Uint8Array(await file.arrayBuffer())')
+        && !page.includes('arrayBuffer.slice(0)'),
+    'PDF opens without retaining a second full-size input buffer'
+);
 assert.ok(page.includes('Failed to extract page'), 'per-page PDF isolation');
+assert.ok(
+    page.includes('await optimizeDocumentImages(rawImageMarkup, imageOptimization)')
+        && page.includes('page?.cleanup?.()'),
+    'PDF image conversion and resource cleanup happen one source page at a time'
+);
 assert.ok(page.includes('MAX_SOURCE_IMAGE_B64') && page.includes('optimizeDocumentImages(doc.body.innerHTML)'),
     'DOCX images accepted then optimized for the selected Kobo');
 assert.ok(page.includes('extractPdfPageImages(page') && page.includes('renderPdfPageAsImage(page)'),

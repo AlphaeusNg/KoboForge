@@ -221,7 +221,7 @@
 
         let currentOutput = null;
         let currentFile = null;
-        let automaticBookTitle = '';
+        let bookTitleWasEdited = false;
         let bodyEdited = false;
         let editMode = 'edit'; // edit | diff | html
         let commitTimer = null;
@@ -4397,7 +4397,7 @@
             documentImageConversionToken += 1;
             currentFile = null;
             currentOutput = null;
-            automaticBookTitle = '';
+            bookTitleWasEdited = false;
             selectedEditableImage = null;
             draggedEditableImage = null;
             imageClipboardHtml = '';
@@ -4617,12 +4617,9 @@
                 setProgress(90, 'Rendering preview');
                 const nextDefaultTitle = output.title || file.name.replace(/\.[^.]+$/, '');
                 const enteredTitle = bookTitleInput.value.trim();
-                if (!enteredTitle || enteredTitle === automaticBookTitle) {
+                if (!enteredTitle || !bookTitleWasEdited) {
                     bookTitleInput.value = nextDefaultTitle;
-                    automaticBookTitle = nextDefaultTitle;
-                } else {
-                    // A deliberate title can describe a multi-file book and should survive replacement.
-                    automaticBookTitle = '';
+                    bookTitleWasEdited = false;
                 }
                 currentOutput = output;
                 const canonical = canonicalizeBody(output.bodyHtml);
@@ -4788,17 +4785,16 @@
         }
 
         async function parseDocx(file) {
-            const arrayBuffer = await file.arrayBuffer();
             const mammoth = await loadScriptDependency(RUNTIME_DEPENDENCIES.mammoth);
             const warnings = [];
             let skippedImages = 0;
-            let docxInput = arrayBuffer;
+            let docxInput = await file.arrayBuffer();
             let fidelityStats = null;
             let listPlan = [];
             let spacingPlan = [];
             try {
                 const JSZipCtor = await loadScriptDependency(RUNTIME_DEPENDENCIES.jszip);
-                const normalized = await prepareDocxForFidelity(arrayBuffer, { JSZipCtor });
+                const normalized = await prepareDocxForFidelity(docxInput, { JSZipCtor });
                 docxInput = normalized.arrayBuffer;
                 fidelityStats = normalized.stats;
                 listPlan = normalized.listPlan || [];
@@ -5141,9 +5137,15 @@
 
                 const canvas = pdfImageToCanvas(image);
                 if (!canvas || canvas.width < 24 || canvas.height < 24 || canvas.width * canvas.height < 2048) {
+                    if (canvas) {
+                        canvas.width = 1;
+                        canvas.height = 1;
+                    }
                     continue;
                 }
                 images.push(canvas.toDataURL('image/png'));
+                canvas.width = 1;
+                canvas.height = 1;
             }
             return images;
         }
@@ -5164,16 +5166,18 @@
             context.fillStyle = '#f4f1e8';
             context.fillRect(0, 0, canvas.width, canvas.height);
             await page.render({ canvasContext: context, viewport }).promise;
-            return canvas.toDataURL('image/jpeg', 0.88);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+            canvas.width = 1;
+            canvas.height = 1;
+            return dataUrl;
         }
 
         async function parsePdf(file) {
             await loadPdfJs();
-            const arrayBuffer = await file.arrayBuffer();
             setProgress(12, 'Opening PDF');
-            // Copy into a fresh Uint8Array. PDF.js may transfer the buffer to the
-            // worker; a detached ArrayBuffer after page 1 is a common multipage hang.
-            const data = new Uint8Array(arrayBuffer.slice(0));
+            // Give PDF.js the file's only ArrayBuffer. It may transfer/detach it,
+            // and KoboForge does not need a second full-size copy after opening.
+            const data = new Uint8Array(await file.arrayBuffer());
             let pdf;
             try {
                 pdf = await pdfjsLib.getDocument({
@@ -5202,9 +5206,18 @@
             const failedPages = [];
             const total = pdf.numPages || 1;
             const warnings = [];
+            const imageOptimization = {
+                imageSources: {},
+                imageVariants: {},
+                variantBySource: new Map(),
+                target: documentImageTarget()
+            };
+            let optimizedImageCount = 0;
+            let failedImageCount = 0;
 
             for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
                 const pageParts = [];
+                let page = null;
                 let sourcePageKind = '';
                 let pageLayout = {
                     startZone: 'top',
@@ -5213,7 +5226,7 @@
                     remainingRatio: 0.92
                 };
                 try {
-                    const page = await pdf.getPage(pageNumber);
+                    page = await pdf.getPage(pageNumber);
                     const textContent = await page.getTextContent();
                     let operatorList = null;
                     try {
@@ -5323,7 +5336,7 @@
                                 : Math.round((Number(pageLayout.remainingRatio) || 0.72) * 100)
                         )
                     );
-                    const imageParts = pageImages.map((source, imageIndex) => {
+                    const rawImageMarkup = pageImages.map((source, imageIndex) => {
                         detectedImageCount += 1;
                         return (
                             `<figure class="kf-document-image kf-image-${imageLayout}">`
@@ -5332,7 +5345,23 @@
                             + `data-kf-width-mode="auto" data-kf-fit-height="${fitHeightPercent}" `
                             + `data-kf-page-images="${Math.max(1, pageImages.length)}"></figure>`
                         );
-                    });
+                    }).join('');
+                    // The page's PDF.js bitmaps are no longer needed once their
+                    // compact sources and text blocks have been captured.
+                    try {
+                        page.cleanup?.();
+                    } catch (cleanupError) {
+                        console.warn(`[KoboForge] PDF cleanup page ${pageNumber}`, cleanupError);
+                    }
+                    page = null;
+                    const optimizedPageImages = rawImageMarkup
+                        ? await optimizeDocumentImages(rawImageMarkup, imageOptimization)
+                        : { html: '', ...imageOptimization, imageCount: 0, failed: 0 };
+                    imageOptimization.imageSources = optimizedPageImages.imageSources;
+                    imageOptimization.imageVariants = optimizedPageImages.imageVariants;
+                    optimizedImageCount += optimizedPageImages.imageCount;
+                    failedImageCount += optimizedPageImages.failed;
+                    const imageParts = optimizedPageImages.html ? [optimizedPageImages.html] : [];
                     if (pageLayout.sideRail) pageParts.unshift(...imageParts);
                     else pageParts.push(...imageParts);
                 } catch (pageErr) {
@@ -5343,6 +5372,10 @@
                     pageParts.push(
                         `<p class="preserve-structure"><em>(Failed to extract page ${pageNumber}: ${escapeHtml(pageErr?.message || 'unknown error')})</em></p>`
                     );
+                } finally {
+                    try {
+                        page?.cleanup?.();
+                    } catch (_) { /* continue; the document-level destroy is the final fallback */ }
                 }
                 const startZone = ['top', 'middle', 'bottom'].includes(pageLayout.startZone)
                     ? pageLayout.startZone
@@ -5365,11 +5398,17 @@
             const html = parts.length
                 ? parts.join('')
                 : '<p class="preserve-structure">No extractable text found.</p>';
-            setProgress(84, 'Optimizing PDF images');
-            const optimized = await optimizeDocumentImages(html);
+            setProgress(84, 'Finalizing PDF');
+            const optimized = {
+                html,
+                imageSources: imageOptimization.imageSources,
+                imageVariants: imageOptimization.imageVariants,
+                imageCount: optimizedImageCount,
+                failed: failedImageCount
+            };
 
             try {
-                pdf.destroy?.();
+                await pdf.destroy?.();
             } catch (_) { /* ignore */ }
 
             const paragraphCount = (optimized.html.match(/<p\b/gi) || []).length || 1;
@@ -7435,6 +7474,9 @@
             context.imageSmoothingEnabled = true;
             context.imageSmoothingQuality = 'high';
             context.drawImage(image, 0, 0, width, height);
+            // Pixels now live in the smaller target canvas; do not retain the
+            // full decoded source while applying Kobo treatment and encoding.
+            image.removeAttribute('src');
 
             const tone = target.profile.isColour ? 'colour' : 'dither';
             applyEinkTreatment(context, width, height, tone, target.profile.isColour ? 105 : 110);
@@ -7442,8 +7484,11 @@
             const mimeType = tone === 'colour' && sourceMime === 'image/jpeg'
                 ? 'image/jpeg'
                 : 'image/png';
+            const dataUrl = canvas.toDataURL(mimeType, mimeType === 'image/jpeg' ? 0.88 : undefined);
+            canvas.width = 1;
+            canvas.height = 1;
             return {
-                dataUrl: canvas.toDataURL(mimeType, mimeType === 'image/jpeg' ? 0.88 : undefined),
+                dataUrl,
                 width,
                 height,
                 tone,
@@ -7462,6 +7507,7 @@
             {
                 imageSources = {},
                 imageVariants = {},
+                variantBySource = new Map(),
                 target = documentImageTarget()
             } = {}
         ) {
@@ -7490,7 +7536,10 @@
                 const cacheKey = `${imageId}:${target.profileKey}:${target.orientation}`;
                 try {
                     if (!imageVariants[cacheKey]) {
-                        imageVariants[cacheKey] = await convertImageSourceForKobo(source, target);
+                        if (!variantBySource.has(source)) {
+                            variantBySource.set(source, await convertImageSourceForKobo(source, target));
+                        }
+                        imageVariants[cacheKey] = variantBySource.get(source);
                     }
                     const variant = imageVariants[cacheKey];
                     img.setAttribute('src', variant.dataUrl);
@@ -7530,6 +7579,7 @@
                 html: root.innerHTML,
                 imageSources,
                 imageVariants,
+                variantBySource,
                 imageCount: converted,
                 failed
             };
@@ -7544,6 +7594,7 @@
             const common = {
                 imageSources: output.imageSources,
                 imageVariants: output.imageVariants || {},
+                variantBySource: new Map(),
                 target
             };
             const body = await optimizeDocumentImages(output.bodyHtml, common);
@@ -7578,6 +7629,9 @@
         }
 
         // Keep outline in sync when title changes
+        bookTitleInput?.addEventListener('input', () => {
+            bookTitleWasEdited = true;
+        });
         bookTitleInput?.addEventListener('change', () => {
             if (currentOutput) {
                 if (isDeviceEditableMode()) syncBodyFromUi();

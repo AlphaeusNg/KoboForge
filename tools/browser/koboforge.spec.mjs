@@ -440,6 +440,17 @@ test("replaces an automatic book title when a new document is imported", async (
     "TXT ready · editable · Kobo Libra Colour",
   );
   await expect(page.locator("#bookTitle")).toHaveValue("Combined sermon notes");
+
+  await page.locator("#bookTitle").fill("third-sermon");
+  await page.locator("#fileInput").setInputFiles({
+    name: "fourth-sermon.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("A fourth source under a title matching the previous automatic title."),
+  });
+  await expect(page.locator("#status")).toHaveText(
+    "TXT ready · editable · Kobo Libra Colour",
+  );
+  await expect(page.locator("#bookTitle")).toHaveValue("third-sermon");
 });
 
 test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ page }) => {

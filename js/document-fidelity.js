@@ -656,6 +656,9 @@ export async function prepareDocxForFidelity(arrayBuffer, {
         throw new Error('DOCX fidelity helpers are unavailable in this browser.');
     }
     const zip = await JSZipCtor.loadAsync(arrayBuffer);
+    // JSZip now owns the compressed entries; release the caller's full buffer
+    // before generating Mammoth's normalized DOCX copy.
+    arrayBuffer = null;
     const documentFile = zip.file('word/document.xml');
     if (!documentFile) {
         throw new Error('This DOCX has no word/document.xml body.');
