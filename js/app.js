@@ -5212,10 +5212,17 @@
                     topRatio: 0,
                     remainingRatio: 0.92
                 };
+                // Announce the page and yield before heavy work so the UI can paint.
+                setProgress(
+                    12 + ((pageNumber - 1) / total) * 70,
+                    `PDF page ${pageNumber} of ${total}`
+                );
+                await yieldForExportProgress();
+                let page = null;
+                let operatorList = null;
                 try {
-                    const page = await pdf.getPage(pageNumber);
+                    page = await pdf.getPage(pageNumber);
                     const textContent = await page.getTextContent();
-                    let operatorList = null;
                     try {
                         // Resolves embedded font names as well as image operators.
                         // The same list is reused by image extraction below.
@@ -5343,6 +5350,12 @@
                     pageParts.push(
                         `<p class="preserve-structure"><em>(Failed to extract page ${pageNumber}: ${escapeHtml(pageErr?.message || 'unknown error')})</em></p>`
                     );
+                } finally {
+                    try {
+                        page?.cleanup?.();
+                    } catch (_) { /* ignore */ }
+                    page = null;
+                    operatorList = null;
                 }
                 const startZone = ['top', 'middle', 'bottom'].includes(pageLayout.startZone)
                     ? pageLayout.startZone
@@ -5357,9 +5370,9 @@
                     + `<section class="kf-pdf-page kf-page-v-${startZone} kf-page-offset-${offsetLevel}${sourcePageKind}" data-source-page="${pageNumber}" data-pdf-top="${topPercent}">`
                     + `${pageParts.join('')}</section>`
                 );
-                setProgress(12 + (pageNumber / total) * 70, `PDF page ${pageNumber}/${total}`);
+                setProgress(12 + (pageNumber / total) * 70, `PDF page ${pageNumber} of ${total}`);
                 // Yield so progress UI paints between pages (avoids "stuck on page 1")
-                await new Promise((r) => setTimeout(r, 0));
+                await yieldForExportProgress();
             }
 
             const html = parts.length
