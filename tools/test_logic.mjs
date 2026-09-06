@@ -10,6 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const htmlPath = join(__dirname, '../index.html');
 const jsPath = join(__dirname, '../js/app.js');
 const cssPath = join(__dirname, '../css/main.css');
+const tailwindCssPath = join(__dirname, '../css/tailwind.css');
 const versionPath = join(__dirname, '../js/version.js');
 const bootPath = join(__dirname, '../js/boot.js');
 const epubPackagePath = join(__dirname, '../js/epub-package.js');
@@ -22,6 +23,7 @@ const fixedFixturePath = join(__dirname, './test_fixed_epub.mjs');
 const html = readFileSync(htmlPath, 'utf8');
 const script = readFileSync(jsPath, 'utf8');
 const styles = readFileSync(cssPath, 'utf8');
+const tailwindStyles = readFileSync(tailwindCssPath, 'utf8');
 const versionScript = readFileSync(versionPath, 'utf8');
 const bootScript = readFileSync(bootPath, 'utf8');
 const epubPackageScript = readFileSync(epubPackagePath, 'utf8');
@@ -36,6 +38,7 @@ const page = [
     epubImagesScript,
     runtimeDependenciesScript,
     imageSizeHoldScript,
+    tailwindStyles,
     styles
 ].join('\n');
 
@@ -49,6 +52,17 @@ assert.ok(
     'KoboForge must load its grouped stylesheet'
 );
 assert.ok(
+    html.includes("window.SITE_VERSION.asset('css/tailwind.css')")
+        && !html.includes('cdn.tailwindcss.com'),
+    'KoboForge must load committed utility CSS without the render-blocking Tailwind CDN'
+);
+assert.ok(
+    html.includes('media="print" onload="this.onload=null;this.media=\'all\'" data-koboforge-fonts')
+        && html.includes('<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2'),
+    'KoboForge fonts must not block first paint and must retain a no-JS fallback'
+);
+assert.match(tailwindStyles, /\.hidden\{display:none\}/, 'compiled utility CSS must retain runtime visibility controls');
+assert.ok(
     /type="module" src="js\/boot\.js"/.test(html),
     'KoboForge must load its grouped application module'
 );
@@ -56,6 +70,7 @@ const deploymentVersion = versionScript.match(/\bid:\s*"([^"]+)"/)?.[1];
 assert.ok(deploymentVersion, 'deployment version must be declared');
 assert.ok(
     versionScript.includes('asset: function (path)')
+        && html.includes("window.SITE_VERSION.asset('css/tailwind.css')")
         && html.includes("window.SITE_VERSION.asset('css/main.css')")
         && bootScript.includes('new URL("app.js", import.meta.url).href')
         && bootScript.includes('new URL("image-size-hold.js", import.meta.url).href')

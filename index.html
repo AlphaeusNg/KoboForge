@@ -7,17 +7,18 @@
     <meta name="description" content="Private client-side Kobo EPUB conversion with reflowable editing, accurate device profiles, and inline image optimization.">
     <meta name="theme-color" content="#080d17">
     <link rel="canonical" href="https://alphaeusng.github.io/KoboForge/">
-    <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="dns-prefetch" href="https://unpkg.com">
-    <script src="https://cdn.tailwindcss.com"></script>
     <!-- Conversion libraries load on demand after file pick or export. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" media="print" onload="this.onload=null;this.media='all'" data-koboforge-fonts>
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap"></noscript>
     <script src="js/version.js"></script>
+    <link id="tailwindStylesheet" rel="stylesheet">
     <link id="appStylesheet" rel="stylesheet">
     <script>
+        document.getElementById('tailwindStylesheet').href = window.SITE_VERSION.asset('css/tailwind.css');
         document.getElementById('appStylesheet').href = window.SITE_VERSION.asset('css/main.css');
     </script>
 
