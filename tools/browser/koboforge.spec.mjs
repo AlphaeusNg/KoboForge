@@ -453,6 +453,61 @@ test("replaces an automatic book title when a new document is imported", async (
   await expect(page.locator("#bookTitle")).toHaveValue("third-sermon");
 });
 
+test("protects unsaved body edits from Clear and tab close", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "protected-edit.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Original protected text."),
+  });
+  await expect(page.locator("#status")).toHaveText(
+    "TXT ready · editable · Kobo Libra Colour",
+  );
+
+  const preview = page.locator("#deviceBookContent");
+  expect(await page.evaluate(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(false);
+
+  await preview.evaluate((element) => {
+    const paragraph = element.querySelector("p");
+    if (!paragraph) throw new Error("TXT preview did not contain an editable paragraph");
+    paragraph.textContent = "Unsaved protected edit.";
+    element.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      inputType: "insertText",
+      data: "Unsaved protected edit.",
+    }));
+  });
+  await expect(preview).toContainText("Unsaved protected edit.");
+  expect(await page.evaluate(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(true);
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("discard the loaded file and your body edits");
+    await dialog.dismiss();
+  });
+  await page.locator("#clearBtn").click();
+  await expect(preview).toContainText("Unsaved protected edit.");
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#clearBtn").click();
+  await expect(page.locator("#status")).toHaveText("Waiting for a document.");
+  await expect(page.locator("#downloadBtn")).toBeDisabled();
+  expect(await page.evaluate(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(false);
+});
+
 test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");

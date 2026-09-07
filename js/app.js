@@ -438,14 +438,11 @@
         preserveTablesEl?.addEventListener('change', () => {
             savePrefs();
             if (!currentFile) return;
-            if (bodyEdited) {
-                const ok = confirm('Re-extracting will discard your body edits. Continue?');
-                if (!ok) {
-                    preserveTablesEl.checked = !preserveTablesEl.checked;
-                    return;
-                }
+            if (!confirmDiscardBodyEdits('Re-extracting will discard your body edits. Continue?')) {
+                preserveTablesEl.checked = !preserveTablesEl.checked;
+                return;
             }
-            processFile(currentFile);
+            processFile(currentFile, [], true);
         });
 
         splitChaptersEl?.addEventListener('change', () => {
@@ -4390,6 +4387,20 @@
             }
         }
 
+        function hasUnsavedBodyEdits() {
+            return !!(bodyEdited && currentOutput);
+        }
+
+        function confirmDiscardBodyEdits(message) {
+            return !hasUnsavedBodyEdits() || confirm(message);
+        }
+
+        window.addEventListener('beforeunload', (event) => {
+            if (!hasUnsavedBodyEdits()) return;
+            event.preventDefault();
+            event.returnValue = '';
+        });
+
         function clearWorkspace() {
             releaseEditablePageLock();
             clearFindHits();
@@ -4446,14 +4457,14 @@
             }
         }
 
-        clearBtn?.addEventListener('click', clearWorkspace);
+        clearBtn?.addEventListener('click', () => {
+            if (!confirmDiscardBodyEdits('Clear will discard the loaded file and your body edits. Continue?')) return;
+            clearWorkspace();
+        });
         cancelFileBtn?.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
-            if (bodyEdited && currentOutput) {
-                const ok = confirm('Cancel will discard the loaded file and any body edits. Continue?');
-                if (!ok) return;
-            }
+            if (!confirmDiscardBodyEdits('Cancel will discard the loaded file and your body edits. Continue?')) return;
             clearWorkspace();
         });
 
@@ -4562,14 +4573,14 @@
             }
         });
 
-        async function processFile(file, extraImageFiles = []) {
+        async function processFile(file, extraImageFiles = [], discardAlreadyConfirmed = false) {
             releaseEditablePageLock();
-            if (bodyEdited && currentOutput) {
-                const ok = confirm('Loading a new file will discard your body edits. Continue?');
-                if (!ok) {
-                    if (fileInput) fileInput.value = '';
-                    return;
-                }
+            if (
+                !discardAlreadyConfirmed
+                && !confirmDiscardBodyEdits('Loading a new file will discard your body edits. Continue?')
+            ) {
+                if (fileInput) fileInput.value = '';
+                return;
             }
             documentImageConversionToken += 1;
             clearFindHits();

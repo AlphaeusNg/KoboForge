@@ -1,26 +1,54 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-09-01 (KoboForge Cycle 76)
+Last updated: 2026-09-08 (KoboForge Cycle 77)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.09.01.1`.
+- Deployment version: `2026.09.08.1`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
-  EPUBCheck, zero-vulnerability audit, 32 decoded-image assertions, 97 package
+  EPUBCheck, 32 decoded-image assertions, 97 package
   assertions, and recursive syntax checks.
 - Automated verification: least-privilege GitHub Actions runs cheap policy/unit
   fixtures, pinned EPUBCheck 5.3.0 on Temurin Java 21, offline
   browser-to-downloaded-EPUB flows (including every real-document corpus file),
   and recursive syntax checks on Node 24. The
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
-  checksum-verified before every extraction, including cache hits. Nineteen
+  checksum-verified before every extraction, including cache hits. Twenty
   offline real-Chromium journeys include real DOCX/PDF conversion and
   fail-closed image, CSS, and active-HTML handling.
 
-## Latest cycle: replace stale automatic book titles
+## Latest cycle: protect edited work from accidental clearing
+
+### Why this was selected
+
+KoboForge warned before Cancel, replacement, and re-extraction discarded body
+edits, but the adjacent Clear action erased the same in-memory work immediately.
+Closing or refreshing the tab also had no warning despite there being no
+document autosave.
+
+### Changes
+
+- Centralize the body-edit discard decision and route Clear, Cancel, Replace,
+  and re-extraction through it without double-confirming.
+- Warn on tab close or refresh only while a loaded document has body edits.
+- Add an offline Chromium journey that rejects Clear and proves the edited body
+  and Download action survive, then accepts Clear and proves the guard resets.
+- Bump deployment version to `2026.09.08.1`.
+
+### Verification
+
+- Test-first: the new journey showed no tab-close guard after editing before
+  the implementation.
+- `npm test` and all 20 offline Chromium journeys pass, including the real DOCX
+  and PDF corpus; JavaScript syntax and diff checks pass.
+- `npm audit` continues to report the existing moderate transitive
+  `@xmldom/xmldom` advisory; this cycle does not conceal it or change the
+  document dependency graph.
+
+## Previous cycle: replace stale automatic book titles
 
 ### Why this was selected
 
