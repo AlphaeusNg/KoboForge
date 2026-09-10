@@ -251,6 +251,29 @@ function normalizeDocumentText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+async function downloadPublication(page) {
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#downloadBtn").click();
+  const download = await downloadPromise;
+  const downloadPath = await download.path();
+  expect(downloadPath).toBeTruthy();
+  const archive = await JSZip.loadAsync(await readFile(downloadPath));
+  const imageName = Object.keys(archive.files).find((name) => /^OEBPS\/images\//.test(name));
+  return {
+    suggestedFilename: download.suggestedFilename(),
+    chapter: await archive.file("OEBPS/chapter-1.xhtml").async("string"),
+    opf: await archive.file("OEBPS/content.opf").async("string"),
+    imageName: imageName || "",
+    imageBytes: imageName ? await archive.file(imageName).async("uint8array") : null,
+  };
+}
+
+function stablePackageDocument(opf) {
+  return opf
+    .replace(/<dc:identifier id="bookid">[^<]+<\/dc:identifier>/, '<dc:identifier id="bookid">generated</dc:identifier>')
+    .replace(/<meta property="dcterms:modified">[^<]+<\/meta>/, '<meta property="dcterms:modified">generated</meta>');
+}
+
 test("real-document corpus contains supported conversion inputs", () => {
   expect(realDocumentFixtures.length, "add at least one real conversion document").toBeGreaterThan(0);
   expect(
@@ -506,6 +529,172 @@ test("protects unsaved body edits from Clear and tab close", async ({ page }) =>
     window.dispatchEvent(event);
     return event.defaultPrevented;
   })).toBe(false);
+});
+
+test("restores an edited image book and exports the same publication after reload", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await openBookDetails(page);
+  await page.locator("#preserveTables").uncheck();
+  await page.locator("#fileInput").setInputFiles({
+    name: "recovery-art.png",
+    mimeType: "image/png",
+    buffer: PNG_1x1,
+  });
+  await expect(page.locator("#status")).toHaveText(
+    "Image ready · editable · Kobo Libra Colour",
+  );
+  await page.locator("#bookTitle").fill("Recovered artwork");
+  await page.locator("#bookAuthor").fill("KoboForge recovery test");
+  await page.locator("#bookLang").fill("fr");
+  await page.locator("#splitChapters").check();
+  await page.locator("#deviceSelect").selectOption("sage");
+  await expect(page.locator("#status")).toHaveText("Image ready · editable · Kobo Sage");
+
+  const image = page.locator("#deviceBookContent img");
+  await image.click();
+  await page.locator("#imageSizeRange").evaluate((element) => {
+    element.value = "75";
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await expect(image).toHaveAttribute("data-kf-width", "75");
+  await expect(page.locator("#draftRecoveryStatus")).toContainText("Recovery draft saved locally");
+  expect(await page.evaluate(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(false);
+
+  const beforeReload = await downloadPublication(page);
+  expect(beforeReload.suggestedFilename).toBe("recovered-artwork.epub");
+  expect(beforeReload.chapter).not.toMatch(/(?:data:image|blob:)/);
+  expect(beforeReload.imageName).toMatch(/^OEBPS\/images\/image-1\.(?:png|jpe?g)$/);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.locator("#restoreDraftBtn")).toBeVisible();
+  await expect(page.locator("#downloadBtn")).toBeDisabled();
+  await page.locator("#restoreDraftBtn").click();
+
+  await expect(page.locator("#status")).toContainText("restored from local recovery");
+  await expect(page.locator("#bookTitle")).toHaveValue("Recovered artwork");
+  await expect(page.locator("#bookAuthor")).toHaveValue("KoboForge recovery test");
+  await expect(page.locator("#bookLang")).toHaveValue("fr");
+  await expect(page.locator("#preserveTables")).not.toBeChecked();
+  await expect(page.locator("#splitChapters")).toBeChecked();
+  await expect(page.locator("#deviceSelect")).toHaveValue("sage");
+  const restoredImage = page.locator("#deviceBookContent img");
+  await expect(restoredImage).toHaveAttribute("data-kf-width", "75");
+  await expect(restoredImage).toHaveAttribute("src", /^data:image\//);
+  expect(await restoredImage.getAttribute("src")).not.toContain("blob:");
+
+  const afterReload = await downloadPublication(page);
+  expect(afterReload.suggestedFilename).toBe(beforeReload.suggestedFilename);
+  expect(afterReload.chapter).toBe(beforeReload.chapter);
+  expect(stablePackageDocument(afterReload.opf)).toBe(stablePackageDocument(beforeReload.opf));
+  expect(afterReload.imageName).toBe(beforeReload.imageName);
+  expect(Buffer.from(afterReload.imageBytes)).toEqual(Buffer.from(beforeReload.imageBytes));
+});
+
+test("discard and Clear remove the IndexedDB recovery draft", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "discard-me.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Discard this local recovery copy."),
+  });
+  await expect(page.locator("#draftRecoveryStatus")).toContainText("Recovery draft saved locally");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.locator("#discardDraftBtn")).toBeVisible();
+  await page.locator("#discardDraftBtn").click();
+  await expect(page.locator("#draftRecoveryStatus")).toContainText("draft discarded");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.locator("html")).toHaveAttribute("data-koboforge-ready", "true");
+  await expect(page.locator("#restoreDraftBtn")).toBeHidden();
+
+  await page.locator("#fileInput").setInputFiles({
+    name: "clear-me.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Clear this local recovery copy."),
+  });
+  await expect(page.locator("#draftRecoveryStatus")).toContainText("Recovery draft saved locally");
+  await page.locator("#clearBtn").click();
+  await expect(page.locator("#draftRecoveryStatus")).toContainText("draft cleared");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.locator("#restoreDraftBtn")).toBeHidden();
+  await expect(page.locator("#status")).toHaveText("Waiting for a document.");
+});
+
+test("removes an unknown draft schema with an actionable status", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open("koboforge-drafts", 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("drafts", "readwrite");
+      transaction.objectStore("drafts").put({ schemaVersion: 999 }, "active-book");
+      transaction.oncomplete = () => {
+        database.close();
+        resolve();
+      };
+      transaction.onerror = () => reject(transaction.error);
+    };
+  }));
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.locator("#draftRecoveryStatus")).toContainText(
+    "unreadable or outdated local draft was removed",
+  );
+  await expect(page.locator("#restoreDraftBtn")).toBeHidden();
+  expect(await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open("koboforge-drafts", 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("drafts", "readonly");
+      const get = transaction.objectStore("drafts").get("active-book");
+      get.onsuccess = () => {
+        database.close();
+        resolve(get.result === undefined);
+      };
+      get.onerror = () => reject(get.error);
+    };
+  }))).toBe(true);
+});
+
+test("keeps editing and export available when IndexedDB fails", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "indexedDB", {
+      configurable: true,
+      value: {
+        open() {
+          throw new DOMException("Storage blocked for test", "QuotaExceededError");
+        },
+      },
+    });
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#draftRecoveryStatus")).toContainText(
+    "Local recovery is unavailable",
+  );
+  await page.locator("#fileInput").setInputFiles({
+    name: "storage-failure.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Original text while storage is blocked."),
+  });
+  const preview = page.locator("#deviceBookContent");
+  await preview.evaluate((element) => {
+    const paragraph = element.querySelector("p");
+    paragraph.textContent = "Edited and exported without storage.";
+    element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+  });
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+  const publication = await downloadPublication(page);
+  expect(publication.chapter).toContain("Edited and exported without storage.");
+  expect(publication.chapter).not.toContain("Original text while storage is blocked.");
 });
 
 test("imports TXT, exports a direct Kobo edit, and packages metadata", async ({ page }) => {

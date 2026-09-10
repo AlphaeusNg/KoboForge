@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-09-08 (KoboForge Cycle 77)
+Last updated: 2026-09-11 (KoboForge Cycle 78)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.09.08.1`.
+- Deployment version: `2026.09.11.2`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, 32 decoded-image assertions, 97 package
@@ -19,6 +19,26 @@ Last updated: 2026-09-08 (KoboForge Cycle 77)
   checksum-verified before every extraction, including cache hits. Twenty
   offline real-Chromium journeys include real DOCX/PDF conversion and
   fail-closed image, CSS, and active-HTML handling.
+
+## Latest cycle: recover the current book after a reload
+
+### Why this was selected
+
+Clear, Cancel, and tab-close now protect unsaved body edits, but a refresh still
+dropped the loaded book. There was no private local draft to restore.
+
+### Changes
+
+- Persist a sanitized IndexedDB recovery record of the current book, options,
+  and embedded images; never restore blob/remote resources.
+- Offer Restore/Discard on the next visit, keep saving while the book is open,
+  and clear the draft on Discard or Clear.
+- Version `2026.09.11.2`.
+
+### Verification
+
+- `npm test` including 12 draft-recovery assertions; Chromium journeys cover
+  restore, discard, invalid schema, and IndexedDB failure.
 
 ## Latest cycle: protect edited work from accidental clearing
 

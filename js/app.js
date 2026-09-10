@@ -32,6 +32,12 @@
         } = await import(
             `./runtime-dependencies.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
+        const {
+            DRAFT_SCHEMA_VERSION,
+            createDraftStore
+        } = await import(
+            `./draft-recovery.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
+        );
         const loadModuleDependency = createModuleDependencyLoader();
         const loadScriptDependency = createScriptDependencyLoader();
         let pdfjsLib = null;
@@ -68,6 +74,11 @@
         const clearBtn = document.getElementById('clearBtn');
         const exportEditHint = document.getElementById('exportEditHint');
         const statusEl = document.getElementById('status');
+        const draftRecovery = document.getElementById('draftRecovery');
+        const draftRecoveryStatus = document.getElementById('draftRecoveryStatus');
+        const draftRecoveryActions = document.getElementById('draftRecoveryActions');
+        const restoreDraftBtn = document.getElementById('restoreDraftBtn');
+        const discardDraftBtn = document.getElementById('discardDraftBtn');
         const previewEl = document.getElementById('deviceBookContent');
         const previewWrap = document.getElementById('previewWrap');
         const bodyHtmlSource = document.getElementById('bodyHtmlSource');
@@ -238,6 +249,13 @@
         let selectedEditableImage = null;
         let draggedEditableImage = null;
         let imageClipboardHtml = '';
+        const draftStore = createDraftStore();
+        let pendingDraft = null;
+        let draftSaveTimer = null;
+        let draftRevision = 0;
+        let draftPersisted = false;
+        let draftStorageUnavailable = false;
+        let draftWriteChain = Promise.resolve();
 
         function tooltipTarget(node) {
             return node?.closest?.('[data-tooltip]') || null;
@@ -434,10 +452,16 @@
 
         bookAuthorInput?.addEventListener('change', savePrefs);
         bookLangInput?.addEventListener('change', savePrefs);
+        [bookAuthorInput, bookLangInput].forEach((control) => {
+            control?.addEventListener('input', () => scheduleDraftSave());
+        });
 
         preserveTablesEl?.addEventListener('change', () => {
             savePrefs();
-            if (!currentFile) return;
+            if (!currentFile || currentOutput?.restoredDraft) {
+                scheduleDraftSave();
+                return;
+            }
             if (!confirmDiscardBodyEdits('Re-extracting will discard your body edits. Continue?')) {
                 preserveTablesEl.checked = !preserveTablesEl.checked;
                 return;
@@ -455,6 +479,7 @@
                 statusEl.textContent = `${conciseReadyStatus()} · ${
                     splitChaptersEl.checked ? 'H1 sections' : 'one section'
                 }`;
+                scheduleDraftSave();
             }
         });
 
@@ -914,6 +939,7 @@
                 // The device frame animates width/aspect-ratio for 200 ms.
                 // Re-measure once more after that transition fully settles.
                 setTimeout(scheduleDevicePagination, 240);
+                scheduleDraftSave();
             });
         });
         deviceChrome?.addEventListener('change', () => {
@@ -921,6 +947,7 @@
             savePrefs();
             saveDevicePrefs();
             renderDevicePreview({ resetPage: true });
+            scheduleDraftSave();
         });
         [deviceFontSize, deviceMargin].forEach((control) => {
             control?.addEventListener('input', () => {
@@ -932,6 +959,7 @@
                 scheduleDevicePagination();
                 savePrefs();
                 saveDevicePrefs();
+                scheduleDraftSave();
             });
         });
         devicePagePrev?.addEventListener('click', () => {
@@ -2566,6 +2594,7 @@
                 exportEditHint.classList.remove('hidden');
                 exportEditHint.textContent = 'Edits will be included in Download.';
             }
+            scheduleDraftSave();
         }
 
         function clearEditedFlag() {
@@ -4387,6 +4416,214 @@
             }
         }
 
+        function showDraftNotice(message, { actions = false, state = 'info' } = {}) {
+            if (!draftRecovery || !draftRecoveryStatus) return;
+            draftRecovery.classList.remove('hidden');
+            draftRecovery.dataset.state = state;
+            draftRecoveryStatus.textContent = message;
+            draftRecoveryActions?.classList.toggle('hidden', !actions);
+        }
+
+        function hideDraftNotice() {
+            draftRecovery?.classList.add('hidden');
+            draftRecoveryActions?.classList.add('hidden');
+            if (draftRecoveryStatus) draftRecoveryStatus.textContent = '';
+        }
+
+        function draftSavedTime(savedAt) {
+            const date = new Date(savedAt);
+            if (!Number.isFinite(date.getTime())) return 'recently';
+            return new Intl.DateTimeFormat(undefined, {
+                dateStyle: 'medium',
+                timeStyle: 'short'
+            }).format(date);
+        }
+
+        function currentDraftRecord() {
+            if (!currentOutput) return null;
+            syncBodyFromUi();
+            const sourceName = currentFile?.name || `${bookTitleInput?.value?.trim() || currentOutput.title || 'Untitled'}.html`;
+            return {
+                schemaVersion: DRAFT_SCHEMA_VERSION,
+                savedAt: new Date().toISOString(),
+                source: {
+                    name: sourceName,
+                    size: Number(currentFile?.size) || 0,
+                    type: currentFile?.type || '',
+                    lastModified: Number(currentFile?.lastModified) || 0
+                },
+                book: {
+                    title: bookTitleInput?.value || '',
+                    author: bookAuthorInput?.value || '',
+                    lang: bookLangInput?.value || 'en',
+                    titleWasEdited: bookTitleWasEdited
+                },
+                options: {
+                    preserveTables: !!preserveTablesEl?.checked,
+                    splitChapters: !!splitChaptersEl?.checked,
+                    device: readDevicePrefsFromDom()
+                },
+                bodyEdited,
+                document: currentOutput
+            };
+        }
+
+        function cancelPendingDraftSave() {
+            clearTimeout(draftSaveTimer);
+            draftSaveTimer = null;
+            draftRevision += 1;
+            draftPersisted = false;
+        }
+
+        function persistCurrentDraft(revision = draftRevision) {
+            if (!currentOutput || draftStorageUnavailable || revision !== draftRevision) {
+                return Promise.resolve(false);
+            }
+            const payload = currentDraftRecord();
+            if (!payload) return Promise.resolve(false);
+            showDraftNotice('Saving a private recovery draft in this browser…', { state: 'saving' });
+            const write = draftWriteChain
+                .catch(() => undefined)
+                .then(async () => {
+                    if (!currentOutput || revision !== draftRevision) return false;
+                    const saved = await draftStore.save(payload);
+                    if (revision !== draftRevision) return false;
+                    draftPersisted = true;
+                    showDraftNotice(
+                        `Recovery draft saved locally · ${draftSavedTime(saved.savedAt)}.`,
+                        { state: 'saved' }
+                    );
+                    return true;
+                })
+                .catch((error) => {
+                    if (revision !== draftRevision) return false;
+                    draftPersisted = false;
+                    draftStorageUnavailable = true;
+                    console.warn('[KoboForge] Local draft recovery is unavailable', error);
+                    showDraftNotice(
+                        'This browser could not save a recovery draft. Keep this tab open; editing and Download still work.',
+                        { state: 'error' }
+                    );
+                    return false;
+                });
+            draftWriteChain = write;
+            return write;
+        }
+
+        function scheduleDraftSave({ immediate = false } = {}) {
+            if (!currentOutput || draftStorageUnavailable) return;
+            clearTimeout(draftSaveTimer);
+            draftSaveTimer = null;
+            const revision = ++draftRevision;
+            draftPersisted = false;
+            showDraftNotice('Changes waiting to save locally…', { state: 'pending' });
+            draftSaveTimer = setTimeout(() => {
+                draftSaveTimer = null;
+                void persistCurrentDraft(revision);
+            }, immediate ? 0 : 650);
+        }
+
+        async function removePersistedDraft({ notice = '' } = {}) {
+            cancelPendingDraftSave();
+            pendingDraft = null;
+            if (draftStorageUnavailable) {
+                if (notice) hideDraftNotice();
+                return;
+            }
+            const removal = draftWriteChain
+                .catch(() => undefined)
+                .then(() => draftStore.remove());
+            draftWriteChain = removal.catch(() => undefined);
+            try {
+                await removal;
+                if (notice) showDraftNotice(notice, { state: 'discarded' });
+                else hideDraftNotice();
+            } catch (error) {
+                draftStorageUnavailable = true;
+                console.warn('[KoboForge] Could not remove local recovery draft', error);
+                showDraftNotice(
+                    'This browser could not discard the recovery draft. Clear site data before using a shared device.',
+                    { state: 'error' }
+                );
+            }
+        }
+
+        function restoreDraft(draft) {
+            if (!draft || currentOutput) return;
+            try {
+                assertChapterMarkupCanRenderLocally(draft.document.bodyHtml);
+                assertChapterMarkupCanRenderLocally(draft.document.originalBodyHtml);
+            } catch (error) {
+                console.warn('[KoboForge] Local draft validation stopped restore', error);
+                void removePersistedDraft({
+                    notice: 'The saved draft contained an unsupported resource and was removed. Choose the source file again.'
+                });
+                return;
+            }
+
+            const appliedDevice = applyDevicePrefs(draft.options.device);
+            updateDeviceControlLabels();
+            applyDeviceGeometry();
+            if (preserveTablesEl) preserveTablesEl.checked = draft.options.preserveTables;
+            if (splitChaptersEl) splitChaptersEl.checked = draft.options.splitChapters;
+            if (bookTitleInput) bookTitleInput.value = draft.book.title;
+            if (bookAuthorInput) bookAuthorInput.value = draft.book.author;
+            if (bookLangInput) bookLangInput.value = draft.book.lang || 'en';
+            bookTitleWasEdited = draft.book.titleWasEdited;
+            currentFile = { ...draft.source, restoredDraft: true };
+            currentOutput = { ...draft.document, restoredDraft: true };
+            bodyEdited = draft.bodyEdited;
+            setDropzoneReady(currentFile);
+            if (dropzoneFileMeta) {
+                dropzoneFileMeta.textContent = `${currentOutput.formatLabel} · recovered locally · ready in this browser`;
+            }
+            devicePageIndex = 0;
+            refreshOutlineAndStats();
+            setEditMode('edit');
+            statusEl.textContent = `${conciseReadyStatus()} · restored from local recovery`;
+            downloadBtn.disabled = false;
+            if (clearBtn) clearBtn.disabled = false;
+            draftPersisted = true;
+            pendingDraft = null;
+            savePrefs();
+            saveDevicePrefs();
+            showDraftNotice(
+                `Recovery draft restored · saved ${draftSavedTime(draft.savedAt)}. Changes continue saving locally.`,
+                { state: 'restored' }
+            );
+            // Keep the sanitized device selection as the next recovery value.
+            if (JSON.stringify(appliedDevice) !== JSON.stringify(draft.options.device)) {
+                scheduleDraftSave({ immediate: true });
+            }
+        }
+
+        async function discoverPersistedDraft() {
+            try {
+                const result = await draftStore.load();
+                if (currentOutput) return;
+                if (result.state === 'ready') {
+                    pendingDraft = result.draft;
+                    const title = result.draft.book.title || result.draft.source.name;
+                    showDraftNotice(
+                        `A private draft of “${title}” was saved ${draftSavedTime(result.draft.savedAt)}. Restore it or discard it before choosing another file.`,
+                        { actions: true, state: 'available' }
+                    );
+                } else if (result.state === 'invalid') {
+                    showDraftNotice(
+                        'An unreadable or outdated local draft was removed. Choose the source file again.',
+                        { state: 'invalid' }
+                    );
+                }
+            } catch (error) {
+                draftStorageUnavailable = true;
+                console.warn('[KoboForge] Local draft recovery is unavailable', error);
+                showDraftNotice(
+                    'Local recovery is unavailable in this browser. Editing and Download still work normally.',
+                    { state: 'error' }
+                );
+            }
+        }
+
         function hasUnsavedBodyEdits() {
             return !!(bodyEdited && currentOutput);
         }
@@ -4396,12 +4633,13 @@
         }
 
         window.addEventListener('beforeunload', (event) => {
-            if (!hasUnsavedBodyEdits()) return;
+            if (!hasUnsavedBodyEdits() || draftPersisted) return;
             event.preventDefault();
             event.returnValue = '';
         });
 
         function clearWorkspace() {
+            void removePersistedDraft({ notice: 'Local recovery draft cleared.' });
             releaseEditablePageLock();
             clearFindHits();
             if (findInBook) findInBook.value = '';
@@ -4466,6 +4704,10 @@
             event.stopPropagation();
             if (!confirmDiscardBodyEdits('Cancel will discard the loaded file and your body edits. Continue?')) return;
             clearWorkspace();
+        });
+        restoreDraftBtn?.addEventListener('click', () => restoreDraft(pendingDraft));
+        discardDraftBtn?.addEventListener('click', () => {
+            void removePersistedDraft({ notice: 'Local recovery draft discarded. Choose a file when you are ready.' });
         });
 
         function openFilePicker() {
@@ -4582,6 +4824,9 @@
                 if (fileInput) fileInput.value = '';
                 return;
             }
+            cancelPendingDraftSave();
+            pendingDraft = null;
+            hideDraftNotice();
             documentImageConversionToken += 1;
             clearFindHits();
             currentFile = file;
@@ -4646,6 +4891,7 @@
                 downloadBtn.disabled = false;
                 updateEditChrome();
                 setProgress(100, 'Ready');
+                scheduleDraftSave({ immediate: true });
             } catch (error) {
                 console.error('[KoboForge]', error);
                 statusEl.textContent = error.message || 'Failed to process file.';
@@ -7659,11 +7905,16 @@
         // Keep outline in sync when title changes
         bookTitleInput?.addEventListener('input', () => {
             bookTitleWasEdited = true;
+            scheduleDraftSave();
         });
         bookTitleInput?.addEventListener('change', () => {
             if (currentOutput) {
                 if (isDeviceEditableMode()) syncBodyFromUi();
                 refreshOutlineAndStats();
                 if (isDeviceEditableMode()) renderDevicePreview();
+                scheduleDraftSave();
             }
         });
+
+        document.documentElement.dataset.koboforgeReady = 'true';
+        void discoverPersistedDraft();
