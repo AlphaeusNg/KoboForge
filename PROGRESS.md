@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-09-11 (KoboForge Cycle 78)
+Last updated: 2026-09-11 (KoboForge Cycle 79)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.09.11.2`.
+- Deployment version: `2026.09.11.3`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, 32 decoded-image assertions, 97 package
@@ -16,11 +16,34 @@ Last updated: 2026-09-11 (KoboForge Cycle 78)
   browser-to-downloaded-EPUB flows (including every real-document corpus file),
   and recursive syntax checks on Node 24. The
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
-  checksum-verified before every extraction, including cache hits. Twenty
+  checksum-verified before every extraction, including cache hits. Twenty-one
   offline real-Chromium journeys include real DOCX/PDF conversion and
   fail-closed image, CSS, and active-HTML handling.
 
-## Latest cycle: recover the current book after a reload
+## Latest cycle: ask whether to keep or clear the recovery draft after Download
+
+### Why this was selected
+
+IndexedDB recovery now survives reload, but a successful EPUB download left the
+private draft in place with no visitor choice. Shared-device privacy needed a
+clear default after export, without wiping a failed download.
+
+### Changes
+
+- After a successful Download, reuse `#draftRecovery` to ask Keep recovery
+  draft vs Clear draft.
+- Default to Clear (primary privacy action); Keep continues local saving for
+  more editing. Failed downloads do not clear or prompt.
+- Extend draft-recovery fixtures and a Chromium keep-then-clear journey.
+- Compile the recovery banner `min-h-10` utility into local Tailwind CSS.
+- Version `2026.09.11.3`.
+
+### Verification
+
+- `node --check js/draft-recovery.js js/app.js js/version.js`
+- `npm test` including 28 draft-recovery assertions. Playwright was not run.
+
+## Previous cycle: recover the current book after a reload
 
 ### Why this was selected
 

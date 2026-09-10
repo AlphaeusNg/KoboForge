@@ -596,6 +596,44 @@ test("restores an edited image book and exports the same publication after reloa
   expect(Buffer.from(afterReload.imageBytes)).toEqual(Buffer.from(beforeReload.imageBytes));
 });
 
+test("successful Download asks to keep or clear the recovery draft", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "export-draft.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Keep or clear this recovery draft after export."),
+  });
+  await expect(page.locator("#draftRecoveryStatus")).toContainText("Recovery draft saved locally");
+  await downloadPublication(page);
+  await expect(page.locator("#draftRecoveryStatus")).toContainText("Keep the private recovery draft");
+  await expect(page.locator("#keepDraftBtn")).toBeVisible();
+  await expect(page.locator("#keepDraftBtn")).toHaveText("Keep recovery draft");
+  await expect(page.locator("#clearDraftBtn")).toBeVisible();
+  await expect(page.locator("#clearDraftBtn")).toHaveText("Clear draft");
+  await expect(page.locator("#restoreDraftBtn")).toBeHidden();
+  await expect(page.locator("#discardDraftBtn")).toBeHidden();
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+
+  await page.locator("#keepDraftBtn").click();
+  await expect(page.locator("#draftRecoveryStatus")).toContainText("Recovery draft kept");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.locator("#restoreDraftBtn")).toBeVisible();
+  await page.locator("#restoreDraftBtn").click();
+  await expect(page.locator("#status")).toContainText("restored from local recovery");
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+
+  await downloadPublication(page);
+  await expect(page.locator("#clearDraftBtn")).toBeVisible();
+  await page.locator("#clearDraftBtn").click();
+  await expect(page.locator("#draftRecoveryStatus")).toContainText("draft cleared");
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.locator("html")).toHaveAttribute("data-koboforge-ready", "true");
+  await expect(page.locator("#restoreDraftBtn")).toBeHidden();
+  await expect(page.locator("#status")).toHaveText("Waiting for a document.");
+});
+
 test("discard and Clear remove the IndexedDB recovery draft", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");

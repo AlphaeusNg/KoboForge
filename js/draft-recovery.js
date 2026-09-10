@@ -6,6 +6,25 @@ export const DRAFT_DATABASE_VERSION = 1;
 export const DRAFT_STORE_NAME = "drafts";
 export const ACTIVE_DRAFT_KEY = "active-book";
 
+export const DRAFT_AFTER_EXPORT = Object.freeze({
+  state: "exported",
+  message:
+    "EPUB downloaded. Keep the private recovery draft for more editing, or clear it from this browser.",
+  keepLabel: "Keep recovery draft",
+  clearLabel: "Clear draft",
+  defaultAction: "clear",
+});
+
+export function shouldPromptDraftAfterExport({
+  downloadSucceeded = false,
+  storageUnavailable = false,
+  hasPersistedDraft = false,
+} = {}) {
+  return downloadSucceeded === true
+    && storageUnavailable !== true
+    && hasPersistedDraft === true;
+}
+
 const OUTPUT_STRING_FIELDS = Object.freeze([
   "title",
   "author",

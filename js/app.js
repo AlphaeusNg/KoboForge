@@ -33,8 +33,10 @@
             `./runtime-dependencies.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
         const {
+            DRAFT_AFTER_EXPORT,
             DRAFT_SCHEMA_VERSION,
-            createDraftStore
+            createDraftStore,
+            shouldPromptDraftAfterExport
         } = await import(
             `./draft-recovery.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
@@ -79,6 +81,8 @@
         const draftRecoveryActions = document.getElementById('draftRecoveryActions');
         const restoreDraftBtn = document.getElementById('restoreDraftBtn');
         const discardDraftBtn = document.getElementById('discardDraftBtn');
+        const keepDraftBtn = document.getElementById('keepDraftBtn');
+        const clearDraftBtn = document.getElementById('clearDraftBtn');
         const previewEl = document.getElementById('deviceBookContent');
         const previewWrap = document.getElementById('previewWrap');
         const bodyHtmlSource = document.getElementById('bodyHtmlSource');
@@ -255,6 +259,7 @@
         let draftRevision = 0;
         let draftPersisted = false;
         let draftStorageUnavailable = false;
+        let draftExportDecisionPending = false;
         let draftWriteChain = Promise.resolve();
 
         function tooltipTarget(node) {
@@ -4418,15 +4423,27 @@
 
         function showDraftNotice(message, { actions = false, state = 'info' } = {}) {
             if (!draftRecovery || !draftRecoveryStatus) return;
+            const actionSet = actions === true ? 'restore' : actions || '';
+            const showRestore = actionSet === 'restore';
+            const showExport = actionSet === 'export';
             draftRecovery.classList.remove('hidden');
             draftRecovery.dataset.state = state;
             draftRecoveryStatus.textContent = message;
-            draftRecoveryActions?.classList.toggle('hidden', !actions);
+            draftRecoveryActions?.classList.toggle('hidden', !showRestore && !showExport);
+            restoreDraftBtn?.classList.toggle('hidden', !showRestore);
+            discardDraftBtn?.classList.toggle('hidden', !showRestore);
+            keepDraftBtn?.classList.toggle('hidden', !showExport);
+            clearDraftBtn?.classList.toggle('hidden', !showExport);
         }
 
         function hideDraftNotice() {
+            draftExportDecisionPending = false;
             draftRecovery?.classList.add('hidden');
             draftRecoveryActions?.classList.add('hidden');
+            restoreDraftBtn?.classList.add('hidden');
+            discardDraftBtn?.classList.add('hidden');
+            keepDraftBtn?.classList.add('hidden');
+            clearDraftBtn?.classList.add('hidden');
             if (draftRecoveryStatus) draftRecoveryStatus.textContent = '';
         }
 
@@ -4481,7 +4498,9 @@
             }
             const payload = currentDraftRecord();
             if (!payload) return Promise.resolve(false);
-            showDraftNotice('Saving a private recovery draft in this browser…', { state: 'saving' });
+            if (!draftExportDecisionPending) {
+                showDraftNotice('Saving a private recovery draft in this browser…', { state: 'saving' });
+            }
             const write = draftWriteChain
                 .catch(() => undefined)
                 .then(async () => {
@@ -4489,16 +4508,19 @@
                     const saved = await draftStore.save(payload);
                     if (revision !== draftRevision) return false;
                     draftPersisted = true;
-                    showDraftNotice(
-                        `Recovery draft saved locally · ${draftSavedTime(saved.savedAt)}.`,
-                        { state: 'saved' }
-                    );
+                    if (!draftExportDecisionPending) {
+                        showDraftNotice(
+                            `Recovery draft saved locally · ${draftSavedTime(saved.savedAt)}.`,
+                            { state: 'saved' }
+                        );
+                    }
                     return true;
                 })
                 .catch((error) => {
                     if (revision !== draftRevision) return false;
                     draftPersisted = false;
                     draftStorageUnavailable = true;
+                    draftExportDecisionPending = false;
                     console.warn('[KoboForge] Local draft recovery is unavailable', error);
                     showDraftNotice(
                         'This browser could not save a recovery draft. Keep this tab open; editing and Download still work.',
@@ -4516,7 +4538,9 @@
             draftSaveTimer = null;
             const revision = ++draftRevision;
             draftPersisted = false;
-            showDraftNotice('Changes waiting to save locally…', { state: 'pending' });
+            if (!draftExportDecisionPending) {
+                showDraftNotice('Changes waiting to save locally…', { state: 'pending' });
+            }
             draftSaveTimer = setTimeout(() => {
                 draftSaveTimer = null;
                 void persistCurrentDraft(revision);
@@ -4526,6 +4550,7 @@
         async function removePersistedDraft({ notice = '' } = {}) {
             cancelPendingDraftSave();
             pendingDraft = null;
+            draftExportDecisionPending = false;
             if (draftStorageUnavailable) {
                 if (notice) hideDraftNotice();
                 return;
@@ -4545,6 +4570,35 @@
                     'This browser could not discard the recovery draft. Clear site data before using a shared device.',
                     { state: 'error' }
                 );
+            }
+        }
+
+        async function promptDraftDecisionAfterExport() {
+            try {
+                if (draftStorageUnavailable || !currentOutput) return;
+                draftExportDecisionPending = true;
+                if (draftSaveTimer) {
+                    clearTimeout(draftSaveTimer);
+                    draftSaveTimer = null;
+                    await persistCurrentDraft(draftRevision);
+                } else {
+                    await draftWriteChain.catch(() => undefined);
+                }
+                if (!shouldPromptDraftAfterExport({
+                    downloadSucceeded: true,
+                    storageUnavailable: draftStorageUnavailable,
+                    hasPersistedDraft: draftPersisted
+                })) {
+                    draftExportDecisionPending = false;
+                    return;
+                }
+                showDraftNotice(DRAFT_AFTER_EXPORT.message, {
+                    actions: 'export',
+                    state: DRAFT_AFTER_EXPORT.state
+                });
+            } catch (error) {
+                draftExportDecisionPending = false;
+                console.warn('[KoboForge] Could not ask about the recovery draft after download', error);
             }
         }
 
@@ -4709,6 +4763,18 @@
         discardDraftBtn?.addEventListener('click', () => {
             void removePersistedDraft({ notice: 'Local recovery draft discarded. Choose a file when you are ready.' });
         });
+        keepDraftBtn?.addEventListener('click', () => {
+            draftExportDecisionPending = false;
+            showDraftNotice(
+                'Recovery draft kept. Changes continue saving locally.',
+                { state: 'saved' }
+            );
+        });
+        clearDraftBtn?.addEventListener('click', () => {
+            void removePersistedDraft({
+                notice: 'Local recovery draft cleared after download. The book remains open for more editing.'
+            });
+        });
 
         function openFilePicker() {
             if (fileInput) fileInput.click();
@@ -4812,7 +4878,9 @@
                 }
                 statusEl.textContent = error.message || 'EPUB build failed.';
                 setProgress(0);
+                return;
             }
+            await promptDraftDecisionAfterExport();
         });
 
         async function processFile(file, extraImageFiles = [], discardAlreadyConfirmed = false) {
