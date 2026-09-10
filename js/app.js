@@ -5237,6 +5237,7 @@
             for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
                 const pageParts = [];
                 let page = null;
+                let operatorList = null;
                 let sourcePageKind = '';
                 let pageLayout = {
                     startZone: 'top',
@@ -5244,10 +5245,15 @@
                     topRatio: 0,
                     remainingRatio: 0.92
                 };
+                // Announce the page and yield before heavy work so the UI can paint.
+                setProgress(
+                    12 + ((pageNumber - 1) / total) * 70,
+                    `PDF page ${pageNumber} of ${total}`
+                );
+                await yieldForExportProgress();
                 try {
                     page = await pdf.getPage(pageNumber);
                     const textContent = await page.getTextContent();
-                    let operatorList = null;
                     try {
                         // Resolves embedded font names as well as image operators.
                         // The same list is reused by image extraction below.
@@ -5368,11 +5374,12 @@
                     // The page's PDF.js bitmaps are no longer needed once their
                     // compact sources and text blocks have been captured.
                     try {
-                        page.cleanup?.();
+                        page?.cleanup?.();
                     } catch (cleanupError) {
                         console.warn(`[KoboForge] PDF cleanup page ${pageNumber}`, cleanupError);
                     }
                     page = null;
+                    operatorList = null;
                     const optimizedPageImages = rawImageMarkup
                         ? await optimizeDocumentImages(rawImageMarkup, imageOptimization)
                         : { html: '', ...imageOptimization, imageCount: 0, failed: 0 };
@@ -5395,6 +5402,8 @@
                     try {
                         page?.cleanup?.();
                     } catch (_) { /* continue; the document-level destroy is the final fallback */ }
+                    page = null;
+                    operatorList = null;
                 }
                 const startZone = ['top', 'middle', 'bottom'].includes(pageLayout.startZone)
                     ? pageLayout.startZone
@@ -5409,9 +5418,9 @@
                     + `<section class="kf-pdf-page kf-page-v-${startZone} kf-page-offset-${offsetLevel}${sourcePageKind}" data-source-page="${pageNumber}" data-pdf-top="${topPercent}">`
                     + `${pageParts.join('')}</section>`
                 );
-                setProgress(12 + (pageNumber / total) * 70, `PDF page ${pageNumber}/${total}`);
+                setProgress(12 + (pageNumber / total) * 70, `PDF page ${pageNumber} of ${total}`);
                 // Yield so progress UI paints between pages (avoids "stuck on page 1")
-                await new Promise((r) => setTimeout(r, 0));
+                await yieldForExportProgress();
             }
 
             const html = parts.length
