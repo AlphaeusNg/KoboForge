@@ -268,6 +268,8 @@ const features = [
     ['PDF page yield progress', 'PDF page ${pageNumber} of ${total}'],
     ['PDF page animation-frame yield', 'await yieldForExportProgress()'],
     ['PDF page resource cleanup', 'page?.cleanup?.()'],
+    ['DOCX image optimize yield', 'Optimizing image ${imageIndex + 1} of ${imageTotal}'],
+    ['DOCX image optimize animation-frame yield', 'const imageTotal = images.length'],
     ['PDF intentional whitespace detector', 'function detectPdfWhitespace'],
     ['PDF embedded font metadata', 'function collectPdfFontMetadata'],
     ['PDF portable typography runs', 'function renderPdfRunsHtml'],
@@ -602,6 +604,24 @@ assert.ok(
 );
 assert.ok(page.includes('MAX_SOURCE_IMAGE_B64') && page.includes('optimizeDocumentImages(doc.body.innerHTML)'),
     'DOCX images accepted then optimized for the selected Kobo');
+{
+    const optStart = script.indexOf('async function optimizeDocumentImages(');
+    const optEnd = script.indexOf('async function retargetCurrentDocumentImages()');
+    assert.ok(optStart >= 0 && optEnd > optStart, 'optimizeDocumentImages function present');
+    const optSrc = script.slice(optStart, optEnd);
+    assert.ok(
+        optSrc.includes('await yieldForExportProgress()')
+            && optSrc.includes('Optimizing image ${imageIndex + 1} of ${imageTotal}')
+            && optSrc.includes('setProgress('),
+        'optimizeDocumentImages must yield and update progress between images'
+    );
+    // PDF page loop yield path must remain intact (unchanged by this DOCX fix).
+    assert.ok(
+        script.includes('PDF page ${pageNumber} of ${total}')
+            && script.includes('await yieldForExportProgress()'),
+        'PDF page yield path must remain present'
+    );
+}
 assert.ok(
     page.includes('convertInput.arrayBuffer = null')
         && page.includes('docxInput = null'),

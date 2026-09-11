@@ -7865,7 +7865,23 @@
             const images = Array.from(root.querySelectorAll('img'));
             let converted = 0;
             let failed = 0;
-            for (const img of images) {
+            const imageTotal = images.length;
+            for (let imageIndex = 0; imageIndex < imageTotal; imageIndex += 1) {
+                const img = images[imageIndex];
+                // Keep progress UI moving and the main thread interactive between
+                // large DOCX / embedded-image batches (PDF page loop yields separately).
+                if (imageTotal > 0) {
+                    let pct = 50;
+                    if (progressBar && progressBar.style.width) {
+                        const parsed = parseFloat(progressBar.style.width);
+                        if (Number.isFinite(parsed)) pct = parsed;
+                    }
+                    setProgress(
+                        pct,
+                        `Optimizing image ${imageIndex + 1} of ${imageTotal}`
+                    );
+                    await yieldForExportProgress();
+                }
                 const currentSrc = img.getAttribute('src') || '';
                 let imageId = img.getAttribute('data-kf-image-id') || '';
                 if (!imageId) imageId = nextDocumentImageId(imageSources);
