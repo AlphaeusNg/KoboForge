@@ -4360,6 +4360,11 @@
             if (progressBar) progressBar.style.width = `${p}%`;
             if (progressPct) progressPct.textContent = `${p}%`;
             if (progressLabel && label) progressLabel.textContent = label;
+            progressWrap.setAttribute('aria-valuenow', String(p));
+            progressWrap.setAttribute(
+                'aria-valuetext',
+                `${label || progressLabel?.textContent || 'Processing'}, ${p}%`
+            );
             if (p >= 100) {
                 setTimeout(() => progressWrap.classList.add('hidden'), 600);
             }

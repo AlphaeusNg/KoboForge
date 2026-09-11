@@ -905,6 +905,14 @@ assert.ok(
     'dropzone and file picker accept images and process them for the selected Kobo'
 );
 assert.ok(
+    /id="status"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"/.test(html)
+        && /id="progressWrap"[^>]*role="progressbar"[^>]*aria-valuemin="0"[^>]*aria-valuemax="100"[^>]*aria-valuenow="0"/.test(html)
+        && script.includes("progressWrap.setAttribute('aria-valuenow', String(p))")
+        && script.includes("progressWrap.setAttribute(\n                'aria-valuetext'")
+        && script.includes("${label || progressLabel?.textContent || 'Processing'}, ${p}%"),
+    'conversion status and stage progress expose live assistive-technology semantics'
+);
+assert.ok(
     page.includes('function imageWidthForPageFit')
         && page.includes('data-kf-fit-height')
         && page.includes('data-kf-page-images')

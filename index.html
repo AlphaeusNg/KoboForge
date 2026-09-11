@@ -365,9 +365,9 @@
                     <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#C9A227]">3. Summary</div>
                     <h2 class="mt-1 text-lg font-semibold tracking-tight">Conversion overview</h2>
                 </div>
-                <div id="status" class="mt-4 text-sm leading-6 text-slate-300">Waiting for a document.</div>
+                <div id="status" class="mt-4 text-sm leading-6 text-slate-300" role="status" aria-live="polite" aria-atomic="true">Waiting for a document.</div>
                 <div id="editedBadge" class="mt-2 hidden text-xs font-medium text-amber-300/90">Edits will be exported.</div>
-                <div id="progressWrap" class="mt-4 hidden">
+                <div id="progressWrap" class="mt-4 hidden" role="progressbar" aria-labelledby="progressLabel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Processing, 0%">
                     <div class="mb-1 flex justify-between text-[11px] uppercase tracking-[0.14em] text-slate-500">
                         <span id="progressLabel">Processing</span>
                         <span id="progressPct">0%</span>

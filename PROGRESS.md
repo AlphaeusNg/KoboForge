@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-09-12 (KoboForge Cycle 80)
+Last updated: 2026-09-12 (KoboForge Cycle 81)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.09.11.3`.
+- Deployment version: `2026.09.12.1`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, 32 decoded-image assertions, 97 package
@@ -16,11 +16,35 @@ Last updated: 2026-09-12 (KoboForge Cycle 80)
   browser-to-downloaded-EPUB flows (including every real-document corpus file),
   and recursive syntax checks on Node 24. The
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
-  checksum-verified before every extraction, including cache hits. Twenty-one
+  checksum-verified before every extraction, including cache hits. Twenty-five
   offline real-Chromium journeys include real DOCX/PDF conversion and
   fail-closed image, CSS, and active-HTML handling.
 
-## Latest cycle: override Mammoth's xmldom to the patched 0.8.15 line
+## Latest cycle: announce conversion and export progress accessibly
+
+### Why this was selected
+
+KoboForge already showed granular import and export progress, but the summary
+was plain text and the visual meter had no progressbar semantics. Screen-reader
+users could not reliably hear when a long conversion moved between reading,
+image optimization, packaging, and ZIP creation or learn its current value.
+
+### Changes
+
+- Make the conversion summary a polite, atomic live status.
+- Give the existing visual meter a labelled progressbar role with bounded
+  numeric value and stage-aware value text such as `Package, 60%`.
+- Keep those ARIA values synchronized through the shared `setProgress` path, so
+  imports and exports use the same accessible contract.
+- Bump the visitor/offline-asset version to `2026.09.12.1`.
+
+### Verification
+
+- The real Chromium export-stage journey now observes Images, Package, ZIP,
+  and Done announcements plus the final numeric progress state.
+- Static contracts guard both the HTML semantics and runtime synchronization.
+
+## Previous cycle: override Mammoth's xmldom to the patched 0.8.15 line
 
 ### Why this was selected
 

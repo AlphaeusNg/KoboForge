@@ -1267,8 +1267,10 @@ test("remembers the last Kobo after reload and names export stages", async ({ pa
 
   const seen = await page.evaluate(() => {
     window.__kfExportStages = [];
+    window.__kfProgressAnnouncements = [];
     const label = document.getElementById("progressLabel");
     const status = document.getElementById("status");
+    const progress = document.getElementById("progressWrap");
     const note = (value) => {
       const text = String(value || "").trim();
       if (text && window.__kfExportStages[window.__kfExportStages.length - 1] !== text) {
@@ -1278,9 +1280,17 @@ test("remembers the last Kobo after reload and names export stages", async ({ pa
     const observer = new MutationObserver(() => {
       note(label?.textContent);
       note(status?.textContent);
+      const announcement = progress?.getAttribute("aria-valuetext") || "";
+      if (
+        announcement
+        && window.__kfProgressAnnouncements[window.__kfProgressAnnouncements.length - 1] !== announcement
+      ) {
+        window.__kfProgressAnnouncements.push(announcement);
+      }
     });
     if (label) observer.observe(label, { childList: true, characterData: true, subtree: true });
     if (status) observer.observe(status, { childList: true, characterData: true, subtree: true });
+    if (progress) observer.observe(progress, { attributes: true, attributeFilter: ["aria-valuenow", "aria-valuetext"] });
     return true;
   });
   expect(seen).toBe(true);
@@ -1290,6 +1300,18 @@ test("remembers the last Kobo after reload and names export stages", async ({ pa
   await downloadPromise;
   const stages = await page.evaluate(() => window.__kfExportStages || []);
   expect(stages).toEqual(expect.arrayContaining(["Images", "Package", "ZIP"]));
+  const announcements = await page.evaluate(() => window.__kfProgressAnnouncements || []);
+  expect(announcements).toEqual(expect.arrayContaining([
+    "Images, 25%",
+    "Package, 60%",
+    "ZIP, 85%",
+    "Done, 100%",
+  ]));
+  await expect(page.locator("#status")).toHaveAttribute("role", "status");
+  await expect(page.locator("#status")).toHaveAttribute("aria-live", "polite");
+  await expect(page.locator("#progressWrap")).toHaveAttribute("role", "progressbar");
+  await expect(page.locator("#progressWrap")).toHaveAttribute("aria-valuenow", "100");
+  await expect(page.locator("#progressWrap")).toHaveAttribute("aria-valuetext", "Done, 100%");
   await expect(page.locator("#status")).toContainText(/EPUB downloaded|Reflowable EPUB ready/);
 });
 
