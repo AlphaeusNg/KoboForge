@@ -1,6 +1,6 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-09-11 (KoboForge Cycle 79)
+Last updated: 2026-09-12 (KoboForge Cycle 80)
 
 ## Current state
 
@@ -20,7 +20,27 @@ Last updated: 2026-09-11 (KoboForge Cycle 79)
   offline real-Chromium journeys include real DOCX/PDF conversion and
   fail-closed image, CSS, and active-HTML handling.
 
-## Latest cycle: ask whether to keep or clear the recovery draft after Download
+## Latest cycle: override Mammoth's xmldom to the patched 0.8.15 line
+
+### Why this was selected
+
+GitHub Dependabot flagged eight high/medium advisories on the development-scope
+`@xmldom/xmldom` 0.8.13 lock (Mammoth's test/DOCX parser). Visitor runtime does
+not load xmldom; the lock still needed the patched 0.8.15 line.
+
+### Changes
+
+- npm override `@xmldom/xmldom` to `0.8.15` without bumping Mammoth.
+- Dependency fixtures assert the override and lock version.
+- SITE_VERSION stays `2026.09.11.3` (no visitor-runtime change).
+
+### Verification
+
+- `node tools/test_dependencies.mjs`
+- `npm test`
+- `npm audit` reports 0 vulnerabilities.
+
+## Previous cycle: ask whether to keep or clear the recovery draft after Download
 
 ### Why this was selected
 

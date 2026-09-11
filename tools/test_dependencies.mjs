@@ -54,5 +54,12 @@ check(
   RUNTIME_DEPENDENCIES.pdfjs.workerUrl.includes(`pdfjs-dist@${requestedPdfJs}/`),
   "the production PDF.js worker URL should match the installed browser-test version",
 );
+const lockedXmldom = packageLock.packages?.["node_modules/@xmldom/xmldom"]?.version;
+check(Boolean(lockedXmldom), "the lockfile should include @xmldom/xmldom from Mammoth");
+check(
+  packageJson.overrides?.["@xmldom/xmldom"] === "0.8.15",
+  "Mammoth's @xmldom/xmldom should be overridden to the patched 0.8.15 line",
+);
+check(lockedXmldom === "0.8.15", "the lockfile should resolve @xmldom/xmldom 0.8.15");
 
 console.log(`Dependency policy tests passed (${assertions} assertions).`);
