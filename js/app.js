@@ -5853,6 +5853,7 @@
                 style.bold ? 'b' : '',
                 style.italic ? 'i' : '',
                 style.light ? 'l' : '',
+                style.verse ? 'v' : '',
                 style.gapLevel || 0
             ].join('|');
             const previous = runs[runs.length - 1];
@@ -5882,6 +5883,10 @@
                 let content = escapeHtml(normalizePdfTokenSpacing(
                     `${run.gapLevel || fieldBoundary ? ' ' : ''}${run.text || ''}`
                 ));
+                if (run.verse && /^\d{1,3}$/.test(content.trim())) {
+                    const verse = content.trim();
+                    content = `<sup class="kf-verse-num" data-kf-verse="${verse}">${verse}</sup>`;
+                }
                 if (run.italic) content = `<em>${content}</em>`;
                 if (run.bold) content = `<strong>${content}</strong>`;
                 return `<span class="${classes.join(' ')}">${content}</span>`;
@@ -5903,9 +5908,106 @@
                 .replace(/(\d(?:st|nd|rd|th))(?=[A-Z][a-z])/g, '$1 ');
         }
 
+        function nearestPdfTextGap(text, estimate) {
+            const gaps = [];
+            String(text || '').replace(/\s+/g, (match, offset) => {
+                gaps.push(offset + Math.ceil(match.length / 2));
+                return match;
+            });
+            if (!gaps.length) {
+                return Math.max(0, Math.min(String(text || '').length, estimate));
+            }
+            return gaps.reduce((best, value) => (
+                Math.abs(value - estimate) < Math.abs(best - estimate) ? value : best
+            ));
+        }
+
+        /**
+         * Some PDF exporters emit a superscript verse number as a separate tiny
+         * text item above the prose baseline. Keep it inside its visual line and,
+         * when it floats over a long text item, split that item at the nearest
+         * authored gap so reading order remains prose → verse → prose.
+         *
+         * Readability behaviour inspired by Markus Yeo's BABulletinBotV2 PDF
+         * reader, reimplemented here for KoboForge's browser-only PDF.js path:
+         * https://github.com/markusyeo/BABulletinBotV2
+         */
+        function foldFloatingPdfVerseItems(items) {
+            const normalized = Array.from(items || []);
+            const candidates = normalized.filter((item) => (
+                /^\d{1,3}$/.test((item.text || '').trim())
+                && Number(item.height) > 0
+            ));
+
+            candidates.forEach((candidate) => {
+                const homes = normalized.filter((item) => {
+                    if (item === candidate || item.floatingVerse) return false;
+                    if ((item.text || '').trim().length < 5) return false;
+                    const homeHeight = Math.max(Number(item.height) || 0, 1);
+                    const lift = Number(candidate.y) - Number(item.y);
+                    const candidateEnd = Number(candidate.x) + Number(candidate.width || 0);
+                    const homeStart = Number(item.x) - homeHeight * 1.25;
+                    const homeEnd = Number(item.x) + Number(item.width || 0) + homeHeight * 0.25;
+                    return (
+                        Number(candidate.height) <= homeHeight * 0.78
+                        && lift >= homeHeight * 0.16
+                        && lift <= homeHeight * 1.05
+                        && candidateEnd >= homeStart
+                        && Number(candidate.x) <= homeEnd
+                    );
+                });
+                if (!homes.length) return;
+                const home = homes.sort((left, right) => {
+                    const vertical = Math.abs(Number(candidate.y) - Number(left.y))
+                        - Math.abs(Number(candidate.y) - Number(right.y));
+                    if (vertical) return vertical;
+                    const distance = (item) => {
+                        const start = Number(item.x);
+                        const end = start + Number(item.width || 0);
+                        if (Number(candidate.x) < start) return start - Number(candidate.x);
+                        if (Number(candidate.x) > end) return Number(candidate.x) - end;
+                        return 0;
+                    };
+                    return distance(left) - distance(right);
+                })[0];
+
+                candidate.y = home.y;
+                candidate.floatingVerse = true;
+                const homeStart = Number(home.x);
+                const homeEnd = homeStart + Number(home.width || 0);
+                const verseStart = Number(candidate.x);
+                if (verseStart <= homeStart || verseStart >= homeEnd) return;
+
+                const text = String(home.text || '');
+                const estimate = Math.round(
+                    ((verseStart - homeStart) / Math.max(Number(home.width) || 1, 1))
+                    * text.length
+                );
+                const cut = nearestPdfTextGap(text, estimate);
+                if (cut <= 0 || cut >= text.length) return;
+                const verseEnd = verseStart + Math.max(Number(candidate.width) || 0, 0);
+                const left = {
+                    ...home,
+                    text: text.slice(0, cut),
+                    width: Math.max(0, verseStart - homeStart)
+                };
+                const right = {
+                    ...home,
+                    text: text.slice(cut).replace(/^\s+/, ''),
+                    x: Math.min(homeEnd, verseEnd),
+                    width: Math.max(0, homeEnd - verseEnd),
+                    explicitSpaceBefore: true
+                };
+                const homeIndex = normalized.indexOf(home);
+                normalized.splice(homeIndex, 1, left, right);
+            });
+
+            return normalized;
+        }
+
         function buildPdfLines(items, { fontMetadata = {} } = {}) {
             const sourceItems = items || [];
-            const normalized = sourceItems
+            const normalized = foldFloatingPdfVerseItems(sourceItems
                 .map((item, sourceIndex) => {
                     if (!item || !item.str || String(item.str).trim() === '') return null;
                     // Some PDF.js items lack transform (marked content / odd fonts).
@@ -5937,7 +6039,7 @@
                         font
                     };
                 })
-                .filter(Boolean)
+                .filter(Boolean))
                 .sort((a, b) => {
                     if (Math.abs(a.y - b.y) > 2) return b.y - a.y;
                     return a.x - b.x;
@@ -5986,8 +6088,13 @@
                             previousPart
                             && /^\d{1,3}$/.test((previousPart.text || '').trim())
                             && /^[A-Za-z“"'‘]/.test((part.text || '').trim())
-                            && previousPart.height <= part.height * 0.82
-                            && previousPart.y - part.y >= part.height * 0.2
+                            && (
+                                previousPart.floatingVerse
+                                || (
+                                    previousPart.height <= part.height * 0.82
+                                    && previousPart.y - part.y >= part.height * 0.2
+                                )
+                            )
                         );
                         if (
                             gap > avgSpace * 0.55
@@ -6003,12 +6110,15 @@
                     }
                     const chunk = `${prefix}${part.text}`;
                     text += chunk;
-                    appendPdfRun(pdfRuns, gapLevel ? part.text : chunk, {
+                    appendPdfRun(pdfRuns, part.floatingVerse
+                        ? String(part.text || '').trim()
+                        : (gapLevel ? part.text : chunk), {
                         family: part.font?.family || 'sans',
                         sizeClass: pdfSizeClass(part.height, medianHeight),
                         bold: !!part.font?.bold,
                         italic: !!part.font?.italic,
                         light: !!part.font?.light,
+                        verse: !!part.floatingVerse,
                         gapLevel
                     });
                     previousEnd = part.x + part.width;
@@ -6041,8 +6151,12 @@
                     indentLevel: indentSpaces >= 9 ? 3 : indentSpaces >= 5 ? 2 : indentSpaces >= 2 ? 1 : 0,
                     pdfRuns,
                     dominantFontFamily,
-                    hasBold: pdfRuns.some((run) => run.bold && (run.text || '').trim()),
-                    hasItalic: pdfRuns.some((run) => run.italic && (run.text || '').trim()),
+                    hasBold: pdfRuns.some((run) => (
+                        !run.verse && run.bold && (run.text || '').trim()
+                    )),
+                    hasItalic: pdfRuns.some((run) => (
+                        !run.verse && run.italic && (run.text || '').trim()
+                    )),
                     cells: sorted.map((part) => ({
                         text: part.text,
                         x: part.x,
@@ -6910,13 +7024,56 @@
             return false;
         }
 
+        function pdfLinesLookLikeVerse(lines) {
+            if (!Array.isArray(lines) || lines.length < 3) return false;
+            const capitalized = lines.filter((line) => (
+                /^[A-Z“"'‘]/.test((line?.plainText || '').trim())
+            )).length;
+            const terminated = lines.filter((line) => (
+                /[.!?:]["'’”)}\]]?$/.test((line?.plainText || '').trim())
+            )).length;
+            return capitalized >= Math.ceil(lines.length * 0.8)
+                && terminated <= Math.floor(lines.length * 0.2);
+        }
+
+        function pdfLineNeedsVisibleBreak(previous, line, lines) {
+            if (pdfLinesLookLikeVerse(lines)) return true;
+            const styleChanged = (
+                !!previous?.hasBold !== !!line?.hasBold
+                || !!previous?.hasItalic !== !!line?.hasItalic
+            );
+            if (styleChanged || (previous?.hasBold && line?.hasBold)) return true;
+            const widest = Math.max(
+                ...lines.map((item) => Math.max(
+                    0,
+                    (Number(item?.xEnd) || 0) - (Number(item?.xStart) || 0)
+                )),
+                1
+            );
+            const previousWidth = Math.max(
+                0,
+                (Number(previous?.xEnd) || 0) - (Number(previous?.xStart) || 0)
+            );
+            const previousText = (previous?.plainText || '').trim();
+            const nextText = (line?.plainText || '').trim();
+            const shortLine = previousWidth < widest * 0.6;
+            const freshStart = /^[A-Z“"'‘]/.test(nextText)
+                && !/(?:[,;:–—-]|\b(?:and|or|the|to|of))$/i.test(previousText);
+            return shortLine && freshStart;
+        }
+
         function renderPdfParagraphHtml(lines) {
-            return lines
-                .map((line, index) => renderPdfLineHtml(
+            return lines.reduce((html, line, index) => {
+                const lineHtml = renderPdfLineHtml(
                     line,
                     { preserveIndent: index === 0 }
-                ))
-                .join(' ');
+                );
+                if (index === 0) return lineHtml;
+                const separator = pdfLineNeedsVisibleBreak(lines[index - 1], line, lines)
+                    ? '<br> '
+                    : ' ';
+                return `${html}${separator}${lineHtml}`;
+            }, '');
         }
 
         function pdfIndentLevelFromX(xStart, textLeft, avgCharWidth) {

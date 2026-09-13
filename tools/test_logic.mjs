@@ -18,6 +18,7 @@ const epubImagesPath = join(__dirname, '../js/epub-images.js');
 const runtimeDependenciesPath = join(__dirname, '../js/runtime-dependencies.js');
 const imageSizeHoldPath = join(__dirname, '../js/image-size-hold.js');
 const packagePath = join(__dirname, '../package.json');
+const readmePath = join(__dirname, '../README.md');
 const fixedLayoutPath = join(__dirname, '../js/fixed-layout.js');
 const fixedFixturePath = join(__dirname, './test_fixed_epub.mjs');
 const html = readFileSync(htmlPath, 'utf8');
@@ -31,6 +32,7 @@ const epubImagesScript = readFileSync(epubImagesPath, 'utf8');
 const runtimeDependenciesScript = readFileSync(runtimeDependenciesPath, 'utf8');
 const imageSizeHoldScript = readFileSync(imageSizeHoldPath, 'utf8');
 const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
+const readme = readFileSync(readmePath, 'utf8');
 const page = [
     html,
     script,
@@ -685,6 +687,12 @@ assert.ok(
     'PDF run reconstruction must preserve explicit spaces, verse boundaries, and mixed-size baselines'
 );
 assert.ok(
+    page.includes('function foldFloatingPdfVerseItems')
+        && page.includes('floatingVerse')
+        && page.includes('data-kf-verse='),
+    'detached PDF verse numbers must return to their prose line as semantic superscripts'
+);
+assert.ok(
     page.includes('crossingItems')
         && page.includes('crossingRatio > 0.2'),
     'full-width PDF prose crossing a proposed gutter must not be reordered as columns'
@@ -695,9 +703,9 @@ assert.ok(
     'PDF lists must remove duplicate source markers while retaining writing space inside list items'
 );
 assert.ok(page.includes("renderPdfParagraphHtml(current)")
-    && page.includes(".join(' ')")
-    && !page.includes("current.map((line) => renderPdfLineHtml(line)).join('<br>')"),
-    'same-paragraph PDF lines must reflow as one sentence instead of saved line breaks');
+    && page.includes('function pdfLinesLookLikeVerse')
+    && page.includes('function pdfLineNeedsVisibleBreak'),
+    'PDF prose must reflow while poetry, stacked titles, and style changes keep visible line breaks');
 assert.ok(page.includes('if (!tableGeometry.hasGrid && !semanticHeader) return null;'),
     'aligned PDF prose must not become a table without grid or header evidence');
 assert.ok(page.includes("let editMode = 'edit'"), 'empty workspace defaults to Edit');
@@ -955,6 +963,24 @@ assert.ok(epubCssMatch, 'shared reflowable EPUB CSS is declared as an array join
 assert.ok(
     !epubCssMatch[1].includes('pre-wrap'),
     'EPUB styles.css must not use white-space:pre-wrap (Kobo page-turn freeze)'
+);
+assert.ok(
+    epubCssMatch[1].includes('text-align:left')
+        && epubCssMatch[1].includes('page-break-after:avoid')
+        && epubCssMatch[1].includes('break-after:avoid-page'),
+    'EPUB defaults must keep ragged-right prose and headings with following content'
+);
+assert.ok(
+    /#deviceBookContent p\s*\{[\s\S]*?text-align:\s*left;/.test(styles)
+        && /#deviceBookContent h1,[\s\S]*?break-after:\s*avoid-column;/.test(styles),
+    'editable preview must match the reader-friendly EPUB alignment and heading flow'
+);
+assert.ok(
+    readme.includes('markusyeo/BABulletinBotV2')
+        && script.includes('markusyeo/BABulletinBotV2')
+        && html.includes('PDF readability: <a href="https://github.com/markusyeo/BABulletinBotV2"')
+        && html.includes('>Markus Yeo</a>'),
+    'Markus Yeo must retain site, README, and source-level credit for the readability refinements'
 );
 assert.ok(
     epubCssMatch[1].includes('kf-image-inline-left')

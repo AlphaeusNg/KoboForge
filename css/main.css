@@ -358,8 +358,7 @@ body {
 #deviceBookContent p {
     margin: 0 0 0.82em;
     line-height: inherit;
-    text-align: justify;
-    text-justify: inter-word;
+    text-align: left;
 }
 
 #deviceBookContent p.preserve-structure {
@@ -608,6 +607,8 @@ body {
     font-weight: 700;
     line-height: 1.22;
     break-inside: auto;
+    break-after: avoid-column;
+    page-break-after: avoid;
 }
 
 #deviceBookContent h1 { font-size: 1.45em; }

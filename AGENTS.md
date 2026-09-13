@@ -60,6 +60,7 @@ Runtime conversion libraries load from CDNs only when their workflow needs them;
 - Locked edit pagination: deletion reflows later paragraphs without viewport drift
 - PDF image extraction with inline scan-page fallback; whitespace analysis preserves worksheet/note regions
 - PDF source-page divisions locked to Kobo page starts; gutter-validated column separation; sentence-aware line joining
+- PDF poetry keeps authored lineation; detached verse numbers return to their prose line as semantic superscripts
 - Conservative PDF table detection requiring ruled-grid or distinct header evidence
 - Actionable download errors identify malformed/empty/unsupported images without exposing encoded contents or private URLs
 - Package boundary restricts image manifest types, unique IDs/filenames, non-empty binaries, locally embedded chapter image references; CSS/SVG must resolve to declared local assets; scripts/frames/forms rejected; ordinary hyperlinks remain

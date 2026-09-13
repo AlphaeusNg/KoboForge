@@ -229,9 +229,9 @@ function escapeXml(value) {
 export const REFLOWABLE_EPUB_CSS = [
     'html,body{height:auto !important;max-height:none !important;overflow:visible !important;}',
     'body{font-family:Georgia,"Times New Roman",serif;line-height:1.55;margin:3% 4%;color:#111;-webkit-hyphens:auto;hyphens:auto;orphans:2;widows:2;}',
-    'h1,h2,h3{margin:1.25em 0 .55em;line-height:1.25;font-family:Georgia,serif;page-break-after:auto;page-break-inside:auto;}',
+    'h1,h2,h3{margin:1.25em 0 .55em;line-height:1.25;font-family:Georgia,serif;page-break-after:avoid;break-after:avoid-page;page-break-inside:auto;}',
     'h1{font-size:1.45em;}h2{font-size:1.22em;}h3{font-size:1.08em;}',
-    'p{margin:0 0 0.85em;text-align:justify;page-break-inside:auto;page-break-before:auto;page-break-after:auto;}',
+    'p{margin:0 0 0.85em;text-align:left;page-break-inside:auto;page-break-before:auto;page-break-after:auto;}',
     'h1.kf-pdf-block,h2.kf-pdf-block,h3.kf-pdf-block,p.kf-pdf-block{font-size:1em;font-family:inherit;text-align:left;}',
     '.kf-pdf-page{display:block;box-sizing:border-box;width:100%;page-break-inside:auto;break-inside:auto;}',
     '.kf-pdf-page::after{display:table;clear:both;content:"";}',

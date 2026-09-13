@@ -19,4 +19,13 @@ On a phone, use the compact icon controls.
 
 Working in this repo? See **[AGENTS.md](AGENTS.md)** for fidelity rules, EPUB packaging, and tests.
 
+## Acknowledgements
+
+PDF readability refinements—including detached verse-number recovery, preserved
+poetry lineation, and reader-friendly default alignment—were informed by
+[BABulletinBotV2](https://github.com/markusyeo/BABulletinBotV2) by
+[Markus Yeo](https://github.com/markusyeo). His church bulletin converter is
+itself built with credited adaptations from KoboForge; these refinements were
+reimplemented here for the browser-only PDF.js workflow.
+
 MIT. See [LICENSE](LICENSE).

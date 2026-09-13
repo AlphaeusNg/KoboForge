@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-09-12 (KoboForge Cycle 81)
+Last updated: 2026-09-14 (KoboForge Cycle 82)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.09.12.1`.
+- Deployment version: `2026.09.14.1`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, 32 decoded-image assertions, 97 package
@@ -16,11 +16,41 @@ Last updated: 2026-09-12 (KoboForge Cycle 81)
   browser-to-downloaded-EPUB flows (including every real-document corpus file),
   and recursive syntax checks on Node 24. The
   immutable EPUBCheck ZIP is cached by exact platform/version/digest and is
-  checksum-verified before every extraction, including cache hits. Twenty-five
+  checksum-verified before every extraction, including cache hits. Twenty-six
   offline real-Chromium journeys include real DOCX/PDF conversion and
   fail-closed image, CSS, and active-HTML handling.
 
-## Latest cycle: announce conversion and export progress accessibly
+## Latest cycle: bring Markus Yeo's PDF readability ideas home
+
+### Why this was selected
+
+Markus Yeo's BABulletinBotV2 credits KoboForge for its device table and EPUB
+foundation, then adds thoughtful reading behaviour for church bulletins and
+sermon material. KoboForge could adopt those reader-facing ideas while keeping
+its more capable browser editor and tested packaging boundary.
+
+### Changes
+
+- Reimplement detached PDF verse-number folding for PDF.js, including numbers
+  floating inside a longer text item, and emit stable semantic superscripts.
+- Preserve authored lines for likely poetry or lyrics, stacked bold titles, and
+  style transitions while continuing to reflow ordinary wrapped prose.
+- Default preview and EPUB prose to ragged-right alignment, retain Justify as an
+  explicit toolbar choice, and keep headings with the content that follows.
+- Credit Markus and BABulletinBotV2 in the live footer, README, and source beside
+  the adapted behaviour.
+- Bump the visitor/offline-asset version to `2026.09.14.1`.
+
+### Verification
+
+- `npm test` passes the workflow/dependency policies, 28 draft-recovery
+  assertions, document-fidelity fixtures, 32 image assertions, and 97 EPUB
+  package assertions.
+- All 26 offline Chromium journeys pass, including every real sermon DOCX/PDF,
+  the new poetry/floating-verse regression, and downloaded-EPUB inspection.
+- Recursive JavaScript syntax checks and `git diff --check` pass.
+
+## Previous cycle: announce conversion and export progress accessibly
 
 ### Why this was selected
 

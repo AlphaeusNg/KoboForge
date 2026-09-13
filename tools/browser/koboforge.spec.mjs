@@ -199,6 +199,54 @@ export function getDocument() {
 }`;
 }
 
+function pdfReadabilityModuleSource() {
+  const pages = [{
+    width: 596,
+    height: 842,
+    items: [
+      pdfTextItem("Grace taught my heart to fear", 72, 760, 168, { hasEOL: true }),
+      pdfTextItem("And grace my fears relieved", 72, 742, 158, { hasEOL: true }),
+      pdfTextItem("How precious did that grace appear", 72, 724, 205, { hasEOL: true }),
+      pdfTextItem("The hour I first believed", 72, 706, 150, { hasEOL: true }),
+    ],
+  }, {
+    width: 596,
+    height: 842,
+    items: [
+      pdfTextItem(
+        "After the plague, the LORD said to Moses  and to Eleazar",
+        72,
+        740,
+        265,
+        { hasEOL: true },
+      ),
+      pdfTextItem("2", 260, 747, 4, { height: 6, fontName: "Helvetica-Bold" }),
+      pdfTextItem("the son of Aaron, the priest.", 72, 722, 170, { hasEOL: true }),
+    ],
+  }];
+  return `
+export const GlobalWorkerOptions = {};
+export const OPS = {};
+const pages = ${JSON.stringify(pages)};
+export function getDocument() {
+  return {
+    promise: Promise.resolve({
+      numPages: pages.length,
+      async getPage(number) {
+        const source = pages[number - 1];
+        return {
+          commonObjs: { get() { throw new Error("font metadata unavailable"); } },
+          getViewport() { return { width: source.width, height: source.height }; },
+          async getTextContent() { return { items: source.items, styles: {} }; },
+          async getOperatorList() { return { fnArray: [], argsArray: [] }; },
+        };
+      },
+      async destroy() {},
+    }),
+  };
+}`;
+}
+
 test.beforeEach(async ({ page }) => {
   const errors = [];
   runtimeErrors.set(page, errors);
@@ -1185,6 +1233,47 @@ test("keeps single-column PDF words ordered and correctly spaced in EPUB", async
   expect(chapterText).toContain("The LORD continues without losing a word.");
   expect(chapter).toContain("kf-note-space kf-space-3");
   expect(chapter).not.toContain("data-pdf-column");
+});
+
+test("keeps PDF poetry lineation and folds floating verse numbers into prose", async ({ page }) => {
+  await page.route(
+    PDFJS_MODULE_URL,
+    async (route) => route.fulfill({
+      status: 200,
+      contentType: "application/javascript",
+      headers: { "access-control-allow-origin": "*" },
+      body: pdfReadabilityModuleSource(),
+    }),
+  );
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "pdf-reader-refinements.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\n% readability fixture\n"),
+  });
+
+  await expect(page.locator("#status")).toHaveText(
+    "PDF ready · editable · Kobo Libra Colour",
+  );
+  const preview = page.locator("#deviceBookContent");
+  const poem = preview.locator('.kf-pdf-page[data-source-page="1"] p').first();
+  await expect(poem.locator("br")).toHaveCount(3);
+  await expect(poem).toContainText("Grace taught my heart to fear");
+  const versePage = preview.locator('.kf-pdf-page[data-source-page="2"]');
+  await expect(versePage.locator('sup.kf-verse-num[data-kf-verse="2"]')).toHaveCount(1);
+  await expect(versePage).toContainText(
+    "After the plague, the LORD said to Moses 2 and to Eleazar the son of Aaron, the priest.",
+  );
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#downloadBtn").click();
+  const download = await downloadPromise;
+  const archive = await JSZip.loadAsync(await readFile(await download.path()));
+  const chapter = await archive.file("OEBPS/chapter-1.xhtml").async("string");
+  expect((chapter.match(/<br\s*\/?\s*>/g) || []).length).toBeGreaterThanOrEqual(3);
+  expect(chapter).toContain('class="kf-verse-num"');
+  expect(chapter).toContain('data-kf-verse="2"');
 });
 
 test("restores sanitized last Kobo prefs before first preview paint", async ({ page }) => {
