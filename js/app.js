@@ -703,7 +703,7 @@
             if (deviceMarginValue) deviceMarginValue.textContent = `${marginMm.toFixed(0)} mm`;
         }
 
-        function renderDevicePreview({ resetPage = false } = {}) {
+        function renderDevicePreview({ resetPage = false, preserveFind = false } = {}) {
             if (!devicePreview || !deviceBookContent) return;
             if (resetPage) devicePageIndex = 0;
             resetDeviceViewportScroll();
@@ -730,6 +730,12 @@
             }
             if (deviceReaderTitle) deviceReaderTitle.textContent = title;
             deviceBookContent.lang = lang;
+            // Geometry-only callers pass preserveFind so an active #findInBook
+            // query can be re-applied after the DOM rebuild. Body/mode paths
+            // omit it and leave finds cleared.
+            const findQueryToRestore = preserveFind
+                ? String(findInBook?.value || '').trim()
+                : '';
             clearFindHits();
             deviceBookContent.innerHTML = renderedBody || '<p>(Empty document)</p>';
             selectedEditableImage = null;
@@ -768,6 +774,9 @@
             scheduleDevicePagination();
             savePrefs();
             saveDevicePrefs();
+            if (findQueryToRestore) {
+                runFindInBook(0);
+            }
         }
 
         function scheduleDevicePagination() {
@@ -940,7 +949,7 @@
                     if (imagesRetargeted) refreshOutlineAndStats();
                     statusEl.textContent = conciseReadyStatus();
                 }
-                renderDevicePreview({ resetPage: true });
+                renderDevicePreview({ resetPage: true, preserveFind: true });
                 // The device frame animates width/aspect-ratio for 200 ms.
                 // Re-measure once more after that transition fully settles.
                 setTimeout(scheduleDevicePagination, 240);
@@ -951,7 +960,7 @@
             releaseEditablePageLock();
             savePrefs();
             saveDevicePrefs();
-            renderDevicePreview({ resetPage: true });
+            renderDevicePreview({ resetPage: true, preserveFind: true });
             scheduleDraftSave();
         });
         [deviceFontSize, deviceMargin].forEach((control) => {
@@ -960,7 +969,7 @@
                 updateDeviceControlLabels();
                 devicePageIndex = 0;
                 if (currentOutput && isDeviceEditableMode()) syncBodyFromUi();
-                renderDevicePreview({ resetPage: true });
+                renderDevicePreview({ resetPage: true, preserveFind: true });
                 scheduleDevicePagination();
                 savePrefs();
                 saveDevicePrefs();

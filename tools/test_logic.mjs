@@ -136,6 +136,34 @@ assert.ok(
         && script.includes("findInBookWrap?.classList.remove('hidden')"),
     'find-in-book stays available even when the chapter outline is hidden'
 );
+assert.ok(
+    script.includes('preserveFind = false')
+        && script.includes('preserveFind: true')
+        && script.includes('findQueryToRestore')
+        && script.includes('if (findQueryToRestore)')
+        && script.includes('runFindInBook(0)'),
+    'geometry-only device preview refresh must re-apply a non-empty Find-in-book query'
+);
+assert.ok(
+    /\[deviceFontSize, deviceMargin\][\s\S]*?renderDevicePreview\(\{ resetPage: true, preserveFind: true \}\)/.test(script)
+        && /deviceChrome[\s\S]*?renderDevicePreview\(\{ resetPage: true, preserveFind: true \}\)/.test(script)
+        && /deviceSelect, deviceOrientation[\s\S]*?renderDevicePreview\(\{ resetPage: true, preserveFind: true \}\)/.test(script),
+    'font, margin, chrome, and device geometry handlers must preserve Find-in-book'
+);
+assert.ok(
+    /function setEditMode\([\s\S]*?if \(isDeviceSurface\) \{[\s\S]*?renderDevicePreview\(\);/.test(script),
+    'mode switches must still clear Find-in-book by rendering without preserveFind'
+);
+assert.equal(
+    (script.match(/function setEditMode\([\s\S]*?\n        function selectedDeviceProfile/) || [''])[0]
+        .includes('preserveFind'),
+    false,
+    'setEditMode must not pass preserveFind when rebuilding the reader'
+);
+assert.ok(
+    /previewEl\.addEventListener\('input'[\s\S]*?clearFindHits\(\);/.test(script),
+    'body edits must still clear Find-in-book hits'
+);
 assert.equal(existsSync(fixedLayoutPath), false, 'removed fixed-layout module must stay deleted');
 assert.equal(existsSync(fixedFixturePath), false, 'removed fixed EPUB fixture must stay deleted');
 assert.ok(
