@@ -992,6 +992,46 @@ test("keeps Find-in-book current state accessible, fresh, and out of exports", a
   expect(chapter).not.toContain("data-kf-find-original-current");
 });
 
+test("re-applies Find-in-book after font and margin geometry refresh", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "find-geometry.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Alpha first.\n\nBeta only.\n\nAlpha last."),
+  });
+  await expect(page.locator("#status")).toHaveText(
+    "TXT ready · editable · Kobo Libra Colour",
+  );
+
+  await page.locator("#findInBook").fill("alpha");
+  await page.locator("#findInBookNext").click();
+  await expect(page.locator("#findInBookStatus")).toHaveText("1 of 2");
+  await expect(page.locator(".kf-find-hit")).toContainText("Alpha first");
+
+  await page.locator("#deviceFontSize").evaluate((el) => {
+    el.value = "4.4";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#findInBookStatus")).toHaveText("1 of 2");
+  await expect(page.locator(".kf-find-hit")).toHaveCount(1);
+  await expect(page.locator(".kf-find-hit")).toContainText("Alpha first");
+
+  await page.locator("#deviceMargin").evaluate((el) => {
+    el.value = "5";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#findInBookStatus")).toHaveText("1 of 2");
+  await expect(page.locator(".kf-find-hit")).toContainText("Alpha first");
+
+  // Mode switch rebuilds without preserveFind and must clear hits.
+  await page.locator('[data-mode="html"]').click();
+  await page.locator('[data-mode="edit"]').click();
+  await expect(page.locator(".kf-find-hit")).toHaveCount(0);
+  await expect(page.locator("#findInBookStatus")).toHaveText("");
+  await expect(page.locator("#findInBook")).toHaveValue("alpha");
+});
+
 test("keeps Diff editable and exports the Diff-mode revision", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");
