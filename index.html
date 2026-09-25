@@ -60,6 +60,8 @@
         <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
         <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
         <symbol id="icon-back" viewBox="0 0 24 24"><path d="m9 18-6-6 6-6"/><path d="M3 12h12a6 6 0 0 1 6 6v1"/></symbol>
+        <symbol id="icon-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+        <symbol id="icon-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
     </svg>
     <nav class="site-header sticky top-0 z-50 border-b border-white/10 bg-[#0A0F1C]/95 backdrop-blur">
         <div class="mx-auto flex h-14 max-w-[1500px] items-center justify-between gap-4 px-6">
@@ -237,8 +239,16 @@
                 <p class="text-xs leading-5 text-slate-500">
                     Edit or Diff on the same Kobo page. Diff keeps red/green marks while you type.
                 </p>
+                <p id="editorHistoryNote" class="text-xs leading-5 text-slate-500">Undo and redo cover text, lists, and image edits on this view. Page turns are not undo steps. Switching Edit, Diff, or HTML starts a fresh undo stack.</p>
                 </div>
 
+                <nav id="bookOutlineWrap" class="mt-4 hidden" aria-label="Book outline">
+                <div class="mb-2 flex items-center justify-between gap-2">
+                    <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Book outline</div>
+                    <span id="bookOutlineHint" class="text-[11px] text-slate-500"></span>
+                </div>
+                <div id="bookOutline" class="flex max-h-36 flex-col gap-1 overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/30 p-2"></div>
+                </nav>
                 <div id="chapterOutlineWrap" class="mt-4 hidden">
                 <div class="mb-2 flex items-center justify-between gap-2">
                     <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Contents (export TOC)</div>
@@ -263,6 +273,10 @@
                         <div id="editToolbar" class="hidden" role="toolbar" aria-label="Document editing controls">
                             <div class="tb-scroll" aria-label="Two rows of editing controls">
                                 <div class="tb-lane" tabindex="0" data-toolbar-row="text" aria-label="Text editing controls; scroll horizontally">
+                                <div class="tb-row" role="group" aria-label="Undo and redo">
+                                    <button type="button" id="undoEditBtn" class="tb-btn" title="Undo" data-tooltip="Undo" aria-label="Undo" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-undo"></use></svg></button>
+                                    <button type="button" id="redoEditBtn" class="tb-btn" title="Redo" data-tooltip="Redo" aria-label="Redo" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-redo"></use></svg></button>
+                                </div>
                                 <div class="tb-row" role="group" aria-label="Inline style">
                                     <button type="button" data-cmd="bold" class="tb-btn" title="Bold" data-tooltip="Bold" aria-label="Bold"><svg class="ui-icon" aria-hidden="true"><use href="#icon-bold"></use></svg></button>
                                     <button type="button" data-cmd="italic" class="tb-btn" title="Italic" data-tooltip="Italic" aria-label="Italic"><svg class="ui-icon" aria-hidden="true"><use href="#icon-italic"></use></svg></button>
@@ -375,6 +389,13 @@
                     <div class="h-2 overflow-hidden rounded-full bg-white/10">
                         <div id="progressBar" class="h-full w-0 rounded-full bg-[#C9A227] transition-[width] duration-200"></div>
                     </div>
+                    <ol id="conversionStages" class="mt-2 hidden flex flex-wrap gap-1.5" aria-label="Import stages">
+                        <li data-stage="read">Read</li>
+                        <li data-stage="parse">Parse</li>
+                        <li data-stage="images">Images</li>
+                        <li data-stage="preview">Preview</li>
+                    </ol>
+                    <button type="button" id="cancelImportBtn" class="mt-3 hidden inline-flex items-center justify-center rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-200 transition hover:border-rose-400/50 hover:bg-rose-500/15">Cancel import</button>
                 </div>
                 <div id="stats" class="mt-4 hidden flex flex-wrap gap-2" aria-label="Conversion facts">
                     <span id="statFormat" class="rounded-full border border-white/10 bg-slate-950/35 px-3 py-1.5 text-xs font-medium text-slate-200">—</span>
@@ -402,6 +423,9 @@
                 </div>
                 <div class="flex flex-wrap items-center gap-2 md:justify-end">
                     <button type="button" id="clearBtn" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30 disabled:opacity-40" disabled>Clear</button>
+                    <button type="button" id="downloadBackupBtn" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30 disabled:opacity-40" disabled>Download backup</button>
+                    <button type="button" id="restoreBackupBtn" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30">Restore backup</button>
+                    <input id="backupFileInput" type="file" accept="application/json,.json,.koboforge.json" class="hidden">
                     <button id="downloadBtn" class="rounded-xl bg-[#C9A227] px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-[#d9b844] disabled:cursor-not-allowed disabled:opacity-50" disabled title="Sync edits, then build and download EPUB">Download EPUB</button>
                 </div>
             </div>

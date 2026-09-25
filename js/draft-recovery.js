@@ -5,6 +5,9 @@ export const DRAFT_DATABASE_NAME = "koboforge-drafts";
 export const DRAFT_DATABASE_VERSION = 1;
 export const DRAFT_STORE_NAME = "drafts";
 export const ACTIVE_DRAFT_KEY = "active-book";
+export const PROJECT_BACKUP_KIND = "koboforge-project-backup";
+export const PROJECT_BACKUP_SCHEMA_VERSION = 1;
+export const PROJECT_BACKUP_MAX_BYTES = 32 * 1024 * 1024;
 
 export const DRAFT_AFTER_EXPORT = Object.freeze({
   state: "exported",
@@ -172,6 +175,54 @@ export function normalizeDraftRecord(value) {
     bodyEdited: value.bodyEdited === true,
     document: output,
   };
+}
+
+function backupByteLength(value) {
+  const text = typeof value === "string" ? value : "";
+  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
+  return text.length;
+}
+
+export function buildProjectBackup(value) {
+  const draft = normalizeDraftRecord(value);
+  if (!draft) return null;
+  return {
+    kind: PROJECT_BACKUP_KIND,
+    schemaVersion: PROJECT_BACKUP_SCHEMA_VERSION,
+    savedAt: draft.savedAt,
+    source: draft.source,
+    book: draft.book,
+    options: draft.options,
+    bodyEdited: draft.bodyEdited,
+    document: draft.document,
+  };
+}
+
+export function parseProjectBackup(raw, { maxBytes = PROJECT_BACKUP_MAX_BYTES } = {}) {
+  if (typeof raw !== "string") return { ok: false, reason: "malformed" };
+  const limit = Number(maxBytes);
+  const bytes = backupByteLength(raw);
+  if (!Number.isFinite(limit) || limit < 1 || bytes > limit) {
+    return { ok: false, reason: "oversized" };
+  }
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch (_) {
+    return { ok: false, reason: "malformed" };
+  }
+  if (!isObject(value) || value.kind !== PROJECT_BACKUP_KIND) {
+    return { ok: false, reason: "malformed" };
+  }
+  if (value.schemaVersion !== PROJECT_BACKUP_SCHEMA_VERSION) {
+    return { ok: false, reason: "malformed" };
+  }
+  const draft = normalizeDraftRecord({
+    ...value,
+    schemaVersion: DRAFT_SCHEMA_VERSION,
+  });
+  if (!draft) return { ok: false, reason: "malformed" };
+  return { ok: true, draft };
 }
 
 function requestResult(request) {

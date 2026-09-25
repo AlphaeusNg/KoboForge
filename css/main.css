@@ -1290,6 +1290,45 @@ html.kf-slider-held body {
     color: #f8fafc;
 }
 
+#bookOutline button {
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 0.45rem 0.7rem;
+    text-align: left;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
+
+#bookOutline button[data-level="2"] { margin-left: 0.7rem; }
+#bookOutline button[data-level="3"] { margin-left: 1.4rem; }
+#bookOutline button[data-level="4"],
+#bookOutline button[data-level="5"],
+#bookOutline button[data-level="6"] { margin-left: 2.1rem; }
+
+#bookOutline button.is-selected {
+    border-color: rgba(201, 162, 39, 0.5);
+    background: rgba(201, 162, 39, 0.12);
+    color: #f8fafc;
+}
+
+#conversionStages { list-style: none; padding: 0; }
+#conversionStages li {
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.15rem 0.55rem;
+    color: #64748b;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+#conversionStages li.is-done { color: #94a3b8; }
+#conversionStages li.is-current {
+    color: #f8fafc;
+    border-color: rgba(201, 162, 39, 0.55);
+}
+
 #deviceBookContent .kf-find-hit {
     background: rgba(201, 162, 39, 0.28);
     box-shadow: inset 0 0 0 1px rgba(201, 162, 39, 0.7);

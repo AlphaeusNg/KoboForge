@@ -632,8 +632,11 @@ assert.ok(
         && page.includes('page?.cleanup?.()'),
     'PDF image conversion and resource cleanup happen one source page at a time'
 );
-assert.ok(page.includes('MAX_SOURCE_IMAGE_B64') && page.includes('optimizeDocumentImages(doc.body.innerHTML)'),
-    'DOCX images accepted then optimized for the selected Kobo');
+assert.ok(
+    page.includes('MAX_SOURCE_IMAGE_B64')
+        && page.includes('optimizeDocumentImages(doc.body.innerHTML, { conversionId })'),
+    'DOCX images accepted then optimized for the selected Kobo'
+);
 {
     const optStart = script.indexOf('async function optimizeDocumentImages(');
     const optEnd = script.indexOf('async function retargetCurrentDocumentImages()');

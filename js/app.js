@@ -35,10 +35,42 @@
         const {
             DRAFT_AFTER_EXPORT,
             DRAFT_SCHEMA_VERSION,
+            PROJECT_BACKUP_MAX_BYTES,
+            buildProjectBackup,
             createDraftStore,
+            parseProjectBackup,
             shouldPromptDraftAfterExport
         } = await import(
             `./draft-recovery.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
+        );
+        const {
+            devicePageTransform,
+            measureDevicePageCount,
+            pageIndexForOffset,
+            resolveDevicePageIndex
+        } = await import(
+            `./device-pagination.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
+        );
+        const {
+            CONVERSION_STAGES,
+            ConversionCancelled,
+            createConversionSession
+        } = await import(
+            `./conversion-session.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
+        );
+        const {
+            collectBookOutline,
+            outlineIndexForNode,
+            outlineIndexForPage
+        } = await import(
+            `./book-outline.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
+        );
+        const {
+            EDITOR_HISTORY_BOUNDARY,
+            EMPTY_EDITOR_HISTORY_STATUS,
+            createEditorHistory
+        } = await import(
+            `./editor-history.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
         const loadModuleDependency = createModuleDependencyLoader();
         const loadScriptDependency = createScriptDependencyLoader();
@@ -135,6 +167,17 @@
         const progressBar = document.getElementById('progressBar');
         const progressPct = document.getElementById('progressPct');
         const progressLabel = document.getElementById('progressLabel');
+        const conversionStages = document.getElementById('conversionStages');
+        const cancelImportBtn = document.getElementById('cancelImportBtn');
+        const downloadBackupBtn = document.getElementById('downloadBackupBtn');
+        const restoreBackupBtn = document.getElementById('restoreBackupBtn');
+        const backupFileInput = document.getElementById('backupFileInput');
+        const bookOutlineWrap = document.getElementById('bookOutlineWrap');
+        const bookOutline = document.getElementById('bookOutline');
+        const bookOutlineHint = document.getElementById('bookOutlineHint');
+        const editorHistoryNote = document.getElementById('editorHistoryNote');
+        const undoEditBtn = document.getElementById('undoEditBtn');
+        const redoEditBtn = document.getElementById('redoEditBtn');
         const modeButtons = document.querySelectorAll('.mode-btn');
         const devicePreview = document.getElementById('devicePreview');
         const deviceSelect = document.getElementById('deviceSelect');
@@ -248,6 +291,13 @@
         let editViewportLockFrame = null;
         let documentImageConversionToken = 0;
         let tooltipHideTimer = null;
+        let activeConversionId = 0;
+        let editorHistoryResetPending = false;
+        let suppressEditorHistory = false;
+        const conversionSession = createConversionSession();
+        const conversionHandles = new Map();
+        const editorHistory = createEditorHistory();
+        if (editorHistoryNote) editorHistoryNote.textContent = EDITOR_HISTORY_BOUNDARY;
         let savedEditRange = null;
         let tableInsertionRange = null;
         let selectedEditableImage = null;
@@ -463,7 +513,7 @@
 
         preserveTablesEl?.addEventListener('change', () => {
             savePrefs();
-            if (!currentFile || currentOutput?.restoredDraft) {
+            if (!currentFile || currentOutput?.restoredDraft || currentOutput?.restoredBackup || !(currentFile instanceof File)) {
                 scheduleDraftSave();
                 return;
             }
@@ -525,7 +575,9 @@
             }
         }
 
-        function setEditMode(mode) {
+        function setEditMode(mode, options = {}) {
+            const resetHistory = options.resetHistory === true;
+            const skipSync = options.skipSync === true;
             if (!['edit', 'diff', 'html'].includes(mode)) mode = 'edit';
             if (!currentOutput) {
                 statusEl.textContent = 'Load a document first.';
@@ -534,12 +586,16 @@
             if (editMode === 'html' && unsafeHtmlSourceStopsTransition()) {
                 return;
             }
-            // Always flush UI → model before leaving a surface that can hold edits
-            if (isDeviceEditableMode() || editMode === 'html') {
+            // Always flush UI → model before leaving a surface that can hold edits.
+            // Import and backup restore pass skipSync because the preview still
+            // shows the previous book and must not replace the new model.
+            if (!skipSync && (isDeviceEditableMode() || editMode === 'html')) {
                 syncBodyFromUi();
             }
             releaseEditablePageLock();
 
+            const surfaceKindChanged = mode !== editMode;
+            if (surfaceKindChanged || resetHistory) editorHistoryResetPending = true;
             editMode = mode;
             modeButtons.forEach((b) => {
                 const active = b.dataset.mode === mode;
@@ -584,6 +640,10 @@
             if (isDeviceSurface) {
                 // Edit and Diff share one reader. Keep the current Kobo page.
                 renderDevicePreview();
+            } else if (editorHistoryResetPending) {
+                editorHistory.reset('');
+                editorHistoryResetPending = false;
+                updateUndoButtons();
             }
             if (isDiff) renderDiffPanel();
             updateEditChrome();
@@ -774,6 +834,14 @@
             scheduleDevicePagination();
             savePrefs();
             saveDevicePrefs();
+            if (editorHistoryResetPending) {
+                editorHistory.reset(deviceBookContent.innerHTML);
+                editorHistoryResetPending = false;
+            } else {
+                editorHistory.realign(deviceBookContent.innerHTML);
+            }
+            updateUndoButtons();
+            refreshBookOutline();
             if (findQueryToRestore) {
                 runFindInBook(0);
             }
@@ -818,7 +886,7 @@
             const pageWidth = Number(deviceBookContent.dataset.pageWidth || 0);
             if (pageWidth) {
                 deviceBookContent.style.transition = 'none';
-                deviceBookContent.style.transform = `translate3d(${-devicePageIndex * pageWidth}px,0,0)`;
+                deviceBookContent.style.transform = devicePageTransform(devicePageIndex, pageWidth);
             }
         }
 
@@ -891,16 +959,13 @@
 
                 requestAnimationFrame(() => {
                     const fullWidth = Math.max(pageWidth, deviceBookContent.scrollWidth);
-                    devicePageCount = Math.max(1, Math.ceil((fullWidth - 0.5) / pageWidth));
-                    const requestedPage = (
-                        isDeviceEditableMode() && lockedEditPageIndex !== null
-                    )
-                        ? lockedEditPageIndex
-                        : devicePageIndex;
-                    devicePageIndex = Math.max(
-                        0,
-                        Math.min(requestedPage, devicePageCount - 1)
-                    );
+                    devicePageCount = measureDevicePageCount(fullWidth, pageWidth);
+                    devicePageIndex = resolveDevicePageIndex({
+                        pageCount: devicePageCount,
+                        requestedIndex: devicePageIndex,
+                        lockedIndex: lockedEditPageIndex,
+                        lockActive: isDeviceEditableMode() && lockedEditPageIndex !== null
+                    });
                     deviceBookContent.dataset.pageWidth = String(pageWidth);
                     updateDevicePage({ animate: false });
                 });
@@ -909,14 +974,16 @@
 
         function updateDevicePage({ animate = true } = {}) {
             const pageWidth = Number(deviceBookContent?.dataset.pageWidth || 0);
-            if (isDeviceEditableMode() && lockedEditPageIndex !== null) {
-                devicePageIndex = lockedEditPageIndex;
-            }
-            devicePageIndex = Math.max(0, Math.min(devicePageIndex, Math.max(0, devicePageCount - 1)));
+            devicePageIndex = resolveDevicePageIndex({
+                pageCount: devicePageCount,
+                requestedIndex: devicePageIndex,
+                lockedIndex: lockedEditPageIndex,
+                lockActive: isDeviceEditableMode() && lockedEditPageIndex !== null
+            });
             resetDeviceViewportScroll();
             if (deviceBookContent && pageWidth) {
                 if (!animate) deviceBookContent.style.transition = 'none';
-                deviceBookContent.style.transform = `translate3d(${-devicePageIndex * pageWidth}px,0,0)`;
+                deviceBookContent.style.transform = devicePageTransform(devicePageIndex, pageWidth);
                 if (!animate) {
                     requestAnimationFrame(() => {
                         resetDeviceViewportScroll();
@@ -934,6 +1001,7 @@
             if (statPages && currentOutput) {
                 statPages.textContent = `${devicePageCount} Kobo page${devicePageCount === 1 ? '' : 's'}`;
             }
+            markBookOutlineSelection();
         }
 
         [deviceSelect, deviceOrientation].forEach((control) => {
@@ -1242,11 +1310,13 @@
             updateImageEditControls();
         }
 
-        function finishImageEdit(message, { paginate = true } = {}) {
+        function finishImageEdit(message, { paginate = true, coalesce = false } = {}) {
             if (!currentOutput || !previewEl) return;
             currentOutput.imageCount = previewEl.querySelectorAll('img[data-kf-image-id]').length;
             beginEditablePageLock();
             markEdited();
+            if (coalesce) commitEditorSurface({ coalesce: true });
+            else commitEditorSurface();
             clearTimeout(commitTimer);
             commitTimer = setTimeout(refreshDiffLive, 80);
             if (paginate) scheduleDevicePagination();
@@ -1267,7 +1337,8 @@
             if (imageSizeValue) imageSizeValue.textContent = `${normalized}%`;
             const holding = document.documentElement.classList.contains('kf-slider-held');
             finishImageEdit(`Image width set to ${normalized}%.`, {
-                paginate: paginate ?? !holding
+                paginate: paginate ?? !holding,
+                coalesce: holding
             });
         }
 
@@ -1615,9 +1686,197 @@
             return !items.length && Array.from(dataTransfer?.types || []).includes('Files');
         }
 
+        function updateUndoButtons() {
+            const available = isDeviceEditableMode() && !!currentOutput;
+            if (undoEditBtn) undoEditBtn.disabled = !available || !editorHistory.canUndo();
+            if (redoEditBtn) redoEditBtn.disabled = !available || !editorHistory.canRedo();
+        }
+
+        function commitEditorSurface({ coalesce = false } = {}) {
+            if (!previewEl || suppressEditorHistory || editorHistory.isApplying()) return;
+            if (coalesce) editorHistory.commit(previewEl.innerHTML, { coalesce: true });
+            else editorHistory.commit(previewEl.innerHTML);
+            updateUndoButtons();
+        }
+
+        function restoreEditorSurface(html, message) {
+            if (!previewEl || !currentOutput || html == null) {
+                statusEl.textContent = EMPTY_EDITOR_HISTORY_STATUS;
+                return;
+            }
+            suppressEditorHistory = true;
+            editorHistory.beginApply();
+            try {
+                previewEl.innerHTML = html;
+                selectedEditableImage = null;
+                draggedEditableImage = null;
+                savedEditRange = null;
+                configureEditableImages();
+                previewEl.querySelectorAll('.kf-note-space').forEach((space) => {
+                    space.setAttribute('contenteditable', 'false');
+                });
+                previewEl.querySelectorAll('.kf-page-break, .kf-blank-page').forEach((pageBreak) => {
+                    pageBreak.setAttribute('contenteditable', 'false');
+                });
+                if (editMode === 'diff') {
+                    previewEl.querySelectorAll('.kf-tc-del, .kf-tc-removed-page, del.kf-tc-del').forEach((mark) => {
+                        mark.setAttribute('contenteditable', 'false');
+                    });
+                }
+                editorHistory.realign(previewEl.innerHTML);
+                beginEditablePageLock();
+                syncBodyFromUi();
+                refreshBookOutline();
+                if (editMode === 'diff') refreshDiffLive();
+                else {
+                    updateEditChrome();
+                    scheduleDevicePagination();
+                }
+                scheduleDraftSave();
+                updateUndoButtons();
+                if (message) statusEl.textContent = message;
+            } finally {
+                editorHistory.endApply();
+                suppressEditorHistory = false;
+            }
+        }
+
+        function undoEditorSurface() {
+            if (!isDeviceEditableMode() || !currentOutput) return;
+            restoreEditorSurface(editorHistory.undo(), 'Undid the last edit on this view.');
+        }
+
+        function redoEditorSurface() {
+            if (!isDeviceEditableMode() || !currentOutput) return;
+            restoreEditorSurface(editorHistory.redo(), 'Redid the last edit on this view.');
+        }
+
+        function bookHeadingElements() {
+            if (!previewEl) return [];
+            return Array.from(previewEl.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+        }
+
+        function refreshBookOutline() {
+            if (!bookOutline || !bookOutlineWrap) return;
+            if (!currentOutput) {
+                bookOutline.innerHTML = '';
+                bookOutlineWrap.classList.add('hidden');
+                return;
+            }
+            const live = isDeviceEditableMode() && previewEl ? previewEl : null;
+            const entries = live
+                ? collectBookOutline(live)
+                : collectBookOutline(new DOMParser().parseFromString(
+                    `<div id="root">${currentOutput.bodyHtml || ''}</div>`,
+                    'text/html'
+                ).getElementById('root'));
+            bookOutline.innerHTML = '';
+            if (!entries.length) {
+                bookOutlineWrap.classList.add('hidden');
+                if (bookOutlineHint) bookOutlineHint.textContent = '';
+                return;
+            }
+            bookOutlineWrap.classList.remove('hidden');
+            if (bookOutlineHint) {
+                bookOutlineHint.textContent = `${entries.length} heading${entries.length === 1 ? '' : 's'}`;
+            }
+            entries.forEach((entry) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'book-outline-item';
+                button.dataset.outlineIndex = String(entry.index);
+                button.dataset.level = String(entry.level);
+                button.textContent = entry.text;
+                button.title = `Jump to ${entry.text}`;
+                button.addEventListener('click', () => jumpToBookHeading(entry.index));
+                bookOutline.appendChild(button);
+            });
+            markBookOutlineSelection();
+        }
+
+        function markBookOutlineSelection() {
+            if (!bookOutline || bookOutlineWrap?.classList.contains('hidden')) return;
+            const buttons = Array.from(bookOutline.querySelectorAll('button'));
+            if (!buttons.length) return;
+            const headings = bookHeadingElements();
+            let index = -1;
+            const selection = window.getSelection();
+            const anchor = selection?.anchorNode;
+            if (anchor && previewEl?.contains(anchor)) {
+                index = outlineIndexForNode(headings, anchor);
+            }
+            if (index < 0 && headings.length) {
+                index = outlineIndexForPage(
+                    headings.map((heading) => pageIndexForElement(heading)),
+                    devicePageIndex
+                );
+            }
+            buttons.forEach((button, buttonIndex) => {
+                const selected = buttonIndex === index;
+                button.classList.toggle('is-selected', selected);
+                if (selected) button.setAttribute('aria-current', 'location');
+                else button.removeAttribute('aria-current');
+            });
+        }
+
+        function jumpToBookHeading(index, { retried = false } = {}) {
+            if (!currentOutput) return;
+            if (!isDeviceEditableMode()) setEditMode('edit');
+            const element = bookHeadingElements()[index];
+            if (!element) return;
+            const pageWidth = Number(deviceBookContent?.dataset.pageWidth || 0);
+            if (!pageWidth && !retried) {
+                scheduleDevicePagination();
+                setTimeout(() => jumpToBookHeading(index, { retried: true }), 90);
+                return;
+            }
+            jumpDeviceToElement(element, { editorFocus: true });
+            markBookOutlineSelection();
+        }
+
+        function syncExportAvailability() {
+            const ready = !!currentOutput;
+            if (downloadBtn) downloadBtn.disabled = !ready;
+            if (downloadBackupBtn) downloadBackupBtn.disabled = !ready;
+        }
+
+        function trackConversionHandle(id, handle) {
+            if (!id || !handle) return;
+            conversionHandles.set(id, handle);
+        }
+
+        function destroyConversionHandle(id) {
+            const handle = conversionHandles.get(id);
+            conversionHandles.delete(id);
+            if (!handle || typeof handle.destroy !== 'function') return;
+            try {
+                const result = handle.destroy();
+                if (result && typeof result.catch === 'function') result.catch(() => {});
+            } catch (_) { /* already destroyed */ }
+        }
+
+        function ensureConversion(id) {
+            if (!id || conversionSession.isCurrent(id)) return;
+            throw new ConversionCancelled();
+        }
+
+        function cancelActiveImport() {
+            const id = conversionSession.currentId();
+            if (!id) return;
+            conversionSession.cancel(id);
+            destroyConversionHandle(id);
+            if (activeConversionId === id) activeConversionId = 0;
+            setProgress(0);
+            statusEl.textContent = currentOutput
+                ? 'Import cancelled. The open book is unchanged.'
+                : 'Import cancelled.';
+        }
+
         function afterFormat() {
             beginEditablePageLock();
             markEdited();
+            commitEditorSurface();
+            refreshBookOutline();
             updateToolbarActiveState();
             clearTimeout(commitTimer);
             commitTimer = setTimeout(() => {
@@ -2550,6 +2809,7 @@
 
         document.addEventListener('selectionchange', () => {
             if (!isDeviceEditableMode()) return;
+            markBookOutlineSelection();
             updateToolbarActiveState();
             const selection = window.getSelection();
             if (!selection?.rangeCount) return;
@@ -2566,12 +2826,24 @@
             if (isDeviceEditableMode() && currentOutput) beginEditablePageLock();
         });
         previewEl.addEventListener('input', () => {
-            if (!isDeviceEditableMode() || !currentOutput) return;
+            if (!isDeviceEditableMode() || !currentOutput || editorHistory.isApplying()) return;
             clearFindHits();
             beginEditablePageLock();
             markEdited();
+            commitEditorSurface();
+            refreshBookOutline();
             clearTimeout(commitTimer);
             commitTimer = setTimeout(refreshDiffLive, 80);
+        });
+        previewEl.addEventListener('keydown', (event) => {
+            if (editorHistory.isApplying() || event.isComposing) return;
+            if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+            const key = String(event.key || '').toLowerCase();
+            const redo = key === 'y' || (key === 'z' && event.shiftKey);
+            const undo = key === 'z' && !event.shiftKey;
+            if (undo || redo) event.preventDefault();
+            if (redo) redoEditorSurface();
+            else if (undo) undoEditorSurface();
         });
         previewEl.addEventListener('keydown', handleEditorTab);
 
@@ -2858,19 +3130,29 @@
             });
         }
 
-        function jumpDeviceToElement(element) {
+        function pageIndexForElement(element) {
+            if (!element || !deviceBookViewport || !deviceBookContent) return devicePageIndex;
+            const pageWidth = Number(deviceBookContent.dataset.pageWidth || 0);
+            if (!pageWidth) return devicePageIndex;
+            const viewportRect = deviceBookViewport.getBoundingClientRect();
+            const rect = element.getClientRects()[0] || element.getBoundingClientRect();
+            const unshiftedLeft = rect.left - viewportRect.left + (devicePageIndex * pageWidth);
+            return pageIndexForOffset(unshiftedLeft, pageWidth, devicePageCount);
+        }
+
+        function jumpDeviceToElement(element, { editorFocus = false } = {}) {
             if (!element || !deviceBookViewport || !deviceBookContent) return;
             releaseEditablePageLock();
             const pageWidth = Number(deviceBookContent.dataset.pageWidth || 0);
             if (!pageWidth) return;
-            const viewportRect = deviceBookViewport.getBoundingClientRect();
-            const rect = element.getClientRects()[0] || element.getBoundingClientRect();
-            const unshiftedLeft = rect.left - viewportRect.left + (devicePageIndex * pageWidth);
-            devicePageIndex = Math.max(
-                0,
-                Math.min(devicePageCount - 1, Math.floor(Math.max(0, unshiftedLeft) / pageWidth))
-            );
+            devicePageIndex = pageIndexForElement(element);
             updateDevicePage();
+            if (editorFocus && previewEl) {
+                previewEl.focus({ preventScroll: true });
+                placeCaretIn(element);
+                resetDeviceViewportScroll();
+                return;
+            }
             devicePreview?.focus({ preventScroll: true });
         }
 
@@ -4362,8 +4644,10 @@
                 .trim();
         }
 
-        function setProgress(pct, label) {
+        function setProgress(pct, label, options = {}) {
+            if (options.conversionId && !conversionSession.isCurrent(options.conversionId)) return;
             if (!progressWrap) return;
+            const stage = options.stage || '';
             const p = Math.max(0, Math.min(100, Math.round(pct)));
             progressWrap.classList.toggle('hidden', p <= 0 && !label);
             if (progressBar) progressBar.style.width = `${p}%`;
@@ -4374,6 +4658,28 @@
                 'aria-valuetext',
                 `${label || progressLabel?.textContent || 'Processing'}, ${p}%`
             );
+            if (conversionStages) {
+                const showStages = !!stage && stage !== 'ready' && p > 0 && p < 100;
+                conversionStages.classList.toggle('hidden', !showStages);
+                const order = CONVERSION_STAGES.map((entry) => entry.id);
+                const currentIndex = order.indexOf(stage);
+                conversionStages.querySelectorAll('[data-stage]').forEach((item) => {
+                    const id = item.dataset.stage;
+                    const itemIndex = order.indexOf(id);
+                    const current = id === stage;
+                    item.classList.toggle('is-current', current);
+                    item.classList.toggle('is-done', currentIndex > itemIndex && itemIndex >= 0);
+                    if (current) item.setAttribute('aria-current', 'step');
+                    else item.removeAttribute('aria-current');
+                });
+            }
+            if (cancelImportBtn && Object.prototype.hasOwnProperty.call(options, 'cancellable')) {
+                cancelImportBtn.classList.toggle('hidden', !(options.cancellable && p > 0 && p < 100));
+            }
+            if (p <= 0 || p >= 100) {
+                conversionStages?.classList.add('hidden');
+                cancelImportBtn?.classList.add('hidden');
+            }
             if (p >= 100) {
                 setTimeout(() => progressWrap.classList.add('hidden'), 600);
             }
@@ -4616,19 +4922,23 @@
             }
         }
 
-        function restoreDraft(draft) {
-            if (!draft || currentOutput) return;
+        function recoveredDocumentIsRenderable(draft) {
             try {
-                assertChapterMarkupCanRenderLocally(draft.document.bodyHtml);
-                assertChapterMarkupCanRenderLocally(draft.document.originalBodyHtml);
+                assertChapterMarkupCanRenderLocally(draft?.document?.bodyHtml || '');
+                assertChapterMarkupCanRenderLocally(draft?.document?.originalBodyHtml || '');
+                return true;
             } catch (error) {
-                console.warn('[KoboForge] Local draft validation stopped restore', error);
-                void removePersistedDraft({
-                    notice: 'The saved draft contained an unsupported resource and was removed. Choose the source file again.'
-                });
-                return;
+                console.warn('[KoboForge] Recovery validation stopped restore', error);
+                return false;
             }
+        }
 
+        function applyRecoveredDocument(draft, {
+            restoredFlag = 'restoredDraft',
+            meta = '',
+            notice = ''
+        } = {}) {
+            cancelActiveImport();
             const appliedDevice = applyDevicePrefs(draft.options.device);
             updateDeviceControlLabels();
             applyDeviceGeometry();
@@ -4638,31 +4948,98 @@
             if (bookAuthorInput) bookAuthorInput.value = draft.book.author;
             if (bookLangInput) bookLangInput.value = draft.book.lang || 'en';
             bookTitleWasEdited = draft.book.titleWasEdited;
-            currentFile = { ...draft.source, restoredDraft: true };
-            currentOutput = { ...draft.document, restoredDraft: true };
+            currentFile = { ...draft.source, [restoredFlag]: true };
+            currentOutput = { ...draft.document, [restoredFlag]: true };
             bodyEdited = draft.bodyEdited;
+            selectedEditableImage = null;
+            draggedEditableImage = null;
+            imageClipboardHtml = '';
+            savedEditRange = null;
+            updateImageEditControls();
             setDropzoneReady(currentFile);
-            if (dropzoneFileMeta) {
-                dropzoneFileMeta.textContent = `${currentOutput.formatLabel} · recovered locally · ready in this browser`;
-            }
-            devicePageIndex = 0;
-            refreshOutlineAndStats();
-            setEditMode('edit');
-            statusEl.textContent = `${conciseReadyStatus()} · restored from local recovery`;
-            downloadBtn.disabled = false;
+            if (dropzoneFileMeta && meta) dropzoneFileMeta.textContent = meta;
             if (clearBtn) clearBtn.disabled = false;
-            draftPersisted = true;
+            devicePageIndex = 0;
+            clearFindHits();
+            refreshOutlineAndStats();
+            setEditMode('edit', { resetHistory: true, skipSync: true });
+            syncExportAvailability();
+            draftPersisted = restoredFlag === 'restoredDraft';
             pendingDraft = null;
             savePrefs();
             saveDevicePrefs();
-            showDraftNotice(
-                `Recovery draft restored · saved ${draftSavedTime(draft.savedAt)}. Changes continue saving locally.`,
-                { state: 'restored' }
-            );
-            // Keep the sanitized device selection as the next recovery value.
-            if (JSON.stringify(appliedDevice) !== JSON.stringify(draft.options.device)) {
+            if (notice) showDraftNotice(notice, { state: 'restored' });
+            if (restoredFlag !== 'restoredDraft' || JSON.stringify(appliedDevice) !== JSON.stringify(draft.options.device)) {
                 scheduleDraftSave({ immediate: true });
             }
+        }
+
+        function restoreDraft(draft) {
+            if (!draft || currentOutput) return;
+            if (!recoveredDocumentIsRenderable(draft)) {
+                void removePersistedDraft({
+                    notice: 'The saved draft contained an unsupported resource and was removed. Choose the source file again.'
+                });
+                return;
+            }
+            applyRecoveredDocument(draft, {
+                restoredFlag: 'restoredDraft',
+                meta: `${draft.document.formatLabel} · recovered locally · ready in this browser`,
+                notice: `Recovery draft restored · saved ${draftSavedTime(draft.savedAt)}. Changes continue saving locally.`
+            });
+            statusEl.textContent = `${conciseReadyStatus()} · restored from local recovery`;
+        }
+
+        function downloadProjectBackup() {
+            const backup = buildProjectBackup(currentDraftRecord());
+            if (!backup) {
+                statusEl.textContent = 'Could not build a backup from the open book.';
+                return;
+            }
+            const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const base = slugify(backup.book.title || 'koboforge-backup') || 'koboforge-backup';
+            link.download = `${base}.koboforge.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+            statusEl.textContent = 'Project backup downloaded in this browser.';
+        }
+
+        async function restoreProjectBackupFile(file) {
+            if (!file) return;
+            if (backupFileInput) backupFileInput.value = '';
+            if (file.size > PROJECT_BACKUP_MAX_BYTES) {
+                statusEl.textContent = 'That backup is too large. The open book was left unchanged.';
+                return;
+            }
+            let text = '';
+            try {
+                text = await file.text();
+            } catch (error) {
+                console.warn('[KoboForge] Backup read failed', error);
+                statusEl.textContent = 'That backup could not be read. The open book was left unchanged.';
+                return;
+            }
+            const parsed = parseProjectBackup(text, { maxBytes: PROJECT_BACKUP_MAX_BYTES });
+            if (!parsed.ok) {
+                statusEl.textContent = parsed.reason === 'oversized'
+                    ? 'That backup is too large. The open book was left unchanged.'
+                    : 'That backup could not be read. The open book was left unchanged.';
+                return;
+            }
+            if (!recoveredDocumentIsRenderable(parsed.draft)) {
+                statusEl.textContent = 'That backup contained an unsupported resource. The open book was left unchanged.';
+                return;
+            }
+            if (currentOutput && !confirm('Restore this backup and replace the open book?')) return;
+            applyRecoveredDocument(parsed.draft, {
+                restoredFlag: 'restoredBackup',
+                meta: `${parsed.draft.document.formatLabel} · restored from backup · ready in this browser`,
+                notice: `Backup restored · saved ${draftSavedTime(parsed.draft.savedAt)}. Changes continue saving locally.`
+            });
+            statusEl.textContent = `${conciseReadyStatus()} · restored from backup`;
         }
 
         async function discoverPersistedDraft() {
@@ -4707,6 +5084,12 @@
         });
 
         function clearWorkspace() {
+            const runningImport = conversionSession.currentId();
+            if (runningImport) {
+                conversionSession.cancel(runningImport);
+                destroyConversionHandle(runningImport);
+                activeConversionId = 0;
+            }
             void removePersistedDraft({ notice: 'Local recovery draft cleared.' });
             releaseEditablePageLock();
             clearFindHits();
@@ -4731,7 +5114,7 @@
                 b.classList.toggle('text-slate-400', !active);
                 b.setAttribute('aria-pressed', String(active));
             });
-            downloadBtn.disabled = true;
+            syncExportAvailability();
             if (clearBtn) clearBtn.disabled = true;
             hideDiffPanel();
             statsEl.classList.add('hidden');
@@ -4740,8 +5123,12 @@
             pageChips.classList.add('hidden');
             pageChipsInner.innerHTML = '';
             chapterOutlineWrap.classList.add('hidden');
+            bookOutlineWrap?.classList.add('hidden');
             findInBookWrap?.classList.add('hidden');
             chapterOutline.innerHTML = '';
+            if (bookOutline) bookOutline.innerHTML = '';
+            editorHistory.reset('');
+            updateUndoButtons();
             previewEl.innerHTML = '<p class="kf-empty-hint">Load a document to edit directly in its paginated Kobo layout.</p>';
             previewEl.contentEditable = 'false';
             previewEl.classList.remove('kf-editing');
@@ -4770,8 +5157,21 @@
         cancelFileBtn?.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
+            if (conversionSession.currentId()) {
+                cancelActiveImport();
+                return;
+            }
             if (!confirmDiscardBodyEdits('Cancel will discard the loaded file and your body edits. Continue?')) return;
             clearWorkspace();
+        });
+        cancelImportBtn?.addEventListener('click', () => cancelActiveImport());
+        undoEditBtn?.addEventListener('click', () => undoEditorSurface());
+        redoEditBtn?.addEventListener('click', () => redoEditorSurface());
+        downloadBackupBtn?.addEventListener('click', () => downloadProjectBackup());
+        restoreBackupBtn?.addEventListener('click', () => backupFileInput?.click());
+        backupFileInput?.addEventListener('change', () => {
+            const file = backupFileInput.files && backupFileInput.files[0];
+            if (file) void restoreProjectBackupFile(file);
         });
         restoreDraftBtn?.addEventListener('click', () => restoreDraft(pendingDraft));
         discardDraftBtn?.addEventListener('click', () => {
@@ -4906,82 +5306,95 @@
                 if (fileInput) fileInput.value = '';
                 return;
             }
-            cancelPendingDraftSave();
-            pendingDraft = null;
-            hideDraftNotice();
+            if (fileInput) fileInput.value = '';
+            const keptBook = !!currentOutput;
+            const previousId = conversionSession.currentId();
+            if (previousId) {
+                conversionSession.cancel(previousId);
+                destroyConversionHandle(previousId);
+            }
+            const conversionId = conversionSession.start();
+            activeConversionId = conversionId;
             documentImageConversionToken += 1;
-            clearFindHits();
-            currentFile = file;
-            currentOutput = null;
-            selectedEditableImage = null;
-            draggedEditableImage = null;
-            imageClipboardHtml = '';
-            savedEditRange = null;
-            updateImageEditControls();
-            clearEditedFlag();
-            previewEl.contentEditable = 'false';
-            previewEl.classList.remove('kf-editing', 'kf-diffing');
-            setDropzoneReady(file);
-            downloadBtn.disabled = true;
-            if (clearBtn) clearBtn.disabled = false;
-            statsEl.classList.add('hidden');
-            diagnosticsEl.classList.add('hidden');
-            pageChips.classList.add('hidden');
-            chapterOutlineWrap.classList.add('hidden');
-            findInBookWrap?.classList.add('hidden');
-            previewEl.innerHTML = '<p class="kf-empty-hint">Processing…</p>';
+            const progress = (pct, label, stage, cancellable = true) => setProgress(pct, label, {
+                stage,
+                cancellable,
+                conversionId
+            });
             statusEl.textContent = `Reading ${file.name} locally…`;
-            setProgress(5, 'Reading file');
+            progress(5, 'Reading file', 'read');
 
             try {
                 const ext = file.name.split('.').pop().toLowerCase();
                 let output;
                 if (ext === 'docx') {
-                    setProgress(30, 'Parsing DOCX');
-                    output = await parseDocx(file);
+                    progress(30, 'Parsing DOCX', 'parse');
+                    output = await parseDocx(file, conversionId);
                 } else if (ext === 'pdf') {
-                    output = await parsePdf(file);
+                    output = await parsePdf(file, conversionId);
                 } else if (ext === 'txt' || ext === 'md' || ext === 'markdown') {
-                    setProgress(40, 'Parsing text');
-                    output = await parsePlainText(file, ext);
+                    progress(40, 'Parsing text', 'parse');
+                    output = await parsePlainText(file, ext, conversionId);
                 } else if (isImageFile(file)) {
                     const images = [file, ...extraImageFiles].filter(isImageFile);
-                    setProgress(40, images.length > 1 ? `Processing ${images.length} images` : 'Processing image');
-                    output = await parseImageFiles(images);
+                    progress(
+                        40,
+                        images.length > 1 ? `Processing ${images.length} images` : 'Processing image',
+                        'images'
+                    );
+                    output = await parseImageFiles(images, conversionId);
                 } else {
                     throw new Error('Unsupported file type. Use DOCX, PDF, TXT, Markdown, or an image (PNG, JPEG, GIF, WebP).');
                 }
 
-                setProgress(90, 'Rendering preview');
+                ensureConversion(conversionId);
+                if (!conversionSession.isCurrent(conversionId)) return;
+                progress(90, 'Rendering preview', 'preview');
                 const nextDefaultTitle = output.title || file.name.replace(/\.[^.]+$/, '');
                 const enteredTitle = bookTitleInput.value.trim();
                 if (!enteredTitle || !bookTitleWasEdited) {
                     bookTitleInput.value = nextDefaultTitle;
                     bookTitleWasEdited = false;
                 }
+                if (!conversionSession.isCurrent(conversionId)) return;
                 currentOutput = output;
                 const canonical = canonicalizeBody(output.bodyHtml);
                 // Snapshot for git-like diff; export always uses bodyHtml after sync
                 currentOutput.originalBodyHtml = canonical;
                 currentOutput.bodyHtml = canonical;
+                currentFile = file;
+                selectedEditableImage = null;
+                draggedEditableImage = null;
+                imageClipboardHtml = '';
+                savedEditRange = null;
+                updateImageEditControls();
                 clearEditedFlag();
+                setDropzoneReady(file);
+                if (clearBtn) clearBtn.disabled = false;
+                clearFindHits();
                 refreshOutlineAndStats();
                 // Open the converted document directly in the selected Kobo editor.
                 devicePageIndex = 0;
-                setEditMode('edit');
+                setEditMode('edit', { resetHistory: true, skipSync: true });
                 statusEl.textContent = conciseReadyStatus(output);
-                downloadBtn.disabled = false;
+                syncExportAvailability();
                 updateEditChrome();
-                setProgress(100, 'Ready');
+                progress(100, 'Ready', 'ready', false);
                 scheduleDraftSave({ immediate: true });
             } catch (error) {
+                if (!conversionSession.isCurrent(conversionId)) return;
                 console.error('[KoboForge]', error);
                 statusEl.textContent = error.message || 'Failed to process file.';
-                previewEl.innerHTML = error instanceof RuntimeDependencyError
-                    ? '<p class="kf-empty-hint">Required conversion tools could not load. Check your connection, then choose this file again.</p>'
-                    : '<p class="kf-empty-hint">Processing failed. Try DOCX for the cleanest result, or a simpler PDF. Scanned PDFs need OCR first.</p>';
-                if (fileInput) fileInput.value = '';
+                if (!keptBook) {
+                    previewEl.innerHTML = error instanceof RuntimeDependencyError
+                        ? '<p class="kf-empty-hint">Required conversion tools could not load. Check your connection, then choose this file again.</p>'
+                        : '<p class="kf-empty-hint">Processing failed. Try DOCX for the cleanest result, or a simpler PDF. Scanned PDFs need OCR first.</p>';
+                }
                 setProgress(0);
+            } finally {
+                destroyConversionHandle(conversionId);
+                conversionSession.finish(conversionId);
+                if (activeConversionId === conversionId) activeConversionId = 0;
             }
         }
 
@@ -5090,6 +5503,7 @@
             }
 
             renderDiagnostics(currentOutput);
+            refreshBookOutline();
         }
 
         function renderDiagnostics(out) {
@@ -5123,8 +5537,10 @@
             diagnosticsEl.classList.remove('hidden');
         }
 
-        async function parseDocx(file) {
+        async function parseDocx(file, conversionId) {
+            ensureConversion(conversionId);
             const mammoth = await loadScriptDependency(RUNTIME_DEPENDENCIES.mammoth);
+            ensureConversion(conversionId);
             const warnings = [];
             let skippedImages = 0;
             let docxInput = await file.arrayBuffer();
@@ -5197,8 +5613,14 @@
                     img.replaceWith(note);
                 }
             });
-            setProgress(68, 'Optimizing DOCX images');
-            const optimized = await optimizeDocumentImages(doc.body.innerHTML);
+            ensureConversion(conversionId);
+            setProgress(68, 'Optimizing DOCX images', {
+                stage: 'images',
+                cancellable: true,
+                conversionId
+            });
+            const optimized = await optimizeDocumentImages(doc.body.innerHTML, { conversionId });
+            ensureConversion(conversionId);
             const paragraphCount = doc.body.querySelectorAll('p, li, blockquote').length || 1;
             const messages = (result.messages || [])
                 .map((m) => m.message || String(m))
@@ -5251,7 +5673,8 @@
             return !el || el.checked;
         }
 
-        async function parseImageFiles(files) {
+        async function parseImageFiles(files, conversionId) {
+            ensureConversion(conversionId);
             const sources = [];
             for (const file of files) {
                 sources.push(await blobAsDataUrl(file));
@@ -5260,8 +5683,14 @@
             if (!markup) {
                 throw new Error('Could not read those images. Use PNG, JPEG, GIF, or WebP.');
             }
-            setProgress(70, 'Optimizing images for this Kobo');
-            const optimized = await optimizeDocumentImages(markup);
+            ensureConversion(conversionId);
+            setProgress(70, 'Optimizing images for this Kobo', {
+                stage: 'images',
+                cancellable: true,
+                conversionId
+            });
+            const optimized = await optimizeDocumentImages(markup, { conversionId });
+            ensureConversion(conversionId);
             if (!optimized.imageCount) {
                 throw new Error('Could not process those images for the selected Kobo. Try PNG or JPEG.');
             }
@@ -5284,8 +5713,10 @@
             };
         }
 
-        async function parsePlainText(file, ext) {
+        async function parsePlainText(file, ext, conversionId) {
+            ensureConversion(conversionId);
             const text = await file.text();
+            ensureConversion(conversionId);
             const html = ext === 'txt'
                 ? plainTextToStructuredHtml(text)
                 : markdownLikeToHtml(text);
@@ -5519,20 +5950,30 @@
             return dataUrl;
         }
 
-        async function parsePdf(file) {
+        async function parsePdf(file, conversionId) {
+            ensureConversion(conversionId);
             await loadPdfJs();
-            setProgress(12, 'Opening PDF');
+            ensureConversion(conversionId);
+            setProgress(12, 'Opening PDF', {
+                stage: 'parse',
+                cancellable: true,
+                conversionId
+            });
             // Give PDF.js the file's only ArrayBuffer. It may transfer/detach it,
             // and KoboForge does not need a second full-size copy after opening.
             const data = new Uint8Array(await file.arrayBuffer());
+            ensureConversion(conversionId);
             let pdf;
+            const loadingTask = pdfjsLib.getDocument({
+                data,
+                useSystemFonts: true,
+                isEvalSupported: false
+            });
+            trackConversionHandle(conversionId, loadingTask);
             try {
-                pdf = await pdfjsLib.getDocument({
-                    data,
-                    useSystemFonts: true,
-                    isEvalSupported: false
-                }).promise;
+                pdf = await loadingTask.promise;
             } catch (openErr) {
+                if (!conversionSession.isCurrent(conversionId)) throw new ConversionCancelled();
                 console.error('[KoboForge] PDF open failed', openErr);
                 throw new Error(
                     openErr?.message
@@ -5540,6 +5981,7 @@
                         : 'Could not open PDF. Try re-exporting or use DOCX.'
                 );
             }
+            trackConversionHandle(conversionId, pdf);
 
             const parts = [];
             let tableCount = 0;
@@ -5557,12 +5999,14 @@
                 imageSources: {},
                 imageVariants: {},
                 variantBySource: new Map(),
-                target: documentImageTarget()
+                target: documentImageTarget(),
+                conversionId
             };
             let optimizedImageCount = 0;
             let failedImageCount = 0;
 
             for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+                ensureConversion(conversionId);
                 const pageParts = [];
                 let page = null;
                 let operatorList = null;
@@ -5576,9 +6020,11 @@
                 // Announce the page and yield before heavy work so the UI can paint.
                 setProgress(
                     12 + ((pageNumber - 1) / total) * 70,
-                    `PDF page ${pageNumber} of ${total}`
+                    `PDF page ${pageNumber} of ${total}`,
+                    { stage: 'parse', cancellable: true, conversionId }
                 );
                 await yieldForExportProgress();
+                ensureConversion(conversionId);
                 try {
                     page = await pdf.getPage(pageNumber);
                     const textContent = await page.getTextContent();
@@ -5719,6 +6165,9 @@
                     if (pageLayout.sideRail) pageParts.unshift(...imageParts);
                     else pageParts.push(...imageParts);
                 } catch (pageErr) {
+                    if (pageErr instanceof ConversionCancelled || !conversionSession.isCurrent(conversionId)) {
+                        throw pageErr instanceof ConversionCancelled ? pageErr : new ConversionCancelled();
+                    }
                     // Isolate per-page failures so page 2+ never aborts the whole convert
                     console.error(`[KoboForge] PDF page ${pageNumber}`, pageErr);
                     failedPages.push(pageNumber);
@@ -5746,15 +6195,24 @@
                     + `<section class="kf-pdf-page kf-page-v-${startZone} kf-page-offset-${offsetLevel}${sourcePageKind}" data-source-page="${pageNumber}" data-pdf-top="${topPercent}">`
                     + `${pageParts.join('')}</section>`
                 );
-                setProgress(12 + (pageNumber / total) * 70, `PDF page ${pageNumber} of ${total}`);
+                setProgress(12 + (pageNumber / total) * 70, `PDF page ${pageNumber} of ${total}`, {
+                    stage: 'parse',
+                    cancellable: true,
+                    conversionId
+                });
                 // Yield so progress UI paints between pages (avoids "stuck on page 1")
                 await yieldForExportProgress();
             }
+            ensureConversion(conversionId);
 
             const html = parts.length
                 ? parts.join('')
                 : '<p class="preserve-structure">No extractable text found.</p>';
-            setProgress(84, 'Finalizing PDF');
+            setProgress(84, 'Finalizing PDF', {
+                stage: 'parse',
+                cancellable: true,
+                conversionId
+            });
             const optimized = {
                 html,
                 imageSources: imageOptimization.imageSources,
@@ -8021,7 +8479,8 @@
                 imageSources = {},
                 imageVariants = {},
                 variantBySource = new Map(),
-                target = documentImageTarget()
+                target = documentImageTarget(),
+                conversionId = 0
             } = {}
         ) {
             const doc = new DOMParser().parseFromString(
@@ -8039,6 +8498,7 @@
             const imageTotal = images.length;
             for (let imageIndex = 0; imageIndex < imageTotal; imageIndex += 1) {
                 const img = images[imageIndex];
+                if (conversionId) ensureConversion(conversionId);
                 // Keep progress UI moving and the main thread interactive between
                 // large DOCX / embedded-image batches (PDF page loop yields separately).
                 if (imageTotal > 0) {
@@ -8049,9 +8509,13 @@
                     }
                     setProgress(
                         pct,
-                        `Optimizing image ${imageIndex + 1} of ${imageTotal}`
+                        `Optimizing image ${imageIndex + 1} of ${imageTotal}`,
+                        conversionId
+                            ? { stage: 'images', cancellable: true, conversionId }
+                            : {}
                     );
                     await yieldForExportProgress();
+                    if (conversionId) ensureConversion(conversionId);
                 }
                 const currentSrc = img.getAttribute('src') || '';
                 let imageId = img.getAttribute('data-kf-image-id') || '';

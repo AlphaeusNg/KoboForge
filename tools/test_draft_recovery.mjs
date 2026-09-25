@@ -3,8 +3,13 @@ import { readFile } from "node:fs/promises";
 import {
   DRAFT_AFTER_EXPORT,
   DRAFT_SCHEMA_VERSION,
+  PROJECT_BACKUP_KIND,
+  PROJECT_BACKUP_MAX_BYTES,
+  PROJECT_BACKUP_SCHEMA_VERSION,
+  buildProjectBackup,
   createDraftStore,
   normalizeDraftRecord,
+  parseProjectBackup,
   shouldPromptDraftAfterExport,
 } from "../js/draft-recovery.js";
 
@@ -140,6 +145,40 @@ check(
 check(
   /statusEl\.textContent = error\.message \|\| 'EPUB build failed\.';\s*setProgress\(0\);\s*return;\s*\}\s*await promptDraftDecisionAfterExport\(\);/.test(app),
   "failed Download should return before the keep-or-clear prompt",
+);
+
+const backup = buildProjectBackup(valid);
+check(backup?.kind === PROJECT_BACKUP_KIND, "a project backup should identify its file kind");
+check(backup?.schemaVersion === PROJECT_BACKUP_SCHEMA_VERSION, "a project backup should be versioned");
+check(backup?.book?.title === "Edited sermon", "a backup should keep the edited title");
+check(backup?.options?.device?.device === "libra-colour", "a backup should keep device settings");
+check(backup?.document?.bodyHtml.includes(image), "a backup should keep editable content and embedded images");
+check(backup?.document?.imageSources?.["kf-image-1"] === image, "a backup should keep image source bytes");
+check(!("chapters" in (backup?.document || {})), "a backup should not keep derived chapter state");
+
+const restored = parseProjectBackup(JSON.stringify(backup));
+check(restored.ok === true, "a versioned backup should parse in a fresh state");
+check(restored.draft?.book?.title === "Edited sermon", "restoring a backup should recover the title");
+check(restored.draft?.document?.originalBodyHtml === "<p>Original</p>", "restoring a backup should recover both body copies");
+check(restored.draft?.options?.device?.deviceFontSize === 3.6, "restoring a backup should recover device settings");
+check(restored.draft?.document?.imageVariants?.["kf-image-1:libra-colour:portrait"]?.dataUrl === image, "restoring a backup should recover embedded image variants");
+
+const malformed = parseProjectBackup("{");
+const wrongKind = parseProjectBackup(JSON.stringify({ ...backup, kind: "other-backup" }));
+const wrongVersion = parseProjectBackup(JSON.stringify({ ...backup, schemaVersion: 99 }));
+const oversized = parseProjectBackup(JSON.stringify(backup), { maxBytes: 32 });
+check(malformed.ok === false && malformed.reason === "malformed", "malformed backup text should fail closed");
+check(wrongKind.ok === false && wrongVersion.ok === false, "unknown backup kinds and versions should fail closed");
+check(oversized.ok === false && oversized.reason === "oversized", "oversized backups should fail closed");
+check(PROJECT_BACKUP_MAX_BYTES >= 1024 * 1024, "the backup limit should allow a normal illustrated book");
+check(malformed.draft === undefined && oversized.draft === undefined, "rejected backups should not produce a replacement document");
+
+const recoveryApp = await readFile(new URL("../js/app.js", import.meta.url), "utf8");
+const backupGuard = recoveryApp.indexOf("if (!parsed.ok)");
+const backupApply = recoveryApp.indexOf("applyRecoveredDocument(parsed.draft");
+check(
+  backupGuard >= 0 && backupApply > backupGuard,
+  "a rejected backup must return before the open book is replaced",
 );
 
 console.log(`Draft recovery tests passed (${assertions} assertions).`);

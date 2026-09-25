@@ -1,12 +1,12 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-09-14 (KoboForge Cycle 82)
+Last updated: 2026-09-25 (KoboForge Cycle 83)
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.09.14.1`.
+- Deployment version: `2026.09.25.1`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, 32 decoded-image assertions, 97 package
@@ -20,7 +20,26 @@ Last updated: 2026-09-14 (KoboForge Cycle 82)
   offline real-Chromium journeys include real DOCX/PDF conversion and
   fail-closed image, CSS, and active-HTML handling.
 
-## Latest cycle: bring Markus Yeo's PDF readability ideas home
+## Latest cycle: import control, outline, backup, and editor undo
+
+### Why this was selected
+
+Long imports could still replace a newer book, the preview outline followed export chapters rather than headings, recovery could not leave the browser, and native undo stopped after list rewrites.
+
+### Changes
+
+- Move Kobo page-count and slide math into `js/device-pagination.js`.
+- Give each import an identity and Read, Parse, Images, and Preview stages. Cancel keeps the open book, and a later import cannot be replaced by an abandoned one.
+- Add a document-order heading outline with jump-to-heading and a selected-section marker.
+- Add a versioned `.koboforge.json` backup for the editable body, embedded images, title, and device settings. Malformed or oversized files do not replace the open book.
+- Record text, list, and image-size edits in an editor undo stack. Page turns are not undo steps, and switching Edit, Diff, or HTML starts a fresh stack.
+- Bump the visitor version to `2026.09.25.1`.
+
+### Verification
+
+- `npm test` covers the new pagination, conversion, outline, history, and backup fixtures with the existing workflow, fidelity, image, and package suites.
+
+## Previous cycle: bring Markus Yeo's PDF readability ideas home
 
 ### Why this was selected
 
