@@ -1,12 +1,21 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-09-25 (KoboForge Cycle 83)
+Last updated: 2026-09-26 (merged release verification)
+
+## Release review — 2026-09-26
+
+- Fixed replacement imports: reset edit chrome after painting the new document,
+  because resetting it earlier synchronizes the old editable DOM into the model.
+- Existing sequential-import and stale Find-in-book browser regressions failed
+  before the fix and pass afterward. All 27 Chromium journeys and `npm test`
+  pass, including document fidelity, conversion sessions, and outline checks.
+- Deployment stamp: `2026.09.26.1`.
 
 ## Current state
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.09.25.1`.
+- Deployment version: `2026.09.26.1`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, 32 decoded-image assertions, 97 package

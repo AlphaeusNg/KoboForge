@@ -5368,7 +5368,6 @@
                 imageClipboardHtml = '';
                 savedEditRange = null;
                 updateImageEditControls();
-                clearEditedFlag();
                 setDropzoneReady(file);
                 if (clearBtn) clearBtn.disabled = false;
                 clearFindHits();
@@ -5376,6 +5375,9 @@
                 // Open the converted document directly in the selected Kobo editor.
                 devicePageIndex = 0;
                 setEditMode('edit', { resetHistory: true, skipSync: true });
+                // Reset chrome only after the new body replaces the old editor:
+                // clearEditedFlag synchronizes the editable DOM back to the model.
+                clearEditedFlag();
                 statusEl.textContent = conciseReadyStatus(output);
                 syncExportAvailability();
                 updateEditChrome();
