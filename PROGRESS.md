@@ -1,6 +1,18 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-09-26 (merged release verification)
+Last updated: 2026-10-05 (Find/outline navigation)
+
+## Find and heading navigation — 2026-10-05
+
+- KOBO-07: the outline follows the visible Find-in-book match instead of a stale
+  editing caret. Returning to a heading or the editor restores caret selection.
+- Fixed page targeting during an unfinished page-turn animation by measuring
+  the match relative to the translated document, not the requested page index.
+- Verification: full `npm test`, syntax/whitespace checks, and 29 Chromium
+  journeys passed. Added same-page and multi-page next/previous match coverage,
+  checked manual outline navigation afterward, and retained heading-free search.
+  The multi-page regression failed before the coordinate fix and passed after it.
+- Release: `2026.10.05.1`.
 
 ## Release review — 2026-09-26
 
@@ -15,7 +27,7 @@ Last updated: 2026-09-26 (merged release verification)
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.09.26.1`.
+- Deployment version: `2026.10.05.1`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, 32 decoded-image assertions, 97 package

@@ -916,6 +916,37 @@ test("holds the image-size slider steady in a phone viewport", async ({ page }) 
   await expect(page.locator("#status")).toContainText("Image width set to");
 });
 
+for (const fillerCount of [0, 20]) {
+test(`Find follows the containing heading rather than a stale editing caret (${fillerCount ? "multiple pages" : "same page"})`, async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "outline-find.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("# First section\n\nNeedle one.\n\n" +
+      "A quiet paragraph between the sections with enough words to fill the reader.\n\n".repeat(fillerCount) +
+      "# Second section\n\nNeedle two.\n\n# Third section\n\nNo match here."),
+  });
+  const selected = page.locator('#bookOutline [aria-current="location"]');
+  await expect(page.locator("#bookOutline button")).toHaveCount(3);
+  await page.locator("#bookOutline button").last().click();
+  await expect(selected).toHaveText("Third section");
+  await page.locator("#findInBook").fill("needle");
+  await page.locator("#findInBookNext").click();
+  await expect(page.locator("#findInBookStatus")).toHaveText("1 of 2");
+  await expect(selected).toHaveText("First section");
+  const firstPage = await page.locator("#devicePageStatus").textContent();
+  await page.locator("#findInBookNext").click();
+  await expect(selected).toHaveText("Second section");
+  if (fillerCount) await expect(page.locator("#devicePageStatus")).not.toHaveText(firstPage);
+  await page.locator("#findInBookPrev").click();
+  await expect(selected).toHaveText("First section");
+  await expect(page.locator("#devicePageStatus")).toHaveText(firstPage);
+  await page.locator("#bookOutline button").last().click();
+  await expect(selected).toHaveText("Third section");
+});
+}
+
 test("keeps Find-in-book current state accessible, fresh, and out of exports", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");
@@ -940,6 +971,7 @@ test("keeps Find-in-book current state accessible, fresh, and out of exports", a
   await expect(page.locator("#findInBookStatus")).toHaveText("1 of 2");
   await expect(page.locator(".kf-find-hit")).toContainText("Alpha first");
   await expect(page.locator(".kf-find-hit")).toHaveAttribute("aria-current", "location");
+  await expect(page.locator("#bookOutlineWrap")).toBeHidden();
 
   await page.locator("#findInBookNext").click();
   await expect(page.locator("#findInBookStatus")).toHaveText("2 of 2");

@@ -1802,7 +1802,13 @@
             let index = -1;
             const selection = window.getSelection();
             const anchor = selection?.anchorNode;
-            if (anchor && previewEl?.contains(anchor)) {
+            const hit = findHits[findHitIndex];
+            const editing = document.activeElement === previewEl || previewEl?.contains(document.activeElement);
+            if (!editing && hit?.isConnected && pageIndexForElement(hit) === devicePageIndex) {
+                // Find navigation does not move the editing caret. Prefer its
+                // visible match over that stale caret (or another heading on the page).
+                index = outlineIndexForNode(headings, hit);
+            } else if (anchor && previewEl?.contains(anchor)) {
                 index = outlineIndexForNode(headings, anchor);
             }
             if (index < 0 && headings.length) {
@@ -3134,9 +3140,11 @@
             if (!element || !deviceBookViewport || !deviceBookContent) return devicePageIndex;
             const pageWidth = Number(deviceBookContent.dataset.pageWidth || 0);
             if (!pageWidth) return devicePageIndex;
-            const viewportRect = deviceBookViewport.getBoundingClientRect();
+            const contentRect = deviceBookContent.getBoundingClientRect();
             const rect = element.getClientRects()[0] || element.getBoundingClientRect();
-            const unshiftedLeft = rect.left - viewportRect.left + (devicePageIndex * pageWidth);
+            // Both rectangles share the actual animated translation. Subtract
+            // it, rather than assuming the previous page turn has finished.
+            const unshiftedLeft = rect.left - contentRect.left + 0.5;
             return pageIndexForOffset(unshiftedLeft, pageWidth, devicePageCount);
         }
 
@@ -3208,6 +3216,7 @@
             const el = findHits[findHitIndex];
             setFindHitState(el);
             jumpDeviceToElement(el);
+            markBookOutlineSelection();
             if (findInBookStatus) {
                 findInBookStatus.textContent = `${findHitIndex + 1} of ${findHits.length}`;
             }
