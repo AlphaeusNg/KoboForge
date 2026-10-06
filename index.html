@@ -419,12 +419,13 @@
                 <div>
                     <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#C9A227]">4. Export</div>
                     <h2 id="export-heading" class="mt-1 text-lg font-semibold tracking-tight">Download EPUB</h2>
+                    <p id="backupHint" class="mt-2 text-xs text-slate-400">Backups include the book and settings. Undo history stays in this session.</p>
                     <p id="exportEditHint" class="mt-2 hidden text-xs font-medium text-amber-300/90"></p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 md:justify-end">
                     <button type="button" id="clearBtn" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30 disabled:opacity-40" disabled>Clear</button>
-                    <button type="button" id="downloadBackupBtn" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30 disabled:opacity-40" disabled>Download backup</button>
-                    <button type="button" id="restoreBackupBtn" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30">Restore backup</button>
+                    <button type="button" id="downloadBackupBtn" aria-describedby="backupHint" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30 disabled:opacity-40" disabled>Download backup</button>
+                    <button type="button" id="restoreBackupBtn" aria-describedby="backupHint" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30">Restore backup</button>
                     <input id="backupFileInput" type="file" accept="application/json,.json,.koboforge.json" class="hidden">
                     <button id="downloadBtn" class="rounded-xl bg-[#C9A227] px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-[#d9b844] disabled:cursor-not-allowed disabled:opacity-50" disabled title="Sync edits, then build and download EPUB">Download EPUB</button>
                 </div>

@@ -1068,3 +1068,8 @@ The package fixture could optionally invoke EPUBCheck, but hosted CI never provi
 
 Rotate workspace attention after three consecutive self-containment cycles and
 return only when new fidelity or reader evidence identifies another Kobo gap.
+
+
+## 2026-10-07 — Explain the scope of project backups
+
+The export panel and backup download status explain that book/settings are backed up while undo history stays in the session. Backup controls reference the hint for screen readers. Browser tests use port 4177 to avoid VerseKeep. Full npm gate and 30 Chromium journeys passed.

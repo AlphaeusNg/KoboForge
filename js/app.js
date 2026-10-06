@@ -5017,7 +5017,7 @@
             link.download = `${base}.koboforge.json`;
             link.click();
             URL.revokeObjectURL(url);
-            statusEl.textContent = 'Project backup downloaded in this browser.';
+            statusEl.textContent = 'Project backup downloaded. Undo history stays in this session.';
         }
 
         async function restoreProjectBackupFile(file) {
