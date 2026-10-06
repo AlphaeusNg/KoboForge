@@ -1024,6 +1024,34 @@ test("keeps Find-in-book current state accessible, fresh, and out of exports", a
   expect(chapter).not.toContain("data-kf-find-original-current");
 });
 
+test("announces text size and margin slider values in pt and mm", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+
+  const fontSlider = page.locator("#deviceFontSize");
+  const marginSlider = page.locator("#deviceMargin");
+  const fontValue = page.locator("#deviceFontValue");
+  const marginValue = page.locator("#deviceMarginValue");
+
+  await expect(fontSlider).toHaveAttribute("aria-valuetext", "10 pt");
+  await expect(marginSlider).toHaveAttribute("aria-valuetext", "8 mm");
+  await expect(fontValue).toHaveText("10 pt");
+  await expect(marginValue).toHaveText("8 mm");
+
+  await fontSlider.focus();
+  await fontSlider.press("ArrowRight");
+  await expect(fontSlider).toHaveAttribute("aria-valuetext", "11 pt");
+  await expect(fontValue).toHaveText("11 pt");
+
+  await marginSlider.focus();
+  await marginSlider.press("ArrowRight");
+  await expect(marginSlider).toHaveAttribute("aria-valuetext", "9 mm");
+  await expect(marginValue).toHaveText("9 mm");
+
+  expect(await fontSlider.getAttribute("aria-valuetext")).toBe((await fontValue.textContent())?.trim());
+  expect(await marginSlider.getAttribute("aria-valuetext")).toBe((await marginValue.textContent())?.trim());
+});
+
 test("re-applies Find-in-book after font and margin geometry refresh", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#deviceSpec")).not.toHaveText("—");

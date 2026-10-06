@@ -1,6 +1,16 @@
 # KoboForge continuous improvement log
 
-Last updated: 2026-10-05 (Find/outline navigation)
+Last updated: 2026-10-06 (Slider screen-reader values)
+
+## Slider screen-reader values — 2026-10-06
+
+- Text size and Margin now announce the same human-readable labels as the
+  visible readouts (`10 pt`, `8 mm`) through `aria-valuetext`, and stay in sync
+  when either slider changes.
+- Verification: full `npm test` and 30 Chromium journeys passed, including a
+  new check that default and adjusted slider announcements match the visible
+  point and millimetre labels.
+- Release: `2026.10.06.1`.
 
 ## Find and heading navigation — 2026-10-05
 
@@ -27,7 +37,7 @@ Last updated: 2026-10-05 (Find/outline navigation)
 
 - Branch: `main`.
 - Runtime: zero-build static site served from the repository root.
-- Deployment version: `2026.10.05.1`.
+- Deployment version: `2026.10.06.1`.
 - Baseline verification: dependency/module fixtures, offline real-Chromium TXT
   and DOCX import/edit/export flows, Find-in-book query changes, optional local
   EPUBCheck, 32 decoded-image assertions, 97 package
