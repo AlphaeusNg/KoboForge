@@ -759,8 +759,12 @@
         function updateDeviceControlLabels() {
             const fontMm = Number(deviceFontSize?.value || 3.6);
             const marginMm = Number(deviceMargin?.value || 8);
-            if (deviceFontValue) deviceFontValue.textContent = `${(fontMm * 2.83465).toFixed(0)} pt`;
-            if (deviceMarginValue) deviceMarginValue.textContent = `${marginMm.toFixed(0)} mm`;
+            const fontLabel = `${(fontMm * 2.83465).toFixed(0)} pt`;
+            const marginLabel = `${marginMm.toFixed(0)} mm`;
+            if (deviceFontValue) deviceFontValue.textContent = fontLabel;
+            if (deviceMarginValue) deviceMarginValue.textContent = marginLabel;
+            if (deviceFontSize) deviceFontSize.setAttribute('aria-valuetext', fontLabel);
+            if (deviceMargin) deviceMargin.setAttribute('aria-valuetext', marginLabel);
         }
 
         function renderDevicePreview({ resetPage = false, preserveFind = false } = {}) {
