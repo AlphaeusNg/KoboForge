@@ -1073,3 +1073,8 @@ return only when new fidelity or reader evidence identifies another Kobo gap.
 ## 2026-10-07 — Explain the scope of project backups
 
 The export panel and backup download status explain that book/settings are backed up while undo history stays in the session. Backup controls reference the hint for screen readers. Browser tests use port 4177 to avoid VerseKeep. Full npm gate and 30 Chromium journeys passed.
+
+
+## 2026-10-07 — Stop cancelled image batches between reads
+
+Image uploads now report Reading images and Preparing image pages before optimisation. Cancellation is checked before and after each file read, so a cancelled batch never begins the next image or commits stale output. Validation: full npm gate and 31 Chromium journeys, including cancel-then-import recovery, passed. Version 2026.10.07.2.

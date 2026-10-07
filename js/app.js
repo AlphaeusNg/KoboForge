@@ -5351,9 +5351,9 @@
                 } else if (isImageFile(file)) {
                     const images = [file, ...extraImageFiles].filter(isImageFile);
                     progress(
-                        40,
-                        images.length > 1 ? `Processing ${images.length} images` : 'Processing image',
-                        'images'
+                        10,
+                        images.length > 1 ? `Reading ${images.length} images` : 'Reading image',
+                        'read'
                     );
                     output = await parseImageFiles(images, conversionId);
                 } else {
@@ -5691,9 +5691,15 @@
         async function parseImageFiles(files, conversionId) {
             ensureConversion(conversionId);
             const sources = [];
-            for (const file of files) {
+            for (const [index, file] of files.entries()) {
+                ensureConversion(conversionId);
                 sources.push(await blobAsDataUrl(file));
+                ensureConversion(conversionId);
+                setProgress(10 + Math.round(30 * (index + 1) / files.length), `Read image ${index + 1} of ${files.length}`, {
+                    stage: 'read', cancellable: true, conversionId
+                });
             }
+            setProgress(45, 'Preparing image pages', { stage: 'parse', cancellable: true, conversionId });
             const markup = imageMarkupFromDataUrls(sources);
             if (!markup) {
                 throw new Error('Could not read those images. Use PNG, JPEG, GIF, or WebP.');

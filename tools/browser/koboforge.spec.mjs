@@ -1603,3 +1603,31 @@ test("keeps active HTML source inert and discardable", async ({ page }) => {
   await expect(page.locator("#deviceBookContent iframe")).toHaveCount(0);
   expect(privateRequests).toEqual([]);
 });
+
+
+test("cancels image batches between reads and accepts the next import", async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = FileReader.prototype.readAsDataURL;
+    window.imageReads = [];
+    FileReader.prototype.readAsDataURL = function (file) {
+      window.imageReads.push(file.name);
+      setTimeout(() => original.call(this, file), 350);
+    };
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles([
+    { name: "first.png", mimeType: "image/png", buffer: PNG_1x1 },
+    { name: "second.png", mimeType: "image/png", buffer: PNG_1x1 },
+  ]);
+  await expect.poll(() => page.evaluate(() => window.imageReads.length)).toBe(1);
+  await page.locator("#cancelImportBtn").click();
+  await expect(page.locator("#status")).toHaveText("Import cancelled.");
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.imageReads)).toEqual(["first.png"]);
+  await page.locator("#fileInput").setInputFiles({
+    name: "next.txt", mimeType: "text/plain", buffer: Buffer.from("Fresh import after cancellation."),
+  });
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+  await expect(page.locator("#deviceBookContent")).toContainText("Fresh import after cancellation.");
+});
