@@ -1652,3 +1652,20 @@ test("cancels an active image reader and preserves the previous book", async ({ 
   await expect(page.locator("#deviceBookContent")).toContainText("Keep this book unchanged.");
   await expect(page.locator("#downloadBtn")).toBeEnabled();
 });
+
+test('pastes two clipboard images without treating their indexes as import identities', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#deviceSpec')).not.toHaveText('—');
+  await page.locator('#fileInput').setInputFiles({name:'paste.txt', mimeType:'text/plain', buffer:Buffer.from('Keep this paragraph.')});
+  await expect(page.locator('#deviceBookContent')).toContainText('Keep this paragraph.');
+  await page.locator('#deviceBookContent').evaluate((editor, bytes) => {
+    editor.focus();
+    const files = [new File([new Uint8Array(bytes)], 'one.png', {type:'image/png'}), new File([new Uint8Array(bytes)], 'two.png', {type:'image/png'})];
+    const event = new Event('paste', {bubbles:true, cancelable:true});
+    Object.defineProperty(event, 'clipboardData', {value:{items:files.map(file => ({kind:'file',type:file.type,getAsFile:()=>file})),getData:()=>''}});
+    editor.dispatchEvent(event);
+  }, [...PNG_1x1]);
+  await expect(page.locator('#deviceBookContent img')).toHaveCount(2);
+  await expect(page.locator('#deviceBookContent')).toContainText('Keep this paragraph.');
+  await expect(page.locator('#downloadBtn')).toBeEnabled();
+});

@@ -1083,3 +1083,7 @@ Image uploads now report Reading images and Preparing image pages before optimis
 ## 2026-10-07 — Abort an image reader when import is cancelled
 
 The active image FileReader is registered with the existing conversion handle lifecycle and aborted immediately on Cancel. Completion/error/abort clears its handle; cancelled output cannot replace the open book. Validation: full npm gate and 32 Chromium journeys passed, including an active reader abort with the previous editable book still exportable. Version 2026.10.07.3.
+
+## 2026-10-07 — Keep clipboard reads outside conversion tracking
+
+Image paste and drop explicitly pass only the file to the data-URL reader. Array indexes no longer enter the active conversion-handle map. A synchronous FileReader start failure also releases its tracked handle. Full npm gate and 33 Chromium journeys passed, including two clipboard images and the real DOCX/PDF corpus.

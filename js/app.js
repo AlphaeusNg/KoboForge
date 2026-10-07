@@ -1534,7 +1534,12 @@
                 reader.onerror = () => { cleanup(); reject(reader.error || new Error('Could not read the image.')); };
                 reader.onabort = () => { cleanup(); reject(new ConversionCancelled()); };
                 if (conversionId) trackConversionHandle(conversionId, handle);
-                reader.readAsDataURL(blob);
+                try {
+                    reader.readAsDataURL(blob);
+                } catch (error) {
+                    cleanup();
+                    reject(error);
+                }
             });
         }
 
@@ -1610,7 +1615,7 @@
             event.preventDefault();
             try {
                 const markup = imageFiles.length
-                    ? imageMarkupFromDataUrls(await Promise.all(imageFiles.map(blobAsDataUrl)))
+                    ? imageMarkupFromDataUrls(await Promise.all(imageFiles.map((file) => blobAsDataUrl(file))))
                     : html;
                 await optimizeAndInsertPastedImages(markup, targetRange);
             } catch (error) {
@@ -1677,7 +1682,7 @@
             const targetRange = imageInsertionRangeFromPoint(event.clientX, event.clientY);
             try {
                 const markup = imageMarkupFromDataUrls(
-                    await Promise.all(imageFiles.map(blobAsDataUrl))
+                    await Promise.all(imageFiles.map((file) => blobAsDataUrl(file)))
                 );
                 await optimizeAndInsertPastedImages(markup, targetRange);
             } catch (error) {
