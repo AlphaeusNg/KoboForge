@@ -1078,3 +1078,8 @@ The export panel and backup download status explain that book/settings are backe
 ## 2026-10-07 — Stop cancelled image batches between reads
 
 Image uploads now report Reading images and Preparing image pages before optimisation. Cancellation is checked before and after each file read, so a cancelled batch never begins the next image or commits stale output. Validation: full npm gate and 31 Chromium journeys, including cancel-then-import recovery, passed. Version 2026.10.07.2.
+
+
+## 2026-10-07 — Abort an image reader when import is cancelled
+
+The active image FileReader is registered with the existing conversion handle lifecycle and aborted immediately on Cancel. Completion/error/abort clears its handle; cancelled output cannot replace the open book. Validation: full npm gate and 32 Chromium journeys passed, including an active reader abort with the previous editable book still exportable. Version 2026.10.07.3.

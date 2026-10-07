@@ -1523,11 +1523,17 @@
             return type.startsWith('image/') && type !== 'image/svg+xml';
         }
 
-        function blobAsDataUrl(blob) {
+        function blobAsDataUrl(blob, conversionId = null) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = () => resolve(String(reader.result || ''));
-                reader.onerror = () => reject(reader.error || new Error('Could not read the pasted image.'));
+                const handle = { destroy() { reader.abort(); } };
+                const cleanup = () => {
+                    if (conversionHandles.get(conversionId) === handle) conversionHandles.delete(conversionId);
+                };
+                reader.onload = () => { cleanup(); resolve(String(reader.result || '')); };
+                reader.onerror = () => { cleanup(); reject(reader.error || new Error('Could not read the image.')); };
+                reader.onabort = () => { cleanup(); reject(new ConversionCancelled()); };
+                if (conversionId) trackConversionHandle(conversionId, handle);
                 reader.readAsDataURL(blob);
             });
         }
@@ -5693,7 +5699,7 @@
             const sources = [];
             for (const [index, file] of files.entries()) {
                 ensureConversion(conversionId);
-                sources.push(await blobAsDataUrl(file));
+                sources.push(await blobAsDataUrl(file, conversionId));
                 ensureConversion(conversionId);
                 setProgress(10 + Math.round(30 * (index + 1) / files.length), `Read image ${index + 1} of ${files.length}`, {
                     stage: 'read', cancellable: true, conversionId

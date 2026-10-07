@@ -1631,3 +1631,24 @@ test("cancels image batches between reads and accepts the next import", async ({
   await expect(page.locator("#downloadBtn")).toBeEnabled();
   await expect(page.locator("#deviceBookContent")).toContainText("Fresh import after cancellation.");
 });
+
+
+test("cancels an active image reader and preserves the previous book", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({ name: "keep.txt", mimeType: "text/plain", buffer: Buffer.from("Keep this book unchanged.") });
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+  await page.evaluate(() => {
+    window.__readerAborts = 0;
+    window.FileReader = class {
+      readAsDataURL() { this.readyState = 1; }
+      abort() { window.__readerAborts += 1; this.readyState = 2; this.onabort?.(); }
+    };
+  });
+  await page.locator("#fileInput").setInputFiles({ name: "slow.png", mimeType: "image/png", buffer: PNG_1x1 });
+  await page.locator("#cancelImportBtn").click();
+  await expect.poll(() => page.evaluate(() => window.__readerAborts)).toBe(1);
+  await expect(page.locator("#status")).toHaveText("Import cancelled. The open book is unchanged.");
+  await expect(page.locator("#deviceBookContent")).toContainText("Keep this book unchanged.");
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+});
