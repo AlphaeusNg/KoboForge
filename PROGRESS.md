@@ -1087,3 +1087,9 @@ The active image FileReader is registered with the existing conversion handle li
 ## 2026-10-07 — Keep clipboard reads outside conversion tracking
 
 Image paste and drop explicitly pass only the file to the data-URL reader. Array indexes no longer enter the active conversion-handle map. A synchronous FileReader start failure also releases its tracked handle. Full npm gate and 33 Chromium journeys passed, including two clipboard images and the real DOCX/PDF corpus.
+
+## 2026-10-11 — Extract measured PDF layout helpers
+
+Moved page positioning, reading-column detection, baseline clustering and preserved whitespace calculations into js/pdf-layout.js, with unchanged measured-input algorithms. The existing worksheet regression imports the production whitespace detector instead of a mirrored implementation. This advances KOBO-06; the full PDF interpreter extraction remains open.
+
+Validation: Full npm gate and 33 Chromium journeys, including real PDF/DOCX import and EPUB export.

@@ -1,3 +1,4 @@
+import { median, detectPdfWhitespace } from "../js/pdf-layout.js";
 /**
  * Lightweight regression tests for KoboForge pure logic (no browser).
  * Run: node tools/test_logic.mjs
@@ -36,6 +37,7 @@ const readme = readFileSync(readmePath, 'utf8');
 const page = [
     html,
     script,
+    readFileSync(join(__dirname, "../js/pdf-layout.js"), "utf8"),
     epubPackageScript,
     epubImagesScript,
     runtimeDependenciesScript,
@@ -429,50 +431,6 @@ function clusterColumnXs(xs, tolerance) {
         else clusters.push([sorted[i]]);
     }
     return clusters.map((c) => c.reduce((s, v) => s + v, 0) / c.length);
-}
-
-function median(arr) {
-    if (!arr.length) return 0;
-    const sorted = [...arr].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function detectPdfWhitespace(builtLines, { pageHeight = 0 } = {}) {
-    if (!builtLines || builtLines.length < 2) return { typicalAdvance: 0, spaces: [] };
-    const medianHeight = median(
-        builtLines.map((line) => line.maxHeight || line.lineHeight || 10)
-    ) || 10;
-    const gaps = [];
-    for (let index = 0; index < builtLines.length - 1; index += 1) {
-        const gap = builtLines[index].y - builtLines[index + 1].y;
-        if (Number.isFinite(gap) && gap > medianHeight * 0.55) gaps.push({ index, gap });
-    }
-    if (!gaps.length) return { typicalAdvance: medianHeight * 1.5, spaces: [] };
-    const ordinaryLimit = Math.max(medianHeight * 2.6, Number(pageHeight || 0) * 0.045);
-    const ordinaryGaps = gaps.map((entry) => entry.gap).filter((gap) => gap <= ordinaryLimit);
-    const typicalAdvance = median(ordinaryGaps)
-        || median(gaps.map((entry) => entry.gap))
-        || medianHeight * 1.5;
-    const significantGap = Math.max(
-        typicalAdvance * 1.65,
-        medianHeight * 2.75,
-        Number(pageHeight || 0) * 0.045
-    );
-    const minimumSurplus = Math.max(medianHeight * 1.05, Number(pageHeight || 0) * 0.018);
-    const spaces = gaps
-        .filter((entry) => (
-            entry.gap >= significantGap
-            && entry.gap - typicalAdvance >= minimumSurplus
-        ))
-        .map((entry) => ({
-            ...entry,
-            lines: Math.max(
-                2,
-                Math.min(12, Math.round((entry.gap - typicalAdvance) / medianHeight))
-            )
-        }));
-    return { typicalAdvance, medianHeight, spaces };
 }
 
 function describePdfFont(name, fallbackFamily = '') {
