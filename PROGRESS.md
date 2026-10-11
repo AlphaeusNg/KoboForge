@@ -1093,3 +1093,9 @@ Image paste and drop explicitly pass only the file to the data-URL reader. Array
 Moved page positioning, reading-column detection, baseline clustering and preserved whitespace calculations into js/pdf-layout.js, with unchanged measured-input algorithms. The existing worksheet regression imports the production whitespace detector instead of a mirrored implementation. This advances KOBO-06; the full PDF interpreter extraction remains open.
 
 Validation: Full npm gate and 33 Chromium journeys, including real PDF/DOCX import and EPUB export.
+
+## 2026-10-11 — Extract PDF font and text interpretation
+
+Moved font traits, relative font sizes, token spacing and floating verse-number normalization to js/pdf-text.js, with measured inputs and unchanged algorithms. Font tests now import the production helper. Markus Yeo credit moves with the implementation. KOBO-06 still has further paragraph/table orchestration to extract.
+
+Validation: Full npm gate and 33 Chromium journeys, including real DOCX/PDF imports and EPUB export.

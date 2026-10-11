@@ -1,3 +1,4 @@
+import { describePdfFont } from "../js/pdf-text.js";
 import { median, detectPdfWhitespace } from "../js/pdf-layout.js";
 /**
  * Lightweight regression tests for KoboForge pure logic (no browser).
@@ -24,6 +25,7 @@ const fixedLayoutPath = join(__dirname, '../js/fixed-layout.js');
 const fixedFixturePath = join(__dirname, './test_fixed_epub.mjs');
 const html = readFileSync(htmlPath, 'utf8');
 const script = readFileSync(jsPath, 'utf8');
+const pdfTextScript = readFileSync(join(__dirname, '../js/pdf-text.js'), 'utf8');
 const styles = readFileSync(cssPath, 'utf8');
 const tailwindStyles = readFileSync(tailwindCssPath, 'utf8');
 const versionScript = readFileSync(versionPath, 'utf8');
@@ -37,6 +39,7 @@ const readme = readFileSync(readmePath, 'utf8');
 const page = [
     html,
     script,
+    pdfTextScript,
     readFileSync(join(__dirname, "../js/pdf-layout.js"), "utf8"),
     epubPackageScript,
     epubImagesScript,
@@ -431,30 +434,6 @@ function clusterColumnXs(xs, tolerance) {
         else clusters.push([sorted[i]]);
     }
     return clusters.map((c) => c.reduce((s, v) => s + v, 0) / c.length);
-}
-
-function describePdfFont(name, fallbackFamily = '') {
-    const sourceName = String(name || '')
-        .replace(/^[A-Z]{6}\+/, '')
-        .replace(/[_-]+/g, ' ')
-        .trim();
-    const sourceKey = sourceName.toLowerCase();
-    const key = `${sourceName} ${fallbackFamily}`.toLowerCase();
-    let family = /\bserif\b/.test(String(fallbackFamily).toLowerCase())
-        && !/\bsans[- ]?serif\b/.test(String(fallbackFamily).toLowerCase())
-        ? 'serif'
-        : 'sans';
-    if (/(script|hand|brush|calligraph|amsterdam|cursive)/.test(sourceKey)) family = 'script';
-    else if (/(mono|courier|consolas|menlo|typewriter|code)/.test(sourceKey)) family = 'mono';
-    else if (/(serif|times|georgia|garamond|baskerville|palatino|playfair|cooper|cambria|bookman|didot|bodoni|caslon|lora|merriweather|constantia)/.test(sourceKey)) family = 'serif';
-    else if (/(sans|arial|helvetica|montserrat|garet|canva|roboto|calibri|avenir|verdana|futura|gotham|lato)/.test(sourceKey)) family = 'sans';
-    return {
-        sourceName: sourceName || fallbackFamily || 'Unknown',
-        family,
-        bold: /(bold|black|heavy|semibold|semi bold|demi)/.test(key),
-        italic: /(italic|oblique|slanted)/.test(key),
-        light: /(light|thin|extralight|extra light)/.test(key)
-    };
 }
 
 // Table detection sample
@@ -966,7 +945,7 @@ assert.ok(
 );
 assert.ok(
     readme.includes('markusyeo/BABulletinBotV2')
-        && script.includes('markusyeo/BABulletinBotV2')
+        && (script + pdfTextScript).includes('markusyeo/BABulletinBotV2')
         && html.includes('PDF readability: <a href="https://github.com/markusyeo/BABulletinBotV2"')
         && html.includes('>Markus Yeo</a>'),
     'Markus Yeo must retain site, README, and source-level credit for the readability refinements'
