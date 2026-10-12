@@ -1099,3 +1099,9 @@ Validation: Full npm gate and 33 Chromium journeys, including real PDF/DOCX impo
 Moved font traits, relative font sizes, token spacing and floating verse-number normalization to js/pdf-text.js, with measured inputs and unchanged algorithms. Font tests now import the production helper. Markus Yeo credit moves with the implementation. KOBO-06 still has further paragraph/table orchestration to extract.
 
 Validation: Full npm gate and 33 Chromium journeys, including real DOCX/PDF imports and EPUB export.
+
+## 2026-10-13 — Extract measured PDF table detection
+
+Move drawing-grid evidence, column clustering and stable two-column heuristics to js/pdf-tables.js. PDF operator identifiers are explicit inputs. The clustering regression imports production code instead of mirroring it. Paragraph/table HTML orchestration remains in app.js; KOBO-06 is still partial.
+
+Validation: Full npm gate and 33 Chromium journeys, including real PDF/DOCX imports and EPUB export, passed; final extracted-helper assertions passed.

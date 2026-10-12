@@ -1,3 +1,4 @@
+import { clusterColumnXs, detectPdfTableGeometry } from "../js/pdf-tables.js";
 import { describePdfFont } from "../js/pdf-text.js";
 import { median, detectPdfWhitespace } from "../js/pdf-layout.js";
 /**
@@ -25,6 +26,7 @@ const fixedLayoutPath = join(__dirname, '../js/fixed-layout.js');
 const fixedFixturePath = join(__dirname, './test_fixed_epub.mjs');
 const html = readFileSync(htmlPath, 'utf8');
 const script = readFileSync(jsPath, 'utf8');
+const pdfTablesScript = readFileSync(join(__dirname, '../js/pdf-tables.js'), 'utf8');
 const pdfTextScript = readFileSync(join(__dirname, '../js/pdf-text.js'), 'utf8');
 const styles = readFileSync(cssPath, 'utf8');
 const tailwindStyles = readFileSync(tailwindCssPath, 'utf8');
@@ -40,6 +42,7 @@ const page = [
     html,
     script,
     pdfTextScript,
+    pdfTablesScript,
     readFileSync(join(__dirname, "../js/pdf-layout.js"), "utf8"),
     epubPackageScript,
     epubImagesScript,
@@ -312,8 +315,8 @@ const features = [
     ['PDF source-page layout', 'function detectPdfPageLayout'],
     ['PDF block position', 'function detectPdfBlockPosition'],
     ['PDF page-level reading columns', 'function detectPdfReadingColumns'],
-    ['PDF stable two-column tables', 'function stableTwoColumnLineIndexes'],
-    ['PDF ruled-table evidence', 'function detectPdfTableGeometry'],
+    ['PDF stable two-column tables', 'stableTwoColumnLineIndexes'],
+    ['PDF ruled-table evidence', 'detectPdfTableGeometry'],
     ['PDF semantic table header evidence', 'function hasPdfTableHeaderEvidence'],
     ['PDF paragraph continuation checker', 'function shouldBreakPdfParagraph'],
     ['EPUB image assets', 'extractEmbeddedImagesForEpub'],
@@ -421,19 +424,6 @@ function isListBlock(block) {
     const lines = block.trim().split('\n').filter((l) => l.trim());
     if (!lines.length) return false;
     return lines.every((l) => /^\s*([-*+]|\d+\.)\s+/.test(l));
-}
-
-function clusterColumnXs(xs, tolerance) {
-    if (!xs.length) return [];
-    const sorted = [...xs].sort((a, b) => a - b);
-    const clusters = [[sorted[0]]];
-    for (let i = 1; i < sorted.length; i += 1) {
-        const last = clusters[clusters.length - 1];
-        const center = last.reduce((s, v) => s + v, 0) / last.length;
-        if (Math.abs(sorted[i] - center) <= tolerance) last.push(sorted[i]);
-        else clusters.push([sorted[i]]);
-    }
-    return clusters.map((c) => c.reduce((s, v) => s + v, 0) / c.length);
 }
 
 // Table detection sample
@@ -1020,3 +1010,10 @@ assert.equal(
 );
 
 console.log('All KoboForge logic tests passed.');
+
+const ops = {constructPath: 1, rectangle: 2, stroke: 3};
+assert.equal(detectPdfTableGeometry({fnArray: [1], argsArray: [[[2], [0,0,80,40]]]}, ops).hasGrid, false, 'one box is not a table');
+const grid = {fnArray: [1,3,1,3,1,3,1,3], argsArray: []};
+for (let i=0;i<8;i++) grid.argsArray.push(i % 2 ? [] : [[2],[0,0,80,40]]);
+assert.equal(detectPdfTableGeometry(grid, ops).hasGrid, true, 'repeated stroked cells provide grid evidence');
+assert.equal(detectPdfTableGeometry(grid).hasGrid, false, 'drawing operator identifiers are explicit inputs');
