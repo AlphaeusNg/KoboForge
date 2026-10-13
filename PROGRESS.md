@@ -1105,3 +1105,9 @@ Validation: Full npm gate and 33 Chromium journeys, including real DOCX/PDF impo
 Move drawing-grid evidence, column clustering and stable two-column heuristics to js/pdf-tables.js. PDF operator identifiers are explicit inputs. The clustering regression imports production code instead of mirroring it. Paragraph/table HTML orchestration remains in app.js; KOBO-06 is still partial.
 
 Validation: Full npm gate and 33 Chromium journeys, including real PDF/DOCX imports and EPUB export, passed; final extracted-helper assertions passed.
+
+## 2026-10-13 — Extract measured PDF paragraph decisions
+
+Move paragraph-boundary, structured-block, poetry and visible-line-break decisions into js/pdf-paragraphs.js. The production interpreter imports the same algorithms with measured line inputs; 23 direct behavioral assertions cover sentence continuation, spacing, list markers, font changes, poetry and stacked titles. This advances KOBO-06; paragraph/list/table HTML orchestration remains in app.js. Version 2026.10.13.2.
+
+Validation: Full npm gate and 33 Chromium journeys, including the real PDF/DOCX import and EPUB export corpus, passed.

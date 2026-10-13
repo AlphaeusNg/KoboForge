@@ -43,6 +43,7 @@ const page = [
     script,
     pdfTextScript,
     pdfTablesScript,
+    readFileSync(join(__dirname, "../js/pdf-paragraphs.js"), "utf8"),
     readFileSync(join(__dirname, "../js/pdf-layout.js"), "utf8"),
     epubPackageScript,
     epubImagesScript,

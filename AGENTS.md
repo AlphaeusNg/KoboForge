@@ -19,6 +19,7 @@ index.html            # GitHub Pages entry point
 css/main.css          # KoboForge presentation
 js/app.js             # Conversion, editing, preview, and EPUB application
 js/document-fidelity.js # DOCX/HTML break and typography normalization
+js/pdf-paragraphs.js   # Measured PDF paragraph and authored line-break decisions
 js/epub-images.js     # Embedded-image cleanup, decoding, signatures, and deduplication
 js/epub-package.js    # Reflowable EPUB files and tested archive adapter
 js/runtime-dependencies.js # Retryable on-demand CDN dependency loading
