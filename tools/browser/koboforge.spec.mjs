@@ -1669,3 +1669,100 @@ test('pastes two clipboard images without treating their indexes as import ident
   await expect(page.locator('#deviceBookContent')).toContainText('Keep this paragraph.');
   await expect(page.locator('#downloadBtn')).toBeEnabled();
 });
+
+test('authors image descriptions and decoration through undo, backup, recovery and EPUB', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#deviceSpec')).not.toHaveText('—');
+  await page.locator('#fileInput').setInputFiles([
+    { name: 'first.png', mimeType: 'image/png', buffer: PNG_1x1 },
+    { name: 'second.png', mimeType: 'image/png', buffer: PNG_1x1 }
+  ]);
+  const images = page.locator('#deviceBookContent img');
+  await expect(images).toHaveCount(2);
+  const original = await images.first().getAttribute('alt');
+  await images.first().click();
+  await expect(page.getByRole('textbox', { name: 'Image description', exact: true })).toHaveValue(original);
+  await page.locator('#imageDescription').fill('');
+  await page.locator('#saveImageDescriptionBtn').click();
+  await expect(page.locator('#imageDescriptionStatus')).toContainText('Enter a description');
+  await expect(page.locator('#imageDescription')).toBeFocused();
+  await expect(images.first()).toHaveAttribute('alt', original);
+  const description = 'A diagram: "Grace & truth" <together>.';
+  await page.locator('#imageDescription').fill(description);
+  await page.locator('#saveImageDescriptionBtn').click();
+  await expect(images.first()).toHaveAttribute('alt', description);
+  await expect(images.first()).toHaveAccessibleName(description);
+  await page.locator('#undoEditBtn').click();
+  await expect(images.first()).toHaveAttribute('alt', original);
+  await expect(page.locator('#imageDescriptionControls')).toBeHidden();
+  await page.locator('#redoEditBtn').click();
+  await expect(images.first()).toHaveAttribute('alt', description);
+  await images.nth(1).click();
+  await page.locator('#imageDecorative').check();
+  await expect(page.locator('#imageDescription')).toBeDisabled();
+  await page.locator('#saveImageDescriptionBtn').click();
+  await expect(images.nth(1)).toHaveAttribute('alt', '');
+  await page.locator('#undoEditBtn').click();
+  await expect(images.nth(1)).not.toHaveAttribute('alt', '');
+  await page.locator('#redoEditBtn').click();
+  await expect(images.nth(1)).toHaveAttribute('alt', '');
+  await images.first().click();
+  await expect(page.locator('#imageDescription')).toHaveValue(description);
+  await expect(page.locator('#imageDecorative')).not.toBeChecked();
+
+  await page.locator('#deviceSelect').selectOption('sage');
+  await expect(page.locator('#status')).toContainText('Kobo Sage');
+  await expect(images.first()).toHaveAttribute('alt', description);
+  await expect(images.nth(1)).toHaveAttribute('alt', '');
+  await expect(page.locator('#draftRecoveryStatus')).toContainText('Recovery draft saved locally');
+  const backupDownload = page.waitForEvent('download');
+  await page.locator('#downloadBackupBtn').click();
+  const backup = await backupDownload;
+  const backupPath = await backup.path();
+  const backupBytes = await readFile(backupPath);
+  expect(backupBytes.toString()).toContain('Grace &amp; truth');
+
+  await page.reload();
+  await page.locator('#restoreDraftBtn').click();
+  await expect(images.first()).toHaveAttribute('alt', description);
+  await expect(images.nth(1)).toHaveAttribute('alt', '');
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#backupFileInput').setInputFiles({
+    name: 'described.koboforge.json', mimeType: 'application/json', buffer: backupBytes
+  });
+  await expect(page.locator('#status')).toContainText('restored from backup');
+  await expect(images.first()).toHaveAttribute('alt', description);
+  await expect(images.nth(1)).toHaveAttribute('alt', '');
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#downloadBtn').click();
+  const archive = await JSZip.loadAsync(await readFile(await (await downloadPromise).path()));
+  const chapters = await Promise.all(Object.keys(archive.files)
+    .filter(name => /^OEBPS\/chapter-\d+\.xhtml$/.test(name))
+    .map(name => archive.file(name).async('string')));
+  const alternatives = await page.evaluate(chapters => chapters.flatMap(html => {
+    const doc = new DOMParser().parseFromString(html, 'application/xhtml+xml');
+    if (doc.querySelector('parsererror')) throw new Error('Malformed exported XHTML');
+    return Array.from(doc.querySelectorAll('img'), image => image.getAttribute('alt'));
+  }), chapters);
+  expect(alternatives).toEqual([description, '']);
+});
+
+test('edits a decorative image on a compact phone and preserves it when copied', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.locator('#deviceSpec')).not.toHaveText('—');
+  await page.locator('#fileInput').setInputFiles({ name: 'border.png', mimeType: 'image/png', buffer: PNG_1x1 });
+  const image = page.locator('#deviceBookContent img');
+  await expect(image).toHaveCount(1);
+  await image.click();
+  await page.locator('#imageDecorative').check();
+  await page.locator('#saveImageDescriptionBtn').click();
+  await expect(image).toHaveAttribute('alt', '');
+  await page.locator('#imageCopyBtn').click();
+  await page.locator('#imagePasteBtn').click();
+  await expect(page.locator('#deviceBookContent img')).toHaveCount(2);
+  for (const copy of await page.locator('#deviceBookContent img').all()) {
+    await expect(copy).toHaveAttribute('alt', '');
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

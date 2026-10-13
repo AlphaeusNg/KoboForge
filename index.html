@@ -330,6 +330,16 @@
                                 </div>
                                 </div>
                             </div>
+                            <div id="imageDescriptionControls" class="hidden image-description-controls" role="group" aria-label="Image description">
+                                <label for="imageDescription">Image description</label>
+                                <div class="image-description-row">
+                                    <input id="imageDescription" type="text" aria-describedby="imageDescriptionHint imageDescriptionStatus" placeholder="Describe what this image adds to the book">
+                                    <button id="saveImageDescriptionBtn" type="button">Save description</button>
+                                </div>
+                                <label class="image-decoration-choice"><input id="imageDecorative" type="checkbox"> Decorative image (skip its description)</label>
+                                <p id="imageDescriptionHint">Describe meaningful content, including text shown only in the image. For a complex diagram, add its details to the book text.</p>
+                                <p id="imageDescriptionStatus" aria-live="polite"></p>
+                            </div>
                             <p class="image-drop-hint">Drop or paste images onto the Kobo page. Select one to resize, position, or drag it to a new location.</p>
                         </div>
                         <div class="preview-page-nav" role="group" aria-label="Page navigation">

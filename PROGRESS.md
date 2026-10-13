@@ -1111,3 +1111,24 @@ Validation: Full npm gate and 33 Chromium journeys, including real PDF/DOCX impo
 Move paragraph-boundary, structured-block, poetry and visible-line-break decisions into js/pdf-paragraphs.js. The production interpreter imports the same algorithms with measured line inputs; 23 direct behavioral assertions cover sentence continuation, spacing, list markers, font changes, poetry and stacked titles. This advances KOBO-06; paragraph/list/table HTML orchestration remains in app.js. Version 2026.10.13.2.
 
 Validation: Full npm gate and 33 Chromium journeys, including the real PDF/DOCX import and EPUB export corpus, passed.
+
+## 2026-10-14 — Author image descriptions and decorative alternatives
+
+Research and priorities were recorded in docs/FEATURE_ROADMAP.md before implementation,
+using the W3C WAI image decision tree and EPUB Accessibility 1.1. Selecting an image
+now exposes a labelled description field, decorative-image choice and explicit Save
+description action. Empty informative descriptions request a description or deliberate
+decoration. No description is generated from filenames or document content.
+
+Descriptions use the existing edit history and private draft/backup machinery. Empty
+alternatives are preserved during optimisation and HTML image paste, so decoration
+survives device changes and EPUB export. The phone editor wraps within the viewport.
+This provides authoring support; it does not certify publication accessibility.
+Version 2026.10.14.1.
+
+Validation: npm test passed, as did all 35 offline Chromium journeys including the
+real PDF/DOCX corpus. The two new journeys cover per-image descriptions, accessible
+names, empty-description guidance/focus, meaningful/decorative undo and redo, draft
+reload, actual backup restoration, device retargeting, escaped EPUB XHTML, phone
+width and copied decorative images. Tightened backup/name assertions also passed
+in a focused repeat. Recursive JavaScript syntax and git diff checks passed.

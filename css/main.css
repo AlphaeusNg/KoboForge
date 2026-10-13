@@ -1357,3 +1357,14 @@ html.kf-slider-held body {
 a { color: var(--gold) !important; text-decoration: none; transition: color .15s ease; }
 a:hover, a:focus-visible { color: var(--gold-hover) !important; }
 a.btn-solid, a.btn-solid:hover { color: var(--ink) !important; }
+
+/* Only selected images expose description authoring controls. */
+.image-description-controls { margin-top: .6rem; padding: .65rem; border: 1px solid rgba(255,255,255,.12); border-radius: .75rem; color: #cbd5e1; font-size: .75rem; }
+.image-description-row { display: flex; gap: .4rem; margin: .4rem 0; }
+.image-description-row input { min-width: 0; flex: 1; background: #0f172a; border: 1px solid #475569; border-radius: .4rem; padding: .5rem; color: #f1f5f9; }
+.image-description-row button { border: 1px solid #C9A227; border-radius: .4rem; padding: .5rem; color: #C9A227; }
+.image-description-controls :focus-visible { outline: 2px solid #C9A227; outline-offset: 2px; }
+.image-decoration-choice { display: flex; align-items: center; gap: .4rem; }
+.image-description-controls p { margin: .35rem 0 0; line-height: 1.5; }
+.image-description-row input:disabled { opacity: .5; }
+@media (max-width: 480px) { .image-description-row { flex-wrap: wrap; } .image-description-row input { flex-basis: 100%; } }

@@ -163,6 +163,11 @@
         const imageDeleteBtn = document.getElementById('imageDeleteBtn');
         const imageSizeControl = document.getElementById('imageSizeControl');
         const imageSizeRange = document.getElementById('imageSizeRange');
+        const imageDescriptionControls = document.getElementById('imageDescriptionControls');
+        const imageDescriptionInput = document.getElementById('imageDescription');
+        const imageDecorativeInput = document.getElementById('imageDecorative');
+        const saveImageDescriptionBtn = document.getElementById('saveImageDescriptionBtn');
+        const imageDescriptionStatus = document.getElementById('imageDescriptionStatus');
         const imageSizeValue = document.getElementById('imageSizeValue');
         const diffPanel = document.getElementById('diffPanel');
         const diffBody = document.getElementById('diffBody');
@@ -1260,6 +1265,14 @@
                 && previewEl?.contains(selectedEditableImage)
                 && selectedEditableImage.classList.contains('kf-editable-image')
             );
+            imageDescriptionControls?.classList.toggle('hidden', !hasSelection);
+            if (imageDescriptionInput && imageDecorativeInput) {
+                const alt = hasSelection ? selectedEditableImage.getAttribute('alt') : null;
+                imageDescriptionInput.value = alt || '';
+                imageDecorativeInput.checked = hasSelection && alt === '';
+                imageDescriptionInput.disabled = !hasSelection || imageDecorativeInput.checked;
+                if (imageDescriptionStatus) imageDescriptionStatus.textContent = '';
+            }
             const hasClipboardImage = !!imageClipboardHtml;
             imageEditControls.classList.toggle('hidden', !hasSelection && !hasClipboardImage);
             if (imageCutBtn) imageCutBtn.disabled = !hasSelection;
@@ -1596,7 +1609,7 @@
                 if (!/^data:image\//i.test(src)) return;
                 const img = document.createElement('img');
                 img.src = src;
-                img.alt = source.getAttribute('alt') || 'Pasted image';
+                img.alt = source.hasAttribute('alt') ? source.getAttribute('alt') : 'Pasted image';
                 const imageId = source.getAttribute('data-kf-image-id');
                 if (imageId) img.setAttribute('data-kf-image-id', imageId);
                 const width = normalizedImageWidth(source);
@@ -2750,6 +2763,28 @@
             closeTablePicker();
         }, true);
         window.addEventListener('resize', positionTablePicker);
+
+        imageDecorativeInput?.addEventListener('change', () => {
+            imageDescriptionInput.disabled = imageDecorativeInput.checked;
+            imageDescriptionStatus.textContent = '';
+        });
+        saveImageDescriptionBtn?.addEventListener('click', () => {
+            if (!canEditImagesNow() || !previewEl?.contains(selectedEditableImage)) return;
+            const decorative = !!imageDecorativeInput?.checked;
+            const description = decorative ? '' : imageDescriptionInput.value.trim();
+            if (!decorative && !description) {
+                imageDescriptionStatus.textContent = 'Enter a description or choose Decorative image.';
+                imageDescriptionInput.focus();
+                return;
+            }
+            if (selectedEditableImage.getAttribute('alt') !== description) {
+                selectedEditableImage.setAttribute('alt', description);
+                finishImageEdit('', { paginate: false });
+            }
+            imageDescriptionStatus.textContent = decorative
+                ? 'Decorative image saved. Its description will be skipped.'
+                : 'Image description saved.';
+        });
 
         imageCutBtn?.addEventListener('click', cutSelectedImage);
         imageCopyBtn?.addEventListener('click', copySelectedImage);
@@ -7909,7 +7944,7 @@
                     img.removeAttribute('height');
                     img.style.removeProperty('height');
                     img.classList.add('kf-inline-image');
-                    if (!img.getAttribute('alt')) img.setAttribute('alt', 'Document image');
+                    if (!img.hasAttribute('alt')) img.setAttribute('alt', 'Document image');
                     if (!img.getAttribute('data-kf-layout')) {
                         img.setAttribute('data-kf-layout', normalizedImageLayout(img));
                         img.setAttribute('data-kf-layout-mode', 'auto');

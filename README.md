@@ -15,7 +15,13 @@ It imports DOCX, PDF, TXT, and Markdown; rebuilds structure; optimizes images fo
 3. Drop in a `.txt` or `.docx` (a sermon outline works well).
 4. Edit in the paginated preview, then export a Kobo-friendly EPUB.
 
+Select an image to write its description or mark it decorative. Descriptions stay
+in your private recovery draft, project backup, and exported EPUB. Add complex
+diagram details to the book text.
+
 On a phone, use the compact icon controls.
+
+See [the feature roadmap](docs/FEATURE_ROADMAP.md) for researched next steps.
 
 Working in this repo? See **[AGENTS.md](AGENTS.md)** for fidelity rules, EPUB packaging, and tests.
 
