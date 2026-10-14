@@ -72,7 +72,7 @@ assert.ok(
         && html.includes('<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2'),
     'KoboForge fonts must not block first paint and must retain a no-JS fallback'
 );
-assert.match(tailwindStyles, /\.hidden\{display:none\}/, 'compiled utility CSS must retain runtime visibility controls');
+assert.match(tailwindStyles, /\.hidden\{display:none(?:!important)?\}/, 'compiled utility CSS must retain runtime visibility controls');
 assert.ok(
     /type="module" src="js\/boot\.js"/.test(html),
     'KoboForge must load its grouped application module'
