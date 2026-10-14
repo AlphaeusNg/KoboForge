@@ -1368,3 +1368,14 @@ a.btn-solid, a.btn-solid:hover { color: var(--ink) !important; }
 .image-description-controls p { margin: .35rem 0 0; line-height: 1.5; }
 .image-description-row input:disabled { opacity: .5; }
 @media (max-width: 480px) { .image-description-row { flex-wrap: wrap; } .image-description-row input { flex-basis: 100%; } }
+
+/* Keep selected-image authoring outside the fixed-height icon toolbar. */
+#imageDescriptionControls { margin: .6rem; }
+#spec-source-heading { overflow-wrap: anywhere; }
+#epubWorkspace button:not(.tb-btn):not(.icon-control):not(.preview-page-arrow),
+#downloadBtn, #downloadBackupBtn, #restoreBackupBtn, #clearBtn { max-width: 100%; overflow-wrap: anywhere; }
+.device-control input[type="range"], .image-size-control input { min-height: 24px; }
+.image-decoration-choice { min-height: 24px; }
+.site-header a { min-height: 24px; display: inline-flex; align-items: center; }
+
+header h1 { overflow-wrap: anywhere; }

@@ -1147,3 +1147,16 @@ braces advisory; the one-shot build does not start its file-watching path. No
 patched braces release was available at inspection, and no remediation is claimed.
 The upstream source-map-js/undici updates remain intact. This is a prerequisite
 for the sizing audit; generated CSS is reviewed with its browser matrix.
+
+## 2026-10-14 — Verify control sizing and expose image descriptions
+
+The six-scenario sizing audit found that the image-description panel added last
+cycle was inside the toolbar's fixed-height clipping region. Moved it below the
+icon rows and added checks against clipping ancestors. Wrapped long title and
+specification text to remove 426px overflow at 375px with doubled text. Preserved
+compact toolbar buttons; increased slider hit areas, the decorative-label target
+and the header return link to a 24px minimum. Version 2026.10.14.2.
+
+See docs/UI_SIZING_AUDIT.md for the matrix, dimensions, findings, screenshots and
+limits. Full npm gate, all 41 Chromium journeys including real PDF/DOCX conversion,
+54 sizing-state captures, recursive syntax and diff checks passed.
