@@ -1160,3 +1160,9 @@ and the header return link to a 24px minimum. Version 2026.10.14.2.
 See docs/UI_SIZING_AUDIT.md for the matrix, dimensions, findings, screenshots and
 limits. Full npm gate, all 41 Chromium journeys including real PDF/DOCX conversion,
 54 sizing-state captures, recursive syntax and diff checks passed.
+
+## 2026-10-15 — Name the file and chapter actions
+
+The drop zone still lists DOCX, PDF, TXT, Markdown, and PNG, JPEG, GIF, and WebP, and still says the file stays in this browser. Chapter split off remains one EPUB file. Edit history still lists every text, formatting, object, and placement change. Version `2026.10.15.1`.
+
+Validation: syntax, logic, book-outline, and editor-history node gates passed. The style rebuild and Chromium journeys were not rerun.

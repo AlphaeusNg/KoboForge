@@ -3002,7 +3002,7 @@
                 exportEditHint.textContent = `Edits will be included in Download: +${stats.added} / −${stats.removed} words${headBit}${structureBit} vs original import.`;
             } else if (bodyEdited) {
                 exportEditHint.classList.remove('hidden');
-                exportEditHint.textContent = 'Body marked edited (structure/HTML). Download will use the current body.';
+                exportEditHint.textContent = 'Download will use the current document.';
             } else {
                 exportEditHint.classList.add('hidden');
                 exportEditHint.textContent = '';
@@ -3348,7 +3348,7 @@
                     const structureBit = tc.structuredChanges
                         ? ` · ${tc.structuredChanges} formatting/object edit${tc.structuredChanges === 1 ? '' : 's'}`
                         : '';
-                    diffSummary.textContent = `${wordBit}${headBit}${structureBit} — live · click a row to jump`;
+                    diffSummary.textContent = `${wordBit}${headBit}${structureBit} — live · click a row to jump to that change`;
                 }
             }
             const rows = [];
@@ -5547,11 +5547,11 @@
                     chapterOutline.appendChild(btn);
                 });
                 if (split && chapters.length === 1 && headingCount === 0) {
-                    chapterOutlineHint.textContent = 'No H1/H2 — single spine item. Add headings in Edit.';
+                    chapterOutlineHint.textContent = 'No H1 or H2. The EPUB has one chapter. Add headings in Edit.';
                 } else if (!split) {
-                    chapterOutlineHint.textContent = 'Chapter split off — one file in EPUB.';
+                    chapterOutlineHint.textContent = 'Chapter split is off. The book is one file in the EPUB.';
                 } else {
-                    chapterOutlineHint.textContent = `${chapters.length} spine item${chapters.length === 1 ? '' : 's'}`;
+                    chapterOutlineHint.textContent = `${chapters.length} chapter${chapters.length === 1 ? '' : 's'}`;
                 }
             } else {
                 chapterOutlineWrap.classList.add('hidden');
@@ -5605,7 +5605,7 @@
                 observation = `${count} blank source page${count === 1 ? '' : 's'} preserved.`;
             } else if (warnings.length) {
                 level = 'warn';
-                observation = 'Converted with a source issue to spot-check.';
+                observation = 'Review a source issue.';
             } else if (bodyEdited) {
                 observation = 'Edited version is ready to export.';
             } else if (out.imageCount > 0 || out.noteSpaceCount > 0) {
