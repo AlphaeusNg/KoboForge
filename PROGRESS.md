@@ -1132,3 +1132,18 @@ names, empty-description guidance/focus, meaningful/decorative undo and redo, dr
 reload, actual backup restoration, device retargeting, escaped EPUB XHTML, phone
 width and copied decorative images. Tightened backup/name assertions also passed
 in a focused repeat. Recursive JavaScript syntax and git diff checks passed.
+
+## 2026-10-14 — Restore the stylesheet build after the Tailwind 4 update
+
+Upstream PR #11 updated Tailwind to 4.3.3 but retained the v3-only CLI command
+and input directives, so npm test failed with `tailwindcss: not found`. Followed
+https://tailwindcss.com/docs/upgrade-guide using the matching official CLI,
+regular CSS imports and explicit legacy configuration. Imports remain unlayered
+to retain the existing main.css cascade and hidden-control behavior. GitHub Pages
+still serves committed CSS without a runtime build.
+
+The CLI's pinned @parcel/watcher dependency reintroduces a development-only
+braces advisory; the one-shot build does not start its file-watching path. No
+patched braces release was available at inspection, and no remediation is claimed.
+The upstream source-map-js/undici updates remain intact. This is a prerequisite
+for the sizing audit; generated CSS is reviewed with its browser matrix.
