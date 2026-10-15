@@ -1284,7 +1284,7 @@
                 if (imageDescriptionStatus) imageDescriptionStatus.textContent = '';
             }
             const hasClipboardImage = !!imageClipboardHtml;
-            imageEditControls.classList.toggle('hidden', !hasSelection && !hasClipboardImage);
+            imageEditControls.classList.toggle('hidden', !hasSelection);
             if (imageCutBtn) imageCutBtn.disabled = !hasSelection;
             if (imageCopyBtn) imageCopyBtn.disabled = !hasSelection;
             if (imageDeleteBtn) imageDeleteBtn.disabled = !hasSelection;
@@ -2460,7 +2460,8 @@
 
         function positionTablePicker() {
             if (!tablePicker || tablePicker.classList.contains('hidden') || !insertTableBtn) return;
-            const buttonRect = insertTableBtn.getBoundingClientRect();
+            const buttonRect = (insertTableBtn.closest('#toolbarMoreMenu')
+                ? document.getElementById('toolbarMoreBtn') : insertTableBtn).getBoundingClientRect();
             const pickerRect = tablePicker.getBoundingClientRect();
             const gutter = 8;
             const left = Math.max(
@@ -2683,7 +2684,7 @@
                 insertUnorderedList: 'insertUnorderedList',
                 insertOrderedList: 'insertOrderedList'
             };
-            editToolbar.querySelectorAll('.tb-btn[data-cmd]').forEach((btn) => {
+            document.getElementById('devicePreviewControls').querySelectorAll('.tb-btn[data-cmd]').forEach((btn) => {
                 const cmd = btn.dataset.cmd;
                 if (!cmd || cmd === 'removeFormat') {
                     btn.classList.remove('is-active');
@@ -2696,7 +2697,7 @@
                 btn.classList.toggle('is-active', !!on);
             });
             const formatBlocks = resolveFormatBlocks();
-            editToolbar.querySelectorAll('.block-fmt-btn[data-block]').forEach((btn) => {
+            document.getElementById('devicePreviewControls').querySelectorAll('.block-fmt-btn[data-block]').forEach((btn) => {
                 const want = btn.dataset.block;
                 const on = formatBlocks.length > 0 && formatBlocks.every((block) => {
                     if (want === 'blockquote') {
@@ -2707,7 +2708,7 @@
                 });
                 btn.classList.toggle('is-active', on);
             });
-            editToolbar.querySelectorAll('.tb-btn[data-align]').forEach((btn) => {
+            document.getElementById('devicePreviewControls').querySelectorAll('.tb-btn[data-align]').forEach((btn) => {
                 const want = btn.dataset.align;
                 const on = formatBlocks.length > 0 && formatBlocks.every((block) => {
                     const target = block.closest?.('blockquote') && block.tagName?.toLowerCase() !== 'blockquote'
@@ -2728,7 +2729,7 @@
                 btn.classList.toggle('is-active', on);
             });
             const cells = selectedTableCells();
-            editToolbar.querySelectorAll('.tb-btn[data-vpos]').forEach((btn) => {
+            document.getElementById('devicePreviewControls').querySelectorAll('.tb-btn[data-vpos]').forEach((btn) => {
                 btn.disabled = !cells.length;
                 btn.classList.toggle(
                     'is-active',
@@ -2755,6 +2756,138 @@
                 else if (btn === insertTableBtn) toggleTablePicker();
             });
         });
+
+        const toolbarControls = document.getElementById('devicePreviewControls');
+        const toolbarMoreBtn = document.getElementById('toolbarMoreBtn');
+        const toolbarMoreMenu = document.getElementById('toolbarMoreMenu');
+        const imageControlsHome = document.createComment('selected image controls');
+        imageEditControls.before(imageControlsHome);
+        const imageContextLane = document.createElement('div');
+        imageContextLane.className = 'tb-lane image-context-lane';
+        imageContextLane.setAttribute('aria-label', 'Selected image controls; scroll horizontally');
+        imageContextLane.tabIndex = 0;
+        imageContextLane.hidden = true;
+        toolbarControls.querySelector('.toolbar-controls-row').after(imageContextLane);
+        const toolbarButtons = [...editToolbar.querySelectorAll('.tb-btn')]
+            .filter((button) => !imageEditControls.contains(button));
+        const toolbarHomes = new Map(toolbarButtons.map((button) => {
+            const home = document.createComment('toolbar button');
+            button.before(home);
+            return [button, home];
+        }));
+        const toolbarPriority = ['#undoEditBtn', '#redoEditBtn', '[data-cmd="bold"]',
+            '[data-cmd="italic"]', '[data-block="h2"]'];
+        toolbarButtons.forEach((button) => {
+            const rank = toolbarPriority.findIndex((selector) => button.matches(selector));
+            button.style.setProperty('--toolbar-order', rank < 0 ? 5 : rank);
+        });
+        function closeToolbarMore(returnFocus = false) {
+            toolbarMoreMenu.hidden = true;
+            toolbarMoreBtn.setAttribute('aria-expanded', 'false');
+            if (returnFocus) toolbarMoreBtn.focus();
+        }
+        function layoutToolbarOverflow() {
+            closeToolbarMore();
+            for (const [button, home] of toolbarHomes) {
+                if (button.parentElement !== toolbarMoreMenu) continue;
+                home.after(button);
+                button.removeAttribute('role');
+                button.removeAttribute('tabindex');
+                button.querySelector('.tb-menu-label')?.remove();
+            }
+            toolbarMoreBtn.hidden = true;
+            imageContextLane.hidden = true;
+            if (imageEditControls.parentElement === imageContextLane) imageControlsHome.after(imageEditControls);
+            toolbarControls.classList.remove('is-compact');
+            if (!editToolbar.getClientRects().length) return;
+            const row = toolbarControls.querySelector('.toolbar-controls-row');
+            // Preserve the full desktop lanes; smaller surfaces use one compact row.
+            if (window.matchMedia('(min-width: 768px)').matches) return;
+            toolbarControls.classList.add('is-compact');
+            imageContextLane.append(imageEditControls);
+            imageContextLane.hidden = imageEditControls.classList.contains('hidden');
+            const visible = toolbarButtons.filter((button) => button.getClientRects().length);
+            const rank = (button) => {
+                const index = toolbarPriority.findIndex((selector) => button.matches(selector));
+                return index < 0 ? 5 : index;
+            };
+            const candidates = visible.sort((a, b) => rank(a) - rank(b));
+            const styles = getComputedStyle(editToolbar);
+            const buttonSize = parseFloat(styles.getPropertyValue('--icon-btn-size')) || 40;
+            const gap = parseFloat(styles.getPropertyValue('--icon-gap')) || 0;
+            const pageNav = row.querySelector('.preview-page-nav');
+            const navWidth = pageNav?.getClientRects().length
+                ? pageNav.getBoundingClientRect().width + gap : 0;
+            const toolbarWidth = row.clientWidth - navWidth;
+            // Count only editing buttons, independently of hints and contextual controls.
+            if (visible.length * (buttonSize + gap) - gap <= toolbarWidth) return;
+            toolbarMoreBtn.hidden = false;
+            const available = toolbarWidth - toolbarMoreBtn.getBoundingClientRect().width - gap;
+            const count = Math.max(1, Math.floor((available + gap) / (buttonSize + gap)));
+            const inline = new Set(candidates.slice(0, count));
+            // Preserve document order in the menu while prioritizing the inline tools.
+            for (const button of toolbarButtons) {
+                if (!visible.includes(button) || inline.has(button)) continue;
+                button.setAttribute('role', 'menuitem');
+                button.setAttribute('tabindex', '-1');
+                const label = document.createElement('span');
+                label.className = 'tb-menu-label';
+                label.textContent = button.getAttribute('aria-label');
+                button.append(label);
+                toolbarMoreMenu.append(button);
+            }
+        }
+        const menuItems = () => [...toolbarMoreMenu.querySelectorAll('[role="menuitem"]')]
+            .filter((button) => !button.disabled && button.getClientRects().length);
+        toolbarMoreBtn.addEventListener('mousedown', (event) => event.preventDefault());
+        toolbarMoreBtn.addEventListener('click', () => {
+            if (!toolbarMoreMenu.hidden) return closeToolbarMore();
+            toolbarMoreMenu.hidden = false;
+            toolbarMoreBtn.setAttribute('aria-expanded', 'true');
+            menuItems()[0]?.focus();
+        });
+        toolbarMoreMenu.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                closeToolbarMore(true);
+                return;
+            }
+            const items = menuItems();
+            const index = items.indexOf(document.activeElement);
+            const next = { ArrowDown: (index + 1) % items.length,
+                ArrowUp: (index - 1 + items.length) % items.length,
+                Home: 0, End: items.length - 1 }[event.key];
+            if (next === undefined) return;
+            event.preventDefault();
+            event.stopPropagation();
+            items[next]?.focus();
+        });
+        // Capture closes the menu before an item's own popover handler runs.
+        toolbarMoreMenu.addEventListener('click', (event) => {
+            if (event.target.closest('[role="menuitem"]:not(:disabled)')) closeToolbarMore();
+        }, true);
+        document.addEventListener('pointerdown', (event) => {
+            if (!toolbarMoreMenu.contains(event.target) && !toolbarMoreBtn.contains(event.target)) {
+                closeToolbarMore();
+            }
+        });
+        let toolbarLayoutFrame = 0;
+        const scheduleToolbarLayout = () => {
+            if (toolbarLayoutFrame) return;
+            toolbarLayoutFrame = requestAnimationFrame(() => {
+                toolbarLayoutFrame = 0;
+                layoutToolbarOverflow();
+            });
+        };
+        new ResizeObserver(scheduleToolbarLayout).observe(toolbarControls);
+        window.addEventListener('resize', scheduleToolbarLayout);
+        const toolbarVisibilityObserver = new MutationObserver(scheduleToolbarLayout);
+        [editToolbar, imageEditControls, ...editToolbar.querySelectorAll('.tb-row')].forEach((element) => {
+            toolbarVisibilityObserver.observe(element, { attributes: true, attributeFilter: ['class', 'hidden'] });
+        });
+        modeButtons.forEach((button) => button.addEventListener('click', scheduleToolbarLayout));
+        scheduleToolbarLayout();
 
         buildTablePicker();
         document.addEventListener('pointerdown', (event) => {

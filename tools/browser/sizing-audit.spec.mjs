@@ -48,6 +48,10 @@ for (const scenario of [{width:320},{width:375},{width:768},{width:1280},{width:
       });
       expect(clipped, `${name}: ${selector} clipped by ancestor`).toBe('');
     }
+    if (await page.locator('#insertTableBtn').evaluate(e => !!e.closest('#toolbarMoreMenu'))
+        && !(await page.locator('#toolbarMoreMenu').isVisible())) {
+      await page.locator('#toolbarMoreBtn').click();
+    }
     await page.locator('#insertTableBtn').click();
     await record('table-dialog');
     await page.keyboard.press('Escape');

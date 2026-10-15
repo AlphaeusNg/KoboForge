@@ -85,7 +85,7 @@ details > :not(summary) {
 }
 
 .icon-control,
-#editToolbar .tb-btn,
+#devicePreviewControls .tb-btn,
 .mode-btn,
 .preview-page-arrow {
     position: relative;
@@ -103,7 +103,7 @@ details > :not(summary) {
 }
 
 .icon-control::before,
-#editToolbar .tb-btn::before,
+#devicePreviewControls .tb-btn::before,
 .mode-btn::before,
 .preview-page-arrow::before {
     content: "";
@@ -926,7 +926,7 @@ details > :not(summary) {
     border-right: 1px solid rgba(255, 255, 255, 0.09);
 }
 
-#editToolbar .tb-btn {
+#devicePreviewControls .tb-btn {
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.05);
     color: #e2e8f0;
@@ -935,20 +935,20 @@ details > :not(summary) {
     transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-#editToolbar .tb-btn:hover,
-#editToolbar .tb-btn:focus-visible {
+#devicePreviewControls .tb-btn:hover,
+#devicePreviewControls .tb-btn:focus-visible {
     border-color: rgba(201, 162, 39, 0.45);
     color: #f8fafc;
     outline: none;
 }
 
-#editToolbar .tb-btn.is-active {
+#devicePreviewControls .tb-btn.is-active {
     border-color: rgba(201, 162, 39, 0.6);
     background: rgba(201, 162, 39, 0.18);
     color: #f5d36d;
 }
 
-#editToolbar .tb-btn:disabled {
+#devicePreviewControls .tb-btn:disabled {
     cursor: not-allowed;
     opacity: 0.3;
 }
@@ -1101,22 +1101,8 @@ html.kf-slider-held body {
 
 @media (max-width: 767px) {
     #devicePreviewControls {
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         padding: 0.34rem 0.38rem;
-    }
-
-    /* Phones: page arrows share one row above the toolbar so the toolbar
-       groups get the full width instead of collapsing into a narrow column. */
-    #devicePreviewControls .preview-page-nav {
-        order: -1;
-        width: 100%;
-        justify-content: flex-end;
-        padding-left: 0;
-        border-left: 0;
-    }
-
-    #devicePreviewControls #editToolbar {
-        flex: 1 1 100%;
     }
 
     .image-size-control input {
@@ -1412,3 +1398,88 @@ a.btn-solid, a.btn-solid:hover { color: var(--ink) !important; }
 .site-header a { min-height: 24px; display: inline-flex; align-items: center; }
 
 header h1 { overflow-wrap: anywhere; }
+
+/* Keep navigation and the overflow trigger alongside the editing surface. */
+#devicePreviewControls { position: relative; flex-direction: column; }
+.toolbar-controls-row {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: flex-start;
+    gap: var(--icon-gap);
+    width: 100%;
+    min-width: 0;
+}
+#devicePreviewControls [hidden] { display: none !important; }
+#devicePreviewControls .preview-page-nav { flex-wrap: nowrap; }
+#devicePreviewControls.is-compact #editToolbar .tb-scroll,
+#devicePreviewControls.is-compact #editToolbar .tb-lane,
+#devicePreviewControls.is-compact #editToolbar .tb-row { display: contents; }
+#devicePreviewControls.is-compact #editToolbar {
+    display: flex;
+    flex-flow: row nowrap;
+    height: var(--icon-btn-size);
+    min-height: var(--icon-btn-size);
+    gap: var(--icon-gap);
+    overflow: visible;
+}
+#devicePreviewControls.is-compact #editToolbar .tb-row:not(:has(.tb-btn)) { display: none; }
+#devicePreviewControls.is-compact #editToolbar .hidden { display: none; }
+#devicePreviewControls.is-compact .image-drop-hint { display: none; }
+#devicePreviewControls.is-compact .tb-btn { order: var(--toolbar-order, 5); }
+#toolbarMoreMenu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 100;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: min(420px, 100%);
+    max-height: min(60vh, 480px);
+    overflow-y: auto;
+    padding: 12px;
+    border: 1px solid rgba(201, 162, 39, .45);
+    border-radius: 12px;
+    background: #0c1322;
+    box-shadow: 0 12px 28px #0008;
+}
+#devicePreviewControls #toolbarMoreMenu .tb-btn {
+    order: 0;
+    display: inline-flex;
+    width: auto;
+    height: auto;
+    min-height: 44px;
+    justify-content: start;
+    padding: 6px 12px;
+    gap: 8px;
+    line-height: 1.3;
+    text-align: left;
+}
+#toolbarMoreMenu .ui-icon { flex: none; }
+
+#devicePreviewControls .image-context-lane {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-x;
+}
+#devicePreviewControls .image-context-lane #imageEditControls {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: center;
+    gap: var(--icon-gap);
+    flex: none;
+}
+#devicePreviewControls .image-context-lane .tb-btn { order: 0; }
+#devicePreviewControls .image-context-lane.kf-slider-held-lane {
+    overflow: hidden;
+    touch-action: none;
+}
+
+#devicePreviewControls #editToolbar.hidden,
+#devicePreviewControls #imageEditControls.hidden { display: none; }
+/* Phones: page arrows sit flush in the single toolbar row (no divider padding)
+   so one more editing icon fits inline. */
+#devicePreviewControls.is-compact .preview-page-nav { padding-left: 0; border-left: 0; }

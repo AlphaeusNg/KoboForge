@@ -906,6 +906,14 @@ test("holds the image-size slider steady in a phone viewport", async ({ page }) 
   const control = page.locator("#imageSizeControl");
   const range = page.locator("#imageSizeRange");
   await expect(control).toBeVisible();
+  const contextLane = page.locator('.image-context-lane');
+  await expect(contextLane).toBeVisible();
+  await expect(contextLane.locator('#imageEditControls')).toBeVisible();
+  await expect(page.locator('#toolbarMoreMenu #imageEditControls, #toolbarMoreMenu #imageSizeControl')).toHaveCount(0);
+  const mainRow = await page.locator('.toolbar-controls-row').boundingBox();
+  const contextRow = await contextLane.boundingBox();
+  expect(contextRow.y).toBeGreaterThanOrEqual(mainRow.y + mainRow.height);
+  expect(Math.abs(contextRow.width - mainRow.width)).toBeLessThanOrEqual(1);
   await control.evaluate((element) => element.scrollIntoView({ block: "nearest", inline: "center" }));
 
   const initialScroll = await page.evaluate(() => {
@@ -1722,19 +1730,19 @@ test('authors image descriptions and decoration through undo, backup, recovery a
   await page.locator('#saveImageDescriptionBtn').click();
   await expect(images.first()).toHaveAttribute('alt', description);
   await expect(images.first()).toHaveAccessibleName(description);
-  await page.locator('#undoEditBtn').click();
+  await clickToolbarButton(page, '#undoEditBtn');
   await expect(images.first()).toHaveAttribute('alt', original);
   await expect(page.locator('#imageDescriptionControls')).toBeHidden();
-  await page.locator('#redoEditBtn').click();
+  await clickToolbarButton(page, '#redoEditBtn');
   await expect(images.first()).toHaveAttribute('alt', description);
   await images.nth(1).click();
   await page.locator('#imageDecorative').check();
   await expect(page.locator('#imageDescription')).toBeDisabled();
   await page.locator('#saveImageDescriptionBtn').click();
   await expect(images.nth(1)).toHaveAttribute('alt', '');
-  await page.locator('#undoEditBtn').click();
+  await clickToolbarButton(page, '#undoEditBtn');
   await expect(images.nth(1)).not.toHaveAttribute('alt', '');
-  await page.locator('#redoEditBtn').click();
+  await clickToolbarButton(page, '#redoEditBtn');
   await expect(images.nth(1)).toHaveAttribute('alt', '');
   await images.first().click();
   await expect(page.locator('#imageDescription')).toHaveValue(description);
@@ -1788,8 +1796,8 @@ test('edits a decorative image on a compact phone and preserves it when copied',
   await page.locator('#imageDecorative').check();
   await page.locator('#saveImageDescriptionBtn').click();
   await expect(image).toHaveAttribute('alt', '');
-  await page.locator('#imageCopyBtn').click();
-  await page.locator('#imagePasteBtn').click();
+  await clickToolbarButton(page, '#imageCopyBtn');
+  await clickToolbarButton(page, '#imagePasteBtn');
   await expect(page.locator('#deviceBookContent img')).toHaveCount(2);
   for (const copy of await page.locator('#deviceBookContent img').all()) {
     await expect(copy).toHaveAttribute('alt', '');
@@ -1845,6 +1853,7 @@ async function loadIconSample(page) {
     buffer: Buffer.from("A short book for the shared icon buttons."),
   });
   await expect(page.locator("#downloadBtn")).toBeEnabled();
+  await expect(page.locator("#deviceBookContent")).toContainText("A short book for the shared icon buttons.");
   await expect(page.locator("#editToolbar")).toBeVisible();
 }
 
@@ -1864,7 +1873,7 @@ test("icon buttons follow the shared icon spec", async ({ page }) => {
         return rect.width > 0 && rect.height > 0;
       };
       return [...document.querySelectorAll("button[aria-label]")]
-        .filter((el) => shown(el) && el.querySelector("svg"))
+        .filter((el) => shown(el) && el.querySelector("svg") && !el.closest("#toolbarMoreMenu"))
         .map((el) => {
           const rect = el.getBoundingClientRect();
           const style = getComputedStyle(el);
@@ -1936,5 +1945,90 @@ test("touch tap shows tooltip and runs the action", async ({ browser }) => {
     await expect(htmlMode).toHaveAttribute("aria-pressed", "true");
   } finally {
     await context.close();
+  }
+});
+
+async function clickToolbarButton(page, selector) {
+  const button = page.locator(selector);
+  if (await button.evaluate((el) => !!el.closest('#toolbarMoreMenu'))
+      && !(await page.locator('#toolbarMoreMenu').isVisible())) {
+    await page.locator('#toolbarMoreBtn').click();
+  }
+  await button.click();
+}
+
+async function loadToolbarSample(page, width = 390) {
+  await page.setViewportSize({ width, height: 844 });
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#deviceSpec')).not.toHaveText('—');
+  await page.locator('#fileInput').setInputFiles({
+    name: 'toolbar.md', mimeType: 'text/markdown',
+    buffer: Buffer.from('A short paragraph for editing tools.\n\nAnother paragraph.'),
+  });
+  await expect(page.locator('#deviceBookContent')).toContainText('A short paragraph for editing tools.');
+  await expect(page.locator('#editToolbar')).toBeVisible();
+}
+
+test('phone editor toolbar stays on one row with page arrows inline', async ({ page }) => {
+  await loadToolbarSample(page);
+  await expect(page.locator('#toolbarMoreBtn')).toBeVisible();
+  const buttons = page.locator('#devicePreviewControls button:visible').filter({
+    hasNot: page.locator('.tb-menu-label'),
+  });
+  const more = await page.locator('#toolbarMoreBtn').boundingBox();
+  for (const button of await buttons.all()) {
+    const box = await button.boundingBox();
+    expect(Math.abs(box.y - more.y)).toBeLessThanOrEqual(2);
+  }
+  for (const id of ['devicePagePrev', 'devicePageNext']) {
+    expect((await page.locator(`#${id}`).boundingBox()).y).toBe(more.y);
+  }
+});
+
+test('toolbar More menu is accessible and overflowed items still work', async ({ page }) => {
+  await loadToolbarSample(page);
+  const more = page.locator('#toolbarMoreBtn');
+  const menu = page.locator('#toolbarMoreMenu');
+  await more.click();
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
+  await expect(menu).toBeVisible();
+  const enabled = menu.locator('[role="menuitem"]:not(:disabled)');
+  await expect(enabled.first()).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(enabled.nth(1)).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await expect(more).toBeFocused();
+  await more.click();
+  await page.locator('h1').click();
+  await expect(menu).toBeHidden();
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await page.locator('#deviceBookContent p').first().click();
+  await clickToolbarButton(page, '[data-cmd="insertUnorderedList"]');
+  await expect(page.locator('#deviceBookContent ul li')).toContainText(['A short paragraph']);
+  await expect(menu).toBeHidden();
+});
+
+test('desktop toolbar has no overflow menu', async ({ page }) => {
+  await loadToolbarSample(page, 1366);
+  await expect(page.locator('#toolbarMoreBtn')).toBeHidden();
+  await expect(page.locator('#toolbarMoreMenu button')).toHaveCount(0);
+  const prev = await page.locator('#devicePagePrev').boundingBox();
+  const next = await page.locator('#devicePageNext').boundingBox();
+  const toolbar = await page.locator('#editToolbar').boundingBox();
+  expect(prev.y).toBe(next.y);
+  expect(Math.abs(prev.y - toolbar.y)).toBeLessThanOrEqual(2);
+});
+
+ test('tablet restores all toolbar buttons inline after phone overflow', async ({ page }) => {
+  await loadToolbarSample(page);
+  await expect(page.locator('#toolbarMoreBtn')).toBeVisible();
+  for (const width of [768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.locator('#devicePreviewControls')).not.toHaveClass(/is-compact/);
+    await expect(page.locator('#toolbarMoreBtn')).toBeHidden();
+    await expect(page.locator('#toolbarMoreMenu button')).toHaveCount(0);
+    await expect(page.locator('#insertTableBtn')).toBeVisible();
   }
 });
