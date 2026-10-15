@@ -62,4 +62,21 @@ check(
 );
 check(lockedXmldom === "0.8.15", "the lockfile should resolve @xmldom/xmldom 0.8.15");
 
+// Mammoth's Node conversion API is used by the real-document fidelity suite.
+// Keep the reviewed CLI-only override from silently regressing on lock updates.
+check(
+  packageLock.packages?.["node_modules/argparse"]?.version === "2.0.1",
+  "Mammoth's test tooling should retain the reviewed argparse 2.0.1 override",
+);
+check(
+  !Object.keys(packageLock.packages).some(key => /(?:^|\/)node_modules\/sprintf-js$/.test(key)),
+  "the vulnerable sprintf-js chain should not return anywhere in the lockfile",
+);
+const requestedMammoth = packageJson.devDependencies.mammoth;
+check(
+  packageLock.packages?.["node_modules/mammoth"]?.version === requestedMammoth
+    && RUNTIME_DEPENDENCIES.mammoth.url.includes(`mammoth@${requestedMammoth}/`),
+  "production DOCX and real-document tests should use the same Mammoth release",
+);
+
 console.log(`Dependency policy tests passed (${assertions} assertions).`);

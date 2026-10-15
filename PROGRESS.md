@@ -1166,3 +1166,10 @@ limits. Full npm gate, all 41 Chromium journeys including real PDF/DOCX conversi
 The drop zone still lists DOCX, PDF, TXT, Markdown, and PNG, JPEG, GIF, and WebP, and still says the file stays in this browser. Chapter split off remains one EPUB file. Edit history still lists every text, formatting, object, and placement change. Version `2026.10.15.1`.
 
 Validation: syntax, logic, book-outline, and editor-history node gates passed. The style rebuild and Chromium journeys were not rerun.
+
+
+## 2026-10-16 — Guard the reviewed Mammoth dependency chain
+
+The latest merged PR removes the vulnerable sprintf-js chain using a scoped argparse override. Dependency checks now reject its return at any nested lockfile location and verify that real-document tests and the production DOCX loader use the same Mammoth release. The full DOCX/PDF fidelity suite continues to exercise the supported conversion API; the documented unsupported Mammoth CLI caveat remains. Deployment stamp: 2026.10.16.1.
+
+Validation: full npm gate and dependency policy passed; all 42 Chromium journeys passed on the fetched application. JavaScript syntax and whitespace checks passed.
