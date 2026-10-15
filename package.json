@@ -19,6 +19,9 @@
     "tailwindcss": "4.3.3"
   },
   "overrides": {
-    "@xmldom/xmldom": "0.8.15"
+    "@xmldom/xmldom": "0.8.15",
+    "mammoth": {
+      "argparse": "^2.0.1"
+    }
   }
 }
