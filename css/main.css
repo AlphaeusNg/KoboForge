@@ -1,5 +1,11 @@
 :root {
     --gold: #C9A227;
+    --icon-btn-size: 40px;
+    --icon-btn-radius: 12px;
+    --icon-size: 24px;
+    --icon-stroke: 2;
+    --icon-tap-target: 48px;
+    --icon-gap: 8px;
 }
 
 body {
@@ -40,24 +46,75 @@ body {
 }
 
 .ui-icon {
-    width: 1rem;
-    height: 1rem;
+    width: var(--icon-size);
+    height: var(--icon-size);
+    display: block;
     fill: none;
     stroke: currentColor;
-    stroke-width: 1.8;
+    stroke-width: var(--icon-stroke);
     stroke-linecap: round;
     stroke-linejoin: round;
 }
 
-.icon-control {
+.icon-sprite symbol {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: var(--icon-stroke);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.ui-icon-inline {
+    width: 1em;
+    height: 1em;
+    display: inline-block;
+    vertical-align: -0.15em;
+}
+
+/* Icon buttons share one row. Disclosure content stacks under that row. */
+.icon-row {
+    display: flex;
+    flex-flow: row wrap;
+    align-items: center;
+    gap: var(--icon-gap);
+}
+
+details > :not(summary) {
+    display: block;
+    width: 100%;
+}
+
+.icon-control,
+#editToolbar .tb-btn,
+.mode-btn,
+.preview-page-arrow {
+    position: relative;
+    box-sizing: border-box;
     display: inline-grid;
-    width: 2rem;
-    height: 2rem;
+    width: var(--icon-btn-size);
+    height: var(--icon-btn-size);
+    min-width: var(--icon-btn-size);
+    min-height: var(--icon-btn-size);
     flex: none;
     place-items: center;
     padding: 0;
+    border-radius: var(--icon-btn-radius);
+    line-height: 1;
+}
+
+.icon-control::before,
+#editToolbar .tb-btn::before,
+.mode-btn::before,
+.preview-page-arrow::before {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    width: var(--icon-tap-target);
+    height: var(--icon-tap-target);
+}
+
+.icon-control {
     border: 1px solid transparent;
-    border-radius: 0.6rem;
     color: #94a3b8;
     transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
@@ -808,8 +865,8 @@ body {
 #devicePreviewControls {
     display: flex;
     min-width: 0;
-    align-items: center;
-    gap: 0.4rem;
+    align-items: flex-start;
+    gap: var(--icon-gap);
     padding: 0.42rem 0.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(8, 13, 23, 0.72);
@@ -819,7 +876,7 @@ body {
     position: static;
     width: auto;
     min-width: 0;
-    height: 4.05rem;
+    height: auto;
     flex: 1 1 auto;
     padding: 0;
     overflow: hidden;
@@ -828,22 +885,26 @@ body {
 #editToolbar .tb-scroll {
     display: flex;
     width: 100%;
-    height: 100%;
+    height: auto;
     flex-flow: column nowrap;
-    gap: 0.2rem;
-    overflow: hidden;
+    gap: var(--icon-gap);
+    overflow: visible;
 }
 
 #editToolbar .tb-lane {
     display: flex;
     width: 100%;
     min-width: 0;
-    min-height: 1.9rem;
-    flex: 1 1 0;
+    max-width: 100%;
+    min-height: var(--icon-btn-size);
+    height: auto;
+    flex: 0 0 auto;
+    flex-flow: row wrap;
     align-items: center;
-    gap: 0.24rem;
+    align-content: flex-start;
+    gap: var(--icon-gap);
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: visible;
     overscroll-behavior: contain;
     touch-action: pan-x;
     scrollbar-width: none;
@@ -855,29 +916,22 @@ body {
 
 #editToolbar .tb-row {
     display: flex;
-    width: max-content;
-    min-width: max-content;
-    flex-wrap: nowrap;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    flex-flow: row wrap;
     align-items: center;
-    gap: 0.22rem;
-    padding-right: 0.26rem;
+    gap: var(--icon-gap);
+    padding-right: var(--icon-gap);
     border-right: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 #editToolbar .tb-btn {
-    display: grid;
-    width: 1.9rem;
-    height: 1.9rem;
-    flex: none;
-    place-items: center;
-    padding: 0;
-    border-radius: 0.55rem;
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.05);
     color: #e2e8f0;
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    line-height: 1;
     transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
@@ -901,14 +955,14 @@ body {
 
 .image-size-control {
     display: flex;
-    width: 8.2rem;
-    height: 1.9rem;
-    flex: none;
+    width: min(8.2rem, 100%);
+    height: var(--icon-btn-size);
+    flex: 1 1 8.2rem;
     align-items: center;
-    gap: 0.28rem;
+    gap: var(--icon-gap);
     padding: 0 0.4rem;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 0.55rem;
+    border-radius: var(--icon-btn-radius);
     background: rgba(255, 255, 255, 0.05);
     color: #cbd5e1;
     touch-action: none;
@@ -921,8 +975,6 @@ body {
 }
 
 .image-size-control .ui-icon {
-    width: 0.85rem;
-    height: 0.85rem;
     flex: none;
 }
 
@@ -1022,30 +1074,18 @@ html.kf-slider-held body {
 .preview-page-nav {
     display: flex;
     flex: none;
+    flex-flow: row wrap;
     align-items: center;
-    gap: 0.18rem;
+    gap: var(--icon-gap);
     margin-left: auto;
-    padding-left: 0.34rem;
+    padding-left: var(--icon-gap);
     border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .preview-page-arrow {
-    display: grid;
-    width: 1.9rem;
-    height: 1.9rem;
-    flex: none;
-    place-items: center;
-    padding: 0;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 0.55rem;
     background: rgba(255, 255, 255, 0.05);
     color: #e2e8f0;
-}
-
-.preview-page-arrow .ui-icon {
-    width: 0.9rem;
-    height: 0.9rem;
-    stroke-width: 2.4;
 }
 
 .preview-page-arrow:hover,
@@ -1061,43 +1101,26 @@ html.kf-slider-held body {
 
 @media (max-width: 767px) {
     #devicePreviewControls {
-        gap: 0.28rem;
+        flex-wrap: wrap;
         padding: 0.34rem 0.38rem;
     }
 
-    #editToolbar,
-    #editToolbar .tb-scroll {
-        height: 3.64rem;
+    /* Phones: page arrows share one row above the toolbar so the toolbar
+       groups get the full width instead of collapsing into a narrow column. */
+    #devicePreviewControls .preview-page-nav {
+        order: -1;
+        width: 100%;
+        justify-content: flex-end;
+        padding-left: 0;
+        border-left: 0;
     }
 
-    #editToolbar .tb-lane {
-        min-height: 1.72rem;
-    }
-
-    #editToolbar .tb-btn,
-    .preview-page-arrow {
-        width: 1.72rem;
-        height: 1.72rem;
-        border-radius: 0.45rem;
-    }
-
-    .image-size-control {
-        width: 7.4rem;
-        height: 1.72rem;
-        border-radius: 0.45rem;
+    #devicePreviewControls #editToolbar {
+        flex: 1 1 100%;
     }
 
     .image-size-control input {
         width: 3.3rem;
-    }
-
-    .table-picker-grid {
-        grid-template-columns: repeat(5, 1.72rem);
-    }
-
-    .table-picker-cell {
-        width: 1.72rem;
-        height: 1.72rem;
     }
 }
 

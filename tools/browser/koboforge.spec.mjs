@@ -1835,3 +1835,106 @@ test("icon controls expose aria-labels and tooltips on hover and focus", async (
   await expect(tooltip).toBeVisible();
   await expect(tooltip).toHaveText("Clear");
 });
+
+async function loadIconSample(page) {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "icon-spec.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("A short book for the shared icon buttons."),
+  });
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+  await expect(page.locator("#editToolbar")).toBeVisible();
+}
+
+function radiusIs12(value) {
+  return String(value).split(/\s+/).filter(Boolean).every((part) => part === "12px");
+}
+
+test("icon buttons follow the shared icon spec", async ({ page }) => {
+  for (const width of [1366, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await loadIconSample(page);
+    const report = await page.evaluate(() => {
+      const shown = (el) => {
+        const style = getComputedStyle(el);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+      return [...document.querySelectorAll("button[aria-label]")]
+        .filter((el) => shown(el) && el.querySelector("svg"))
+        .map((el) => {
+          const rect = el.getBoundingClientRect();
+          const style = getComputedStyle(el);
+          const before = getComputedStyle(el, "::before");
+          const svg = el.querySelector("svg");
+          const href = svg.querySelector("use")?.getAttribute("href") || "";
+          const symbol = href.startsWith("#") ? document.getElementById(href.slice(1)) : null;
+          const strokeAttr = svg.getAttribute("stroke") || symbol?.getAttribute("stroke") || "";
+          const computedStroke = getComputedStyle(svg).stroke;
+          return {
+            id: el.id,
+            label: el.getAttribute("aria-label"),
+            width: rect.width,
+            height: rect.height,
+            y: rect.y,
+            radius: style.borderRadius,
+            beforeW: parseFloat(before.width),
+            beforeH: parseFloat(before.height),
+            strokeAttr,
+            computedStroke,
+            hasImg: !!el.querySelector("img"),
+          };
+        });
+    });
+    expect(report.length, `${width}px icon buttons`).toBeGreaterThan(8);
+    for (const item of report) {
+      const name = `${width}px ${item.label}`;
+      expect(item.hasImg, name).toBe(false);
+      const strokeOk = item.strokeAttr === "currentColor" || (item.computedStroke && item.computedStroke !== "none");
+      expect(strokeOk, `${name} stroke ${item.strokeAttr} / ${item.computedStroke}`).toBe(true);
+      expect(Math.abs(item.width - 40), name).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(item.height - 40), name).toBeLessThanOrEqual(0.5);
+      expect(radiusIs12(item.radius), `${name} radius ${item.radius}`).toBe(true);
+      expect(item.beforeW, name).toBeGreaterThanOrEqual(48);
+      expect(item.beforeH, name).toBeGreaterThanOrEqual(48);
+    }
+    const exportYs = ["clearBtn", "downloadBackupBtn", "restoreBackupBtn", "downloadBtn"].map((id) => {
+      const match = report.find((item) => item.id === id);
+      expect(match, `${width}px ${id}`).toBeTruthy();
+      return match.y;
+    });
+    for (const y of exportYs) {
+      expect(Math.abs(y - exportYs[0]), `${width}px export row`).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
+test("touch tap shows tooltip and runs the action", async ({ browser }) => {
+  const context = await browser.newContext({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 390, height: 844 },
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+    await page.locator("#fileInput").setInputFiles({
+      name: "touch-tooltip.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("A short note for the touch tooltip."),
+    });
+    await expect(page.locator("#downloadBtn")).toBeEnabled();
+    const htmlMode = page.locator('.mode-btn[data-mode="html"]');
+    await htmlMode.tap();
+    const tooltip = page.locator("#controlTooltip");
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toHaveText("HTML source");
+    await expect(htmlMode).toHaveAttribute("aria-pressed", "true");
+  } finally {
+    await context.close();
+  }
+});

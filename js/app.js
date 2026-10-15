@@ -325,6 +325,7 @@
         let editViewportLockFrame = null;
         let documentImageConversionToken = 0;
         let tooltipHideTimer = null;
+        let tooltipHoldUntil = 0;
         let activeConversionId = 0;
         let editorHistoryResetPending = false;
         let suppressEditorHistory = false;
@@ -351,6 +352,7 @@
         }
 
         function hideControlTooltip() {
+            if (Date.now() < tooltipHoldUntil) return;
             clearTimeout(tooltipHideTimer);
             tooltipHideTimer = null;
             controlTooltip?.classList.remove('is-visible', 'is-below');
@@ -358,7 +360,7 @@
 
         function showControlTooltip(target, { temporary = false } = {}) {
             if (!controlTooltip || !target?.dataset?.tooltip) return;
-            clearTimeout(tooltipHideTimer);
+            if (!temporary) clearTimeout(tooltipHideTimer);
             controlTooltip.textContent = target.dataset.tooltip;
             controlTooltip.classList.remove('is-below');
             controlTooltip.classList.add('is-visible');
@@ -373,7 +375,13 @@
             controlTooltip.style.top = `${showBelow ? rect.bottom : rect.top}px`;
             controlTooltip.classList.toggle('is-below', showBelow);
             if (temporary) {
-                tooltipHideTimer = setTimeout(hideControlTooltip, 1200);
+                const holdMs = 1500;
+                tooltipHoldUntil = Date.now() + holdMs;
+                clearTimeout(tooltipHideTimer);
+                tooltipHideTimer = setTimeout(() => {
+                    tooltipHoldUntil = 0;
+                    hideControlTooltip();
+                }, holdMs);
             }
         }
 
@@ -397,7 +405,9 @@
         document.addEventListener('pointerdown', (event) => {
             if (event.pointerType !== 'touch') return;
             const target = tooltipTarget(event.target);
-            if (target) showControlTooltip(target, { temporary: true });
+            if (!target) return;
+            // Same tap shows the label and activates the control.
+            showControlTooltip(target, { temporary: true });
         });
         document.addEventListener('scroll', hideControlTooltip, true);
 
