@@ -1766,3 +1766,84 @@ test('edits a decorative image on a compact phone and preserves it when copied',
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normaliseWhitespace(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+// H1/H2/H3 glyphs are aria-hidden. innerText still sees them, but they are not
+// the accessible name, so only text outside aria-hidden counts as a visible name.
+async function visibleButtonText(button) {
+  const rendered = normaliseWhitespace(await button.innerText());
+  if (!rendered) return "";
+  const exposed = await button.evaluate((element) => {
+    const parts = [];
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      if (!node.parentElement?.closest("[aria-hidden='true']")) parts.push(node.textContent || "");
+      node = walker.nextNode();
+    }
+    return parts.join("");
+  });
+  return normaliseWhitespace(exposed);
+}
+
+test("buttons expose accessible names", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  await page.locator("#fileInput").setInputFiles({
+    name: "notes.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("# Field notes\n\nA short paragraph for the editor toolbar.\n"),
+  });
+  await expect(page.locator("#status")).toHaveText(
+    "Markdown ready · editable · Kobo Libra Colour",
+  );
+  await expect(page.locator("#editToolbar")).toBeVisible();
+
+  const buttons = page.locator("button:visible");
+  const buttonCount = await buttons.count();
+  let iconOnlyCount = 0;
+  let visibleTextCount = 0;
+  for (let i = 0; i < buttonCount; i += 1) {
+    const button = buttons.nth(i);
+    const visibleText = await visibleButtonText(button);
+    const id = (await button.getAttribute("id")) || "";
+    if (!visibleText) {
+      iconOnlyCount += 1;
+      await expect(button, `icon-only button ${i}${id ? ` #${id}` : ""}`).toHaveAccessibleName(/\S/);
+    } else {
+      visibleTextCount += 1;
+      await expect(
+        button,
+        `visible-text button ${i}${id ? ` #${id}` : ""} "${visibleText}"`,
+      ).toHaveAccessibleName(new RegExp(escapeRegExp(visibleText), "i"));
+    }
+  }
+
+  expect(iconOnlyCount).toBeGreaterThanOrEqual(20);
+  test.info().annotations.push(
+    { type: "icon-only buttons", description: String(iconOnlyCount) },
+    { type: "visible-text buttons", description: String(visibleTextCount) },
+    { type: "visible buttons", description: String(buttonCount) },
+  );
+
+  await page.locator("#insertTableBtn").click();
+  await expect(page.locator("#tablePicker")).toBeVisible();
+  const cells = page.locator(".table-picker-cell");
+  const cellCount = await cells.count();
+  expect(cellCount).toBeGreaterThan(0);
+  for (let i = 0; i < cellCount; i += 1) {
+    await expect(cells.nth(i), `table picker cell ${i}`).toHaveAccessibleName(/\S/);
+  }
+  test.info().annotations.push(
+    { type: "table picker cells", description: String(cellCount) },
+  );
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#tablePicker")).toBeHidden();
+});
