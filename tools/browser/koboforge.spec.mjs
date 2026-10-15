@@ -1796,3 +1796,42 @@ test('edits a decorative image on a compact phone and preserves it when copied',
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+
+test("icon controls expose aria-labels and tooltips on hover and focus", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#deviceSpec")).not.toHaveText("—");
+  const controls = {
+    clearBtn: "Clear",
+    downloadBackupBtn: "Download backup",
+    restoreBackupBtn: "Restore backup",
+    downloadBtn: "Download EPUB",
+    findInBookPrev: "Previous match",
+    findInBookNext: "Next match",
+    replaceFileBtn: "Replace file",
+    cancelFileBtn: "Cancel",
+    cancelImportBtn: "Cancel import",
+  };
+  for (const [id, label] of Object.entries(controls)) {
+    const control = page.locator(`#${id}`);
+    await expect(control).toHaveAttribute("aria-label", label);
+    await expect(control).toHaveAttribute("data-tooltip", label);
+    await expect(control).toHaveAttribute("title", label);
+    await expect(control.locator("svg.ui-icon")).toHaveCount(1);
+    await expect(control).toHaveJSProperty("textContent", "");
+  }
+  await page.locator("#restoreBackupBtn").hover();
+  const tooltip = page.locator("#controlTooltip");
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toHaveText("Restore backup");
+  await page.mouse.move(0, 0);
+  await page.locator("#fileInput").setInputFiles({
+    name: "icon-controls.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("A short book for checking icon controls."),
+  });
+  await expect(page.locator("#clearBtn")).toBeEnabled();
+  await page.locator("#clearBtn").focus();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toHaveText("Clear");
+});

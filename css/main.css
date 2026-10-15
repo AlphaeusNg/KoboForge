@@ -69,6 +69,16 @@ body {
     outline: none;
 }
 
+#downloadBtn.icon-control {
+    background: #C9A227;
+    color: #020617;
+}
+
+#downloadBtn.icon-control:hover,
+#downloadBtn.icon-control:focus-visible {
+    background: #d9b844;
+}
+
 #controlTooltip {
     position: fixed;
     z-index: 100;

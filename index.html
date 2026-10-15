@@ -57,6 +57,11 @@
         <symbol id="icon-cut" viewBox="0 0 24 24"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="m8.7 8.3 10.8 6.2"/><path d="m8.7 15.7 10.8-6.2"/></symbol>
         <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
         <symbol id="icon-paste" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></symbol>
+        <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 16v5h16v-5"/></symbol>
+        <symbol id="icon-backup" viewBox="0 0 24 24"><path d="M14 2H6v20h12V6zM14 2v4h4"/><path d="M12 9v9m-3-3 3 3 3-3"/></symbol>
+        <symbol id="icon-restore" viewBox="0 0 24 24"><path d="M3 10a9 9 0 1 1 2 9M3 4v6h6"/><path d="M12 17V8m-3 3 3-3 3 3"/></symbol>
+        <symbol id="icon-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+        <symbol id="icon-file-replace" viewBox="0 0 24 24"><path d="M14 2H5v20h14V7zM14 2v5h5"/><path d="M8 12h8l-2-2M16 17H8l2 2"/></symbol>
         <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
         <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
         <symbol id="icon-back" viewBox="0 0 24 24"><path d="m9 18-6-6 6-6"/><path d="M3 12h12a6 6 0 0 1 6 6v1"/></symbol>
@@ -121,8 +126,8 @@
                         <p id="dropzoneFileMeta" class="mt-1 text-sm text-slate-400">—</p>
                         <p class="mt-3 text-xs leading-5 text-slate-500">Processed only in this browser — nothing was uploaded to a server.</p>
                         <div class="mt-6 flex flex-wrap items-center justify-center gap-2">
-                            <button type="button" id="replaceFileBtn" class="inline-flex items-center justify-center rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-[#C9A227]/40 hover:text-[#C9A227]">Replace file</button>
-                            <button type="button" id="cancelFileBtn" class="inline-flex items-center justify-center rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-200 transition hover:border-rose-400/50 hover:bg-rose-500/15">Cancel</button>
+                            <button type="button" id="replaceFileBtn" class="inline-flex items-center justify-center rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-[#C9A227]/40 hover:text-[#C9A227] icon-control" title="Replace file" data-tooltip="Replace file" aria-label="Replace file"><svg class="ui-icon" aria-hidden="true"><use href="#icon-file-replace"></use></svg></button>
+                            <button type="button" id="cancelFileBtn" class="inline-flex items-center justify-center rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-200 transition hover:border-rose-400/50 hover:bg-rose-500/15 icon-control" title="Cancel" data-tooltip="Cancel" aria-label="Cancel"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
                         </div>
                     </div>
                     <input id="fileInput" type="file" accept=".docx,.pdf,.txt,.md,.markdown,.png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp" multiple class="hidden">
@@ -268,8 +273,8 @@
                 <label class="block text-[11px] uppercase tracking-[0.18em] text-slate-500" for="findInBook">Find in book
                     <div class="mt-1 flex gap-2">
                         <input id="findInBook" type="search" autocomplete="off" aria-describedby="findInBookStatus" placeholder="Search the current book…" class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-100 outline-none focus:border-[#C9A227]" />
-                        <button type="button" id="findInBookPrev" aria-controls="deviceBookContent" class="rounded-xl border border-white/10 px-2 text-xs text-slate-300">Prev</button>
-                        <button type="button" id="findInBookNext" aria-controls="deviceBookContent" class="rounded-xl border border-white/10 px-2 text-xs text-slate-300">Next</button>
+                        <button type="button" id="findInBookPrev" aria-controls="deviceBookContent" class="rounded-xl border border-white/10 px-2 text-xs text-slate-300 icon-control" title="Previous match" data-tooltip="Previous match" aria-label="Previous match"><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg></button>
+                        <button type="button" id="findInBookNext" aria-controls="deviceBookContent" class="rounded-xl border border-white/10 px-2 text-xs text-slate-300 icon-control" title="Next match" data-tooltip="Next match" aria-label="Next match"><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron-right"></use></svg></button>
                     </div>
                 </label>
                 <p id="findInBookStatus" class="mt-1 text-[11px] text-slate-500" aria-live="polite"></p>
@@ -414,7 +419,7 @@
                         <li data-stage="images">Images</li>
                         <li data-stage="preview">Preview</li>
                     </ol>
-                    <button type="button" id="cancelImportBtn" class="mt-3 hidden inline-flex items-center justify-center rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-200 transition hover:border-rose-400/50 hover:bg-rose-500/15">Cancel import</button>
+                    <button type="button" id="cancelImportBtn" class="mt-3 hidden inline-flex items-center justify-center rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-200 transition hover:border-rose-400/50 hover:bg-rose-500/15 icon-control" title="Cancel import" data-tooltip="Cancel import" aria-label="Cancel import"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
                 </div>
                 <div id="stats" class="mt-4 hidden flex flex-wrap gap-2" aria-label="Conversion facts">
                     <span id="statFormat" class="rounded-full border border-white/10 bg-slate-950/35 px-3 py-1.5 text-xs font-medium text-slate-200">—</span>
@@ -442,11 +447,11 @@
                     <p id="exportEditHint" class="mt-2 hidden text-xs font-medium text-amber-300/90"></p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 md:justify-end">
-                    <button type="button" id="clearBtn" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30 disabled:opacity-40" disabled>Clear</button>
-                    <button type="button" id="downloadBackupBtn" aria-describedby="backupHint" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30 disabled:opacity-40" disabled>Download backup</button>
-                    <button type="button" id="restoreBackupBtn" aria-describedby="backupHint" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30">Restore backup</button>
+                    <button type="button" id="clearBtn" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30 disabled:opacity-40 icon-control" disabled title="Clear" data-tooltip="Clear" aria-label="Clear"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg></button>
+                    <button type="button" id="downloadBackupBtn" aria-describedby="backupHint" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30 disabled:opacity-40 icon-control" disabled title="Download backup" data-tooltip="Download backup" aria-label="Download backup"><svg class="ui-icon" aria-hidden="true"><use href="#icon-backup"></use></svg></button>
+                    <button type="button" id="restoreBackupBtn" aria-describedby="backupHint" class="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/30 icon-control" title="Restore backup" data-tooltip="Restore backup" aria-label="Restore backup"><svg class="ui-icon" aria-hidden="true"><use href="#icon-restore"></use></svg></button>
                     <input id="backupFileInput" type="file" accept="application/json,.json,.koboforge.json" class="hidden">
-                    <button id="downloadBtn" class="rounded-xl bg-[#C9A227] px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-[#d9b844] disabled:cursor-not-allowed disabled:opacity-50" disabled title="Sync edits, then build and download EPUB">Download EPUB</button>
+                    <button id="downloadBtn" class="rounded-xl bg-[#C9A227] px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-[#d9b844] disabled:cursor-not-allowed disabled:opacity-50 icon-control" disabled title="Download EPUB" data-tooltip="Download EPUB" aria-label="Download EPUB"><svg class="ui-icon" aria-hidden="true"><use href="#icon-download"></use></svg></button>
                 </div>
             </div>
         </div>
