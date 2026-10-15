@@ -30,7 +30,7 @@ for (const scenario of [{width:320},{width:375},{width:768},{width:1280},{width:
           overflow: [...document.querySelectorAll('body *')].filter(e=>visible(e)&&e.getBoundingClientRect().right>innerWidth+1&&!e.closest('#editToolbar,#deviceFrame,#tablePicker')).slice(0,20).map(e=>({tag:e.tagName,id:e.id,classes:e.className,right:e.getBoundingClientRect().right}))};
       },state));
     }
-    await page.locator('details.book-details').evaluate(e=>e.open=true);
+    await page.locator('details.book-details').evaluateAll(els=>els.forEach(e=>e.open=true));
     await record('empty-settings');
     await page.locator('#fileInput').setInputFiles({name:'Sizing document.png',mimeType:'image/png',buffer:png});
     await page.locator('#deviceBookContent img').waitFor();

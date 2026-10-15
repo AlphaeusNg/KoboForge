@@ -272,11 +272,18 @@ test.afterEach(async ({ page }) => {
 });
 
 async function openBookDetails(page) {
-  const details = page.locator("details.book-details");
+  const details = page.locator("details.book-details").filter({ has: page.locator("#bookTitle") });
   if (await details.count()) {
     await details.evaluate((el) => {
       el.open = true;
     });
+  }
+}
+
+async function openDisplaySettings(page) {
+  const details = page.locator("#deviceDisplaySettings");
+  if (!(await details.evaluate((element) => element.open))) {
+    await details.locator("summary").click();
   }
 }
 
@@ -356,6 +363,27 @@ test("real-document corpus contains supported conversion inputs", () => {
       ).toBe(true);
     }
   }
+});
+
+test("first screen keeps secondary details behind disclosures", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  const displaySettings = page.locator("#deviceDisplaySettings");
+  const editorHelp = page.locator("#editorHelp");
+  await expect(displaySettings).not.toHaveAttribute("open");
+  await expect(editorHelp).not.toHaveAttribute("open");
+  await expect(page.locator("#deviceFontSize")).toBeHidden();
+  await expect(page.locator("#editorHistoryNote")).toBeHidden();
+  await expect(displaySettings.locator("summary")).toBeVisible();
+  await expect(editorHelp.locator("summary")).toBeVisible();
+
+  await displaySettings.locator("summary").click();
+  await expect(page.locator("#deviceFontSize")).toBeVisible();
+  await expect(displaySettings).toHaveAttribute("open", "");
+
+  await editorHelp.locator("summary").click();
+  await expect(page.locator("#editorHistoryNote")).toBeVisible();
+  await expect(editorHelp).toHaveAttribute("open", "");
 });
 
 for (const fixture of realDocumentFixtures) {
@@ -1038,6 +1066,7 @@ test("announces text size and margin slider values in pt and mm", async ({ page 
   await expect(fontValue).toHaveText("10 pt");
   await expect(marginValue).toHaveText("8 mm");
 
+  await openDisplaySettings(page);
   await fontSlider.focus();
   await fontSlider.press("ArrowRight");
   await expect(fontSlider).toHaveAttribute("aria-valuetext", "11 pt");
@@ -1429,6 +1458,7 @@ test("fails closed when stored device prefs cannot be parsed", async ({ page }) 
 test("remembers the last Kobo after reload and names export stages", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.locator("#deviceSelect").selectOption("elipsa-2e");
+  await openDisplaySettings(page);
   await page.locator("#deviceOrientation").selectOption("landscape");
   await page.locator("#deviceFontSize").evaluate((el) => {
     el.value = "4.4";

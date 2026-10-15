@@ -105,7 +105,7 @@
                         </div>
                         <h2 class="mt-4 text-lg font-semibold tracking-tight">Drop a file here</h2>
                         <p class="mt-2 text-sm leading-6 text-slate-400">
-                            DOCX, PDF, TXT, Markdown, or images (PNG, JPEG, GIF, WebP). DOCX gives the best result. Stays in this browser.
+                            DOCX, PDF, TXT, Markdown or images. DOCX works best.
                         </p>
                         <button type="button" id="pickFileBtn" class="mt-5 inline-flex items-center justify-center rounded-xl bg-[#C9A227] px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-[#d9b844]">Choose file</button>
                     </div>
@@ -148,6 +148,10 @@
                                 <option value="elipsa-2e">Kobo Elipsa 2E · 10.3″ B&amp;W</option>
                             </select>
                         </label>
+                    </div>
+                    <details id="deviceDisplaySettings" class="book-details mt-4">
+                        <summary>Display settings</summary>
+                        <div class="mt-4 grid gap-4 sm:grid-cols-2">
                         <label class="device-control block">
                             <span class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.17em] text-slate-500">Orientation</span>
                             <select id="deviceOrientation" class="rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-[#C9A227]">
@@ -169,18 +173,19 @@
                             </span>
                             <input id="deviceMargin" type="range" min="3" max="16" step="1" value="8" aria-valuetext="8 mm" class="accent-[#C9A227]">
                         </label>
-                    </div>
-                    <div class="mt-4 flex flex-wrap items-center gap-2">
-                        <span id="deviceSpec" class="device-spec-pill rounded-full px-3 py-1.5 text-xs text-slate-300">—</span>
-                        <span id="devicePhysicalSpec" class="device-spec-pill rounded-full px-3 py-1.5 text-xs text-slate-400">—</span>
-                        <label class="device-spec-pill flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-xs text-slate-300">
-                            <input id="deviceChrome" type="checkbox" checked class="rounded border-white/20 bg-slate-900 text-[#C9A227] focus:ring-[#C9A227]">
-                            Reader header + footer
-                        </label>
-                    </div>
-                    <p class="mt-3 text-[11px] leading-5 text-slate-500">
-                        Preview only. Line breaks can still vary with Kobo firmware.
-                    </p>
+                        </div>
+                        <div class="mt-4 flex flex-wrap items-center gap-2">
+                            <span id="deviceSpec" class="device-spec-pill rounded-full px-3 py-1.5 text-xs text-slate-300">—</span>
+                            <span id="devicePhysicalSpec" class="device-spec-pill rounded-full px-3 py-1.5 text-xs text-slate-400">—</span>
+                            <label class="device-spec-pill flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-xs text-slate-300">
+                                <input id="deviceChrome" type="checkbox" checked class="rounded border-white/20 bg-slate-900 text-[#C9A227] focus:ring-[#C9A227]">
+                                Reader header + footer
+                            </label>
+                        </div>
+                        <p class="mt-3 text-[11px] leading-5 text-slate-500">
+                            Preview only. Line breaks can still vary with Kobo firmware.
+                        </p>
+                    </details>
                 </div>
 
                 <details class="book-details mt-4">
@@ -236,10 +241,13 @@
                         </div>
                     </div>
                 </div>
-                <p class="text-xs leading-5 text-slate-500">
-                    Edit or Diff on the same Kobo page. Diff keeps red/green marks while you type.
-                </p>
-                <p id="editorHistoryNote" class="text-xs leading-5 text-slate-500">Undo and redo cover text, lists, and image edits on this view. Page turns are not undo steps. Switching Edit, Diff, or HTML starts a fresh undo stack.</p>
+                <details id="editorHelp">
+                    <summary class="text-xs text-slate-400 cursor-pointer">How editing works</summary>
+                    <p class="text-xs leading-5 text-slate-500">
+                        Edit or Diff on the same Kobo page. Diff keeps red/green marks while you type.
+                    </p>
+                    <p id="editorHistoryNote" class="text-xs leading-5 text-slate-500">Undo and redo cover text, lists, and image edits on this view. Page turns are not undo steps. Switching Edit, Diff, or HTML starts a fresh undo stack.</p>
+                </details>
                 </div>
 
                 <nav id="bookOutlineWrap" class="mt-4 hidden" aria-label="Book outline">
