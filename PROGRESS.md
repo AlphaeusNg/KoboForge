@@ -1173,3 +1173,10 @@ Validation: syntax, logic, book-outline, and editor-history node gates passed. T
 The latest merged PR removes the vulnerable sprintf-js chain using a scoped argparse override. Dependency checks now reject its return at any nested lockfile location and verify that real-document tests and the production DOCX loader use the same Mammoth release. The full DOCX/PDF fidelity suite continues to exercise the supported conversion API; the documented unsupported Mammoth CLI caveat remains. Deployment stamp: 2026.10.16.1.
 
 Validation: full npm gate and dependency policy passed; all 42 Chromium journeys passed on the fetched application. JavaScript syntax and whitespace checks passed.
+
+
+## 2026-10-17 — Extract conservative PDF heading decisions
+
+Moved the production heading heuristic into the existing measured PDF table/column helper. It uses the same measured font, text and cell evidence, without application state or duplicated algorithms. Direct regressions cover the size boundary, Bible-reference prose and table-cell rejection. This advances KOBO-06; larger PDF orchestration remains partial. Version 2026.10.17.1.
+
+Validation: full npm gate, JavaScript syntax and all 42 Chromium journeys (including the real PDF/DOCX corpus) passed.

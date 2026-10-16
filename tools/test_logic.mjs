@@ -1,4 +1,4 @@
-import { clusterColumnXs, detectPdfTableGeometry } from "../js/pdf-tables.js";
+import { clusterColumnXs, detectPdfTableGeometry, lineLooksLikeHeading } from "../js/pdf-tables.js";
 import { describePdfFont } from "../js/pdf-text.js";
 import { median, detectPdfWhitespace } from "../js/pdf-layout.js";
 /**
@@ -675,7 +675,14 @@ assert.ok(!page.includes('id="einkToggle"'), 'standalone e-ink toggle removed');
 assert.ok(page.includes("id=\"splitChapters\"") && !page.match(/id="splitChapters"[^>]*checked/),
     'chapter split off by default for continuous Kobo reading');
 assert.ok(page.includes('tag === \'h1\'') || page.includes('tag === "h1"'), 'spine splits H1 only');
-assert.ok(page.includes('ratio >= 1.55'), 'conservative PDF heading size threshold');
+assert.equal(lineLooksLikeHeading({ plainText: 'A new heading', maxHeight: 15.4, medianHeight: 10 }), null,
+    'size-only PDF promotion remains conservative below the threshold');
+assert.deepEqual(lineLooksLikeHeading({ plainText: 'A new heading', maxHeight: 15.5, medianHeight: 10 }), { level: 2 });
+assert.equal(lineLooksLikeHeading({ plainText: 'Numbers 13:1-15', maxHeight: 14, medianHeight: 10 }), false,
+    'ordinary Bible references stay prose');
+assert.equal(lineLooksLikeHeading({ plainText: 'A  B  C', maxHeight: 20, medianHeight: 10,
+    avgCharWidth: 4, cells: [{ x: 0, end: 5 }, { x: 30, end: 35 }, { x: 65, end: 70 }] }), false,
+    'spaced table cells cannot become document headings');
 assert.ok(page.includes('function syncBodyFromUi'), 'edit surface must flush into model before export');
 assert.ok(page.includes('function bodyHtmlForExport') && page.includes('syncBodyFromUi()'), 'download path syncs edits');
 assert.ok(page.includes('originalBodyHtml'), 'snapshot original import for diff');

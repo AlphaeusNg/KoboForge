@@ -5,7 +5,7 @@
             `./pdf-paragraphs.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`
         );
         const {
-            detectPdfTableGeometry, clusterColumnXs, lineToRow, lineLooksTabular,
+            detectPdfTableGeometry, clusterColumnXs, lineToRow, lineLooksTabular, lineLooksLikeHeading,
             splitPdfLineIntoColumns, lineLooksLikeTwoColumnRow, stableTwoColumnLineIndexes
         } = await import(`./pdf-tables.js?v=${encodeURIComponent(window.SITE_VERSION?.id || 'dev')}`);
         const {
@@ -6588,46 +6588,6 @@
                     }))
                 };
             });
-        }
-
-        /**
-         * Heading heuristic (conservative): false H2s used to split the EPUB spine
-         * mid-document (e.g. “Offerings at the Tabernacle's Consecration”), so Kobo
-         * looked stuck after that title while the rest lived in later spine items.
-         */
-        function lineLooksLikeHeading(line) {
-            const t = (line.plainText || '').trim();
-            if (!t || t.length > 80 || t.length < 3) return false;
-            if (t.endsWith('.') && t.length > 30) return false;
-            if (lineLooksTabular(line)) return false;
-            // Long prose / verses starting with a number are not outline headings
-            if (/^\d+\s+[“"A-Za-z]/.test(t) && t.length > 45) return false;
-            // Bare bible refs stay body text unless massively oversized
-            if (/^(numbers|genesis|exodus|leviticus|deuteronomy|matthew|mark|luke|john)\b/i.test(t)
-                && t.length < 40
-                && !/^\d+\./.test(t)) {
-                const r0 = (line.maxHeight || line.lineHeight) / (line.medianHeight || 10);
-                if (r0 < 1.5) return false;
-            }
-            const ratio = (line.maxHeight || line.lineHeight) / (line.medianHeight || 10);
-            const isBold = !!line.hasBold;
-            const isChapter = /^(chapter|part|section|appendix)\b/i.test(t);
-            // Outline only: "1. God goes with his people" — not "1 On the day when Moses"
-            const isNumberedOutline = /^\d{1,2}[\.\)]\s+\S/.test(t) && t.length <= 70 && !/^\d+\s+[A-Z]/.test(t);
-            const isLetteredSection = /^[A-Z][\.\)]\s+\S/.test(t) && t.length <= 70;
-            const isAllCaps = t.length <= 50
-                && t === t.toUpperCase()
-                && /[A-Z]/.test(t)
-                && t.split(/\s+/).length <= 10;
-            if (isChapter || (isAllCaps && ratio >= 1.4)) return { level: 1 };
-            if ((isNumberedOutline && (ratio >= 1.15 || isBold)) || (isLetteredSection && isBold)) {
-                return { level: 2 };
-            }
-            if (isAllCaps && ratio >= 1.22) return { level: 2 };
-            if (isBold && ratio >= 1.25) return { level: 2 };
-            // Size-only promotion needs a strong signal (avoids section subtitles)
-            if (ratio >= 1.55) return { level: 2 };
-            return null;
         }
 
         function buildTableHtml(rows, { headerRow = true } = {}) {
