@@ -1,7 +1,10 @@
 /* Keep utilities unlayered to preserve their cascade against main.css. */
 @import "tailwindcss/theme.css";
 @import "tailwindcss/preflight.css";
-@import "tailwindcss/utilities.css";
+@import "tailwindcss/utilities.css" source(none);
+/* Only deploy inputs produce utilities; Markdown/test fixtures must not drift CSS. */
+@source "../index.html";
+@source "../js";
 @config "../tailwind.config.cjs";
 
 /* Visibility switches must win against v4 display-utility ordering. */

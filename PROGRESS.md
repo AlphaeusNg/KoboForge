@@ -1180,3 +1180,9 @@ Validation: full npm gate and dependency policy passed; all 42 Chromium journeys
 Moved the production heading heuristic into the existing measured PDF table/column helper. It uses the same measured font, text and cell evidence, without application state or duplicated algorithms. Direct regressions cover the size boundary, Bible-reference prose and table-cell rejection. This advances KOBO-06; larger PDF orchestration remains partial. Version 2026.10.17.1.
 
 Validation: full npm gate, JavaScript syntax and all 42 Chromium journeys (including the real PDF/DOCX corpus) passed.
+
+### Restrict stylesheet sources after hosted validation
+
+Hosted CI caught that Tailwind 4's automatic project scan included Markdown: the final progress note introduced a documentation-only utility after local tests. Disabled automatic detection and explicitly registered index.html and js/ using Tailwind's documented source controls (https://tailwindcss.com/docs/detecting-classes-in-source-files). This removes five unused documentation utilities and keeps the app's declared utility sources. A temporary Markdown utility candidate leaves generated CSS byte-identical. Version 2026.10.17.2.
+
+Validation: the complete npm gate and all 42 Chromium journeys passed again with the corrected CSS. Generated styles remain reproducible after this note; no browser conversion or editor behavior changed.
