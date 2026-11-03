@@ -1193,3 +1193,10 @@ Validation: the complete npm gate and all 42 Chromium journeys passed again with
 Delete and Backspace no longer remove the selected image while an input method is composing text, including the legacy key-code 229 path, or after another handler consumes the key. Ordinary image deletion and undo still work. Version 2026.11.04.1.
 
 Validation: the new Chromium regression reproduced image loss before the fix. Complete npm and Chromium gates passed, including real DOCX/PDF conversion, both deletion keys, composition/consumed-event cases, ordinary deletion and undo.
+
+
+### Patch the development HTTP client
+
+GitHub's dependency alert identified undici 7.30.0 in the jsdom development chain. Updated only that lockfile record to 7.30.1, the upstream security release: https://github.com/nodejs/undici/releases/tag/v7.30.1. Browser conversion libraries remain unchanged. Version 2026.11.04.2.
+
+Validation: clean npm installation, complete npm gate and all 43 Chromium journeys passed. npm audit reports zero vulnerabilities.
