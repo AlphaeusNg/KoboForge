@@ -1186,3 +1186,10 @@ Validation: full npm gate, JavaScript syntax and all 42 Chromium journeys (inclu
 Hosted CI caught that Tailwind 4's automatic project scan included Markdown: the final progress note introduced a documentation-only utility after local tests. Disabled automatic detection and explicitly registered index.html and js/ using Tailwind's documented source controls (https://tailwindcss.com/docs/detecting-classes-in-source-files). This removes five unused documentation utilities and keeps the app's declared utility sources. A temporary Markdown utility candidate leaves generated CSS byte-identical. Version 2026.10.17.2.
 
 Validation: the complete npm gate and all 42 Chromium journeys passed again with the corrected CSS. Generated styles remain reproducible after this note; no browser conversion or editor behavior changed.
+
+
+## 2026-11-04 — Preserve selected images during text composition
+
+Delete and Backspace no longer remove the selected image while an input method is composing text, including the legacy key-code 229 path, or after another handler consumes the key. Ordinary image deletion and undo still work. Version 2026.11.04.1.
+
+Validation: the new Chromium regression reproduced image loss before the fix. Complete npm and Chromium gates passed, including real DOCX/PDF conversion, both deletion keys, composition/consumed-event cases, ordinary deletion and undo.

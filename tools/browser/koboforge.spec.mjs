@@ -1847,3 +1847,27 @@ test("buttons expose accessible names", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(page.locator("#tablePicker")).toBeHidden();
 });
+
+
+test('selected images survive composition and consumed deletion keys', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#deviceSpec')).not.toHaveText('—');
+  await page.locator('#fileInput').setInputFiles({ name: 'keep.png', mimeType: 'image/png', buffer: PNG_1x1 });
+  const image = page.locator('#deviceBookContent img');
+  await expect(image).toHaveCount(1);
+  await image.click();
+  for (const key of ['Delete', 'Backspace']) {
+    for (const extra of [{isComposing:true}, {keyCode:229}, {prevented:true}]) {
+      await image.evaluate((img, {key, extra}) => {
+        const event = new KeyboardEvent('keydown', {key,bubbles:true,cancelable:true,...extra});
+        if (extra.prevented) event.preventDefault();
+        img.dispatchEvent(event);
+      }, {key, extra});
+      await expect(image).toHaveCount(1);
+    }
+  }
+  await image.press('Delete');
+  await expect(image).toHaveCount(0);
+  await page.locator('#undoEditBtn').click();
+  await expect(image).toHaveCount(1);
+});

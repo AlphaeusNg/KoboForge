@@ -2826,6 +2826,7 @@
             }
         });
         previewEl.addEventListener('keydown', (event) => {
+            if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
             if (
                 selectedEditableImage
                 && (event.key === 'Backspace' || event.key === 'Delete')
