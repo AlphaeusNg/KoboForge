@@ -971,6 +971,20 @@ test("keeps Find-in-book current state accessible, fresh, and out of exports", a
   await expect(page.locator("#findInBookStatus")).toHaveText("1 of 2");
   await expect(page.locator(".kf-find-hit")).toContainText("Alpha first");
   await expect(page.locator(".kf-find-hit")).toHaveAttribute("aria-current", "location");
+  for (const options of [{ isComposing: true }, { keyCode: 229 }, { ctrlKey: true }, { metaKey: true }, { altKey: true }, { consumed: true }]) {
+    const prevented = await page.locator("#findInBook").evaluate((input, options) => {
+      const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...options });
+      if (options.consumed) event.preventDefault();
+      input.dispatchEvent(event);
+      return event.defaultPrevented;
+    }, options);
+    expect(prevented).toBe(!!options.consumed);
+    await expect(page.locator("#findInBookStatus")).toHaveText("1 of 2");
+  }
+  await page.locator("#findInBook").press("Enter");
+  await expect(page.locator("#findInBookStatus")).toHaveText("2 of 2");
+  await page.locator("#findInBook").press("Shift+Enter");
+  await expect(page.locator("#findInBookStatus")).toHaveText("1 of 2");
   await expect(page.locator("#bookOutlineWrap")).toBeHidden();
 
   await page.locator("#findInBookNext").click();

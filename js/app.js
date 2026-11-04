@@ -582,6 +582,7 @@
             btn.addEventListener('click', () => setEditMode(btn.dataset.mode));
         });
         findInBook?.addEventListener('keydown', (e) => {
+            if (e.defaultPrevented || e.isComposing || e.keyCode === 229 || e.ctrlKey || e.metaKey || e.altKey) return;
             if (e.key === 'Enter') {
                 e.preventDefault();
                 runFindInBook(e.shiftKey ? -1 : 1);

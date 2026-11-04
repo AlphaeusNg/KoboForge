@@ -1200,3 +1200,9 @@ Validation: the new Chromium regression reproduced image loss before the fix. Co
 GitHub's dependency alert identified undici 7.30.0 in the jsdom development chain. Updated only that lockfile record to 7.30.1, the upstream security release: https://github.com/nodejs/undici/releases/tag/v7.30.1. Browser conversion libraries remain unchanged. Version 2026.11.04.2.
 
 Validation: clean npm installation, complete npm gate and all 43 Chromium journeys passed. npm audit reports zero vulnerabilities.
+
+## 2026-11-05 — Keep Find-in-book out of text composition
+
+Find-in-book leaves composed Enter, legacy key-code 229, consumed events and Ctrl/Meta/Alt chords available to the input method or browser. Ordinary Enter and Shift+Enter still move between matches. Version 2026.11.05.1.
+
+Validation: expanded browser regression fails with the original handler and passes with the guard. Complete npm gate and all 43 Chromium journeys passed, including real DOCX/PDF conversion. Focused regression passed again after the before/after reproduction; syntax and whitespace checks passed.
