@@ -1632,20 +1632,22 @@
             return accepted.innerHTML;
         }
 
-        async function optimizeAndInsertPastedImages(markup, targetRange = imageInsertionRange()) {
-            if (!markup || !currentOutput) return 0;
+        async function optimizeAndInsertPastedImages(markup, targetRange = imageInsertionRange(), output = currentOutput) {
+            if (!markup || !output || currentOutput !== output) return 0;
             const optimized = await optimizeDocumentImages(markup, {
-                imageSources: currentOutput.imageSources || {},
-                imageVariants: currentOutput.imageVariants || {},
+                imageSources: output.imageSources || {},
+                imageVariants: output.imageVariants || {},
                 target: documentImageTarget()
             });
-            currentOutput.imageSources = optimized.imageSources;
-            currentOutput.imageVariants = optimized.imageVariants;
+            if (currentOutput !== output) return 0;
+            output.imageSources = optimized.imageSources;
+            output.imageVariants = optimized.imageVariants;
             return insertOptimizedImageHtml(optimized.html, targetRange);
         }
 
         async function handleImagePaste(event) {
             if (!canEditImagesNow() || !event.clipboardData) return;
+            const output = currentOutput;
             const targetRange = imageInsertionRange();
             const imageFiles = Array.from(event.clipboardData.items || [])
                 .filter((item) => item.kind === 'file' && /^image\//i.test(item.type || ''))
@@ -1660,8 +1662,9 @@
                 const markup = imageFiles.length
                     ? imageMarkupFromDataUrls(await Promise.all(imageFiles.map((file) => blobAsDataUrl(file))))
                     : html;
-                await optimizeAndInsertPastedImages(markup, targetRange);
+                await optimizeAndInsertPastedImages(markup, targetRange, output);
             } catch (error) {
+                if (currentOutput !== output) return;
                 console.error('[KoboForge] Image paste', error);
                 statusEl.textContent = error.message || 'Could not paste that image.';
             }
@@ -1669,10 +1672,12 @@
 
         async function pasteImageFromToolbar() {
             if (!imageClipboardHtml) return;
+            const output = currentOutput;
             const targetRange = imageInsertionRange();
             try {
-                await optimizeAndInsertPastedImages(imageClipboardHtml, targetRange);
+                await optimizeAndInsertPastedImages(imageClipboardHtml, targetRange, output);
             } catch (error) {
+                if (currentOutput !== output) return;
                 console.error('[KoboForge] Image paste', error);
                 statusEl.textContent = error.message || 'Could not paste that image.';
             }
@@ -1717,6 +1722,7 @@
 
         async function handleImageDrop(event) {
             if (!canEditImagesNow()) return;
+            const output = currentOutput;
             const imageFiles = Array.from(event.dataTransfer?.files || [])
                 .filter((file) => /^image\//i.test(file.type || ''));
             if (!imageFiles.length) return;
@@ -1727,8 +1733,9 @@
                 const markup = imageMarkupFromDataUrls(
                     await Promise.all(imageFiles.map((file) => blobAsDataUrl(file)))
                 );
-                await optimizeAndInsertPastedImages(markup, targetRange);
+                await optimizeAndInsertPastedImages(markup, targetRange, output);
             } catch (error) {
+                if (currentOutput !== output) return;
                 console.error('[KoboForge] Image drop', error);
                 statusEl.textContent = error.message || 'Could not add that image.';
             }

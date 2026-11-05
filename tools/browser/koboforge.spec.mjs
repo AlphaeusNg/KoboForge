@@ -1885,3 +1885,37 @@ test('selected images survive composition and consumed deletion keys', async ({ 
   await page.locator('#undoEditBtn').click();
   await expect(image).toHaveCount(1);
 });
+
+test('discards an image paste that finishes after replacing the book', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#deviceSpec')).not.toHaveText('—');
+  await page.locator('#fileInput').setInputFiles({ name: 'first.txt', mimeType: 'text/plain', buffer: Buffer.from('Original book.') });
+  await expect(page.locator('#deviceBookContent')).toContainText('Original book.');
+  await page.locator('#deviceBookContent').evaluate((editor, bytes) => {
+    const read = FileReader.prototype.readAsDataURL;
+    FileReader.prototype.readAsDataURL = function(blob) {
+      window.__releasePaste = () => read.call(this, blob);
+    };
+    editor.focus();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+    const file = new File([new Uint8Array(bytes)], 'delayed.png', { type: 'image/png' });
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: {
+      items: [{ kind: 'file', type: file.type, getAsFile: () => file }], getData: () => '',
+    } });
+    editor.dispatchEvent(event);
+    FileReader.prototype.readAsDataURL = read;
+  }, [...PNG_1x1]);
+  await page.locator('#fileInput').setInputFiles({ name: 'replacement.txt', mimeType: 'text/plain', buffer: Buffer.from('Replacement book stays clean.') });
+  await expect(page.locator('#deviceBookContent')).toContainText('Replacement book stays clean.');
+  await page.evaluate(() => window.__releasePaste());
+  // A rendering turn lets FileReader, image decoding and the paste continuation settle.
+  await page.waitForTimeout(300);
+  await expect(page.locator('#deviceBookContent img')).toHaveCount(0);
+  await expect(page.locator('#deviceBookContent')).toContainText('Replacement book stays clean.');
+  await expect(page.locator('#status')).not.toContainText('image added');
+});

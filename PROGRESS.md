@@ -1206,3 +1206,16 @@ Validation: clean npm installation, complete npm gate and all 43 Chromium journe
 Find-in-book leaves composed Enter, legacy key-code 229, consumed events and Ctrl/Meta/Alt chords available to the input method or browser. Ordinary Enter and Shift+Enter still move between matches. Version 2026.11.05.1.
 
 Validation: expanded browser regression fails with the original handler and passes with the guard. Complete npm gate and all 43 Chromium journeys passed, including real DOCX/PDF conversion. Focused regression passed again after the before/after reproduction; syntax and whitespace checks passed.
+
+## 2026-11-05 — Keep delayed image edits with their original book
+
+Image paste, image drop and toolbar paste retain the original document identity
+through file reads and image optimization. Replacing, restoring or clearing the
+book discards their pending completions and errors; a delayed image can no longer
+appear in a replacement book or overwrite its image-source maps and status.
+Version 2026.11.05.2.
+
+Validation: the new Chromium regression reproduced an image entering a replacement
+book before the fix. Complete npm gate and all 44 Chromium journeys passed,
+including ordinary multi-image pasting, image descriptions/backup/undo and the
+real DOCX/PDF corpus. JavaScript syntax and whitespace checks passed.
