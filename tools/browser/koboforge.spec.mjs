@@ -1947,3 +1947,30 @@ test('keeps edits made while device images are being retargeted', async ({ page 
   await expect(page.locator('#deviceBookContent')).toContainText('An edit made while images are optimizing.');
   await expect(page.locator('#deviceBookContent img')).toHaveCount(1);
 });
+
+
+test('ignores a backup read completed after importing another book', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#deviceSpec')).not.toHaveText('—');
+  await page.locator('#fileInput').setInputFiles({ name: 'first.txt', mimeType: 'text/plain', buffer: Buffer.from('Original backup book.') });
+  await expect(page.locator('#deviceBookContent')).toContainText('Original backup book.');
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#downloadBackupBtn').click();
+  const backup = await readFile(await (await downloadPromise).path());
+  await page.evaluate(() => {
+    const read = File.prototype.text;
+    File.prototype.text = function() {
+      if (!this.name.endsWith('.koboforge.json')) return read.call(this);
+      return new Promise(resolve => { window.__releaseBackup = async () => resolve(await read.call(this)); });
+    };
+  });
+  await page.locator('#backupFileInput').setInputFiles({ name: 'delayed.koboforge.json', mimeType: 'application/json', buffer: backup });
+  await page.locator('#fileInput').setInputFiles({ name: 'replacement.txt', mimeType: 'text/plain', buffer: Buffer.from('The newer book stays open.') });
+  await expect(page.locator('#deviceBookContent')).toContainText('The newer book stays open.');
+  let prompts = 0;
+  page.on('dialog', dialog => { prompts++; return dialog.accept(); });
+  await page.evaluate(() => window.__releaseBackup());
+  await page.waitForTimeout(200);
+  await expect(page.locator('#deviceBookContent')).toContainText('The newer book stays open.');
+  expect(prompts).toBe(0);
+});

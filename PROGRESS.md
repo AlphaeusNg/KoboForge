@@ -1231,3 +1231,14 @@ Validation: a focused Chromium regression reproduced lost text before the fix an
 passes afterward. The complete npm gate and all 45 Chromium journeys passed,
 including image descriptions, undo, backups, and real DOCX/PDF conversion.
 JavaScript syntax and whitespace checks passed.
+
+## 2026-11-06 — Keep delayed backup reads with their original workspace
+
+A pending project-backup read is discarded when another backup, import or Clear
+supersedes it. It cannot reopen an older book or overwrite the newer status with
+a delayed read error. Version 2026.11.06.1.
+
+Validation: the new Chromium regression reproduced a delayed backup replacing a
+newly imported book before the fix. Complete npm gate and all 46 Chromium
+journeys passed, including normal backup restore and real DOCX/PDF conversion.
+JavaScript syntax and whitespace checks passed.

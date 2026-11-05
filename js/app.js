@@ -324,6 +324,7 @@
         let editPageUnlockTimer = null;
         let editViewportLockFrame = null;
         let documentImageConversionToken = 0;
+        let backupRestoreRevision = 0;
         let tooltipHideTimer = null;
         let activeConversionId = 0;
         let editorHistoryResetPending = false;
@@ -5106,6 +5107,9 @@
 
         async function restoreProjectBackupFile(file) {
             if (!file) return;
+            const revision = ++backupRestoreRevision;
+            const output = currentOutput;
+            const isCurrent = () => revision === backupRestoreRevision && currentOutput === output;
             if (backupFileInput) backupFileInput.value = '';
             if (file.size > PROJECT_BACKUP_MAX_BYTES) {
                 statusEl.textContent = 'That backup is too large. The open book was left unchanged.';
@@ -5115,10 +5119,12 @@
             try {
                 text = await file.text();
             } catch (error) {
+                if (!isCurrent()) return;
                 console.warn('[KoboForge] Backup read failed', error);
                 statusEl.textContent = 'That backup could not be read. The open book was left unchanged.';
                 return;
             }
+            if (!isCurrent()) return;
             const parsed = parseProjectBackup(text, { maxBytes: PROJECT_BACKUP_MAX_BYTES });
             if (!parsed.ok) {
                 statusEl.textContent = parsed.reason === 'oversized'
@@ -5192,6 +5198,7 @@
             clearFindHits();
             if (findInBook) findInBook.value = '';
             documentImageConversionToken += 1;
+            backupRestoreRevision += 1;
             currentFile = null;
             currentOutput = null;
             bookTitleWasEdited = false;
@@ -5413,6 +5420,7 @@
             const conversionId = conversionSession.start();
             activeConversionId = conversionId;
             documentImageConversionToken += 1;
+            backupRestoreRevision += 1;
             const progress = (pct, label, stage, cancellable = true) => setProgress(pct, label, {
                 stage,
                 cancellable,
