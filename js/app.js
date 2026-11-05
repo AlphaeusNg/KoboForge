@@ -7953,10 +7953,11 @@
             if (!output || !Object.keys(output.imageSources || {}).length) return false;
             const token = ++documentImageConversionToken;
             const target = documentImageTarget();
+            const sourceBody = output.bodyHtml;
             statusEl.textContent = `Optimizing embedded images for ${target.profile.name}…`;
             const common = {
-                imageSources: output.imageSources,
-                imageVariants: output.imageVariants || {},
+                imageSources: { ...output.imageSources },
+                imageVariants: { ...output.imageVariants },
                 variantBySource: new Map(),
                 target
             };
@@ -7967,6 +7968,10 @@
                 target
             });
             if (token !== documentImageConversionToken || currentOutput !== output) return false;
+            syncBodyFromUi();
+            // Image decoding yields to the editor. Rebuild from any intervening
+            // edits instead of replacing them with the original snapshot.
+            if (output.bodyHtml !== sourceBody) return retargetCurrentDocumentImages();
             output.bodyHtml = canonicalizeBody(body.html);
             output.originalBodyHtml = canonicalizeBody(original.html);
             output.imageSources = original.imageSources;

@@ -1919,3 +1919,31 @@ test('discards an image paste that finishes after replacing the book', async ({ 
   await expect(page.locator('#deviceBookContent')).toContainText('Replacement book stays clean.');
   await expect(page.locator('#status')).not.toContainText('image added');
 });
+
+test('keeps edits made while device images are being retargeted', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#deviceSpec')).not.toHaveText('—');
+  await page.locator('#fileInput').setInputFiles({ name: 'first.png', mimeType: 'image/png', buffer: PNG_1x1 });
+  await expect(page.locator('#deviceBookContent img')).toHaveCount(1);
+  await page.evaluate(() => {
+    const request = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => {
+      window.requestAnimationFrame = request;
+      window.__releaseRetarget = () => request.call(window, callback);
+      return 0;
+    };
+    const device = document.querySelector('#deviceSelect');
+    device.value = 'sage';
+    device.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.locator('#deviceBookContent').evaluate((editor) => {
+    const paragraph = document.createElement('p');
+    paragraph.textContent = 'An edit made while images are optimizing.';
+    editor.append(paragraph);
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+  });
+  await page.evaluate(() => window.__releaseRetarget());
+  await expect(page.locator('#status')).toContainText('ready · editable · Kobo Sage');
+  await expect(page.locator('#deviceBookContent')).toContainText('An edit made while images are optimizing.');
+  await expect(page.locator('#deviceBookContent img')).toHaveCount(1);
+});

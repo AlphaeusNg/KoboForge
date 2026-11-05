@@ -1219,3 +1219,15 @@ Validation: the new Chromium regression reproduced an image entering a replaceme
 book before the fix. Complete npm gate and all 44 Chromium journeys passed,
 including ordinary multi-image pasting, image descriptions/backup/undo and the
 real DOCX/PDF corpus. JavaScript syntax and whitespace checks passed.
+
+## 2026-11-05 — Preserve edits during Kobo image retargeting
+
+Changing the Kobo device or orientation optimizes images asynchronously. If the
+book is edited during that work, retargeting now restarts from the latest content
+instead of replacing those edits with its older snapshot. Image source and variant
+maps stay isolated until the matching result is applied. Version 2026.11.05.3.
+
+Validation: a focused Chromium regression reproduced lost text before the fix and
+passes afterward. The complete npm gate and all 45 Chromium journeys passed,
+including image descriptions, undo, backups, and real DOCX/PDF conversion.
+JavaScript syntax and whitespace checks passed.
